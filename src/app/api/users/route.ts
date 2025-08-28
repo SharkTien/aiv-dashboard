@@ -29,8 +29,7 @@ export async function GET(req: NextRequest) {
      LIMIT ?`,
     [...params, limit + 1]
   );
-  // @ts-expect-error mysql2 types
-  const list = Array.isArray(rows) ? rows : [];
+  const list = Array.isArray(rows) ? (rows as Array<{ user_id: number } & Record<string, any>>) : [];
   const hasMore = list.length > limit;
   const data = hasMore ? list.slice(0, limit) : list;
   const nextCursor = hasMore ? data[data.length - 1].user_id : null;
