@@ -4,12 +4,12 @@ import { getCurrentUser } from "@/lib/auth";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const formId = params.id;
+  const { id: formId } = await ctx.params;
   const pool = getDbPool();
   
   try {
@@ -18,11 +18,11 @@ export async function GET(
       [formId]
     );
     
-    if (!Array.isArray(rows) || rows.length === 0) {
+    if (!Array.isArray(rows) || (rows as any).length === 0) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
     
-    const form = rows[0];
+    const form: any = (rows as any)[0];
     
     const response = NextResponse.json({ form });
     response.headers.set('Content-Type', 'application/json; charset=utf-8');
