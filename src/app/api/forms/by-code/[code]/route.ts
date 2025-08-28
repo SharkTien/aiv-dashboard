@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbPool } from "@/lib/db";
 
+function cors(res: NextResponse) {
+  res.headers.set("Access-Control-Allow-Origin", "*");
+  res.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.headers.set("Vary", "Origin");
+  return res;
+}
+
+export async function OPTIONS() {
+  const res = NextResponse.json({}, { status: 204 });
+  return cors(res);
+}
+
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ code: string }> }
@@ -16,7 +29,7 @@ export async function GET(
     );
     
     if (!Array.isArray(formRows) || (formRows as any).length === 0) {
-      return NextResponse.json({ error: "Form not found" }, { status: 404 });
+      return cors(NextResponse.json({ error: "Form not found" }, { status: 404 }));
     }
     
     const form: any = (formRows as any)[0];
@@ -38,16 +51,16 @@ export async function GET(
       field_options: field.field_options ? JSON.parse(field.field_options) : null
     }));
     
-    return NextResponse.json({ 
+    return cors(NextResponse.json({ 
       form: {
         id: form.id,
         code: form.code,
         name: form.name
       },
       fields: processedFields
-    });
+    }));
   } catch (error) {
     console.error("Error fetching form:", error);
-    return NextResponse.json({ error: "Failed to fetch form" }, { status: 500 });
+    return cors(NextResponse.json({ error: "Failed to fetch form" }, { status: 500 }));
   }
 }

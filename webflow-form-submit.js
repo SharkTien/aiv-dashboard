@@ -1,4 +1,5 @@
 
+
 // Public form submit → Next.js API (no Supabase)
 
 // Grab form (adjust selector to your Webflow form name/id)
@@ -20,6 +21,7 @@ if (!form) {
     var API_HOST = winHost || fromAttr || fromInput || origin;
     // Expose for debugging
     if (typeof window !== 'undefined') window.__FORM_API_HOST__ = API_HOST;
+    console.log('[FormSubmit] Resolved API_HOST =', API_HOST, ' page origin =', origin);
     if (/webflow\.(io|com)/i.test(API_HOST) || /\.webflow\.io$/i.test(API_HOST)) {
       console.warn('[FormSubmit] API_HOST looks like a Webflow domain:', API_HOST, '\nThis will 405 because that origin does not serve your Next.js API. Set window.WEBFLOW_API_HOST or data-api-host on <form> to your backend, e.g., https://your-backend.example.com');
     }
@@ -71,11 +73,27 @@ async function submitToBackend(formData) {
     if (!code) throw new Error('Missing form-code');
 
     const API_HOST = (typeof window !== 'undefined' && (window.WEBFLOW_API_HOST || window.__FORM_API_HOST__ || window.API_HOST)) || (typeof window !== 'undefined' ? window.location.origin : '');
-    const url = `${API_HOST}/api/forms/by-code/${encodeURIComponent(code)}/submit`;
+    const base = `${API_HOST}/api/forms/by-code/${encodeURIComponent(code)}`;
+    const url = `${base}/submit`;
 
     console.log('[FormSubmit] POST URL:', url);
     console.log('[FormSubmit] form-code:', code);
     console.log('[FormSubmit] payload:', payload);
+
+    // Preflight GET probe to detect 405/host issues and DB reachability
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort('probe-timeout'), 8000);
+      const probe = await fetch(base, { method: 'GET', signal: ctrl.signal });
+      clearTimeout(t);
+      console.log('[FormSubmit] Probe GET', base, '→', probe.status, probe.statusText);
+      if (!probe.ok && probe.status !== 404) {
+        const probeBody = await probe.text().catch(() => '');
+        console.warn('[FormSubmit] Probe body:', probeBody);
+      }
+    } catch (probeErr) {
+      console.warn('[FormSubmit] Probe error:', probeErr);
+    }
 
     const res = await fetch(url, {
       method: 'POST',
@@ -86,11 +104,16 @@ async function submitToBackend(formData) {
     console.log('[FormSubmit] response status:', res.status, res.statusText);
 
     if (!res.ok) {
+      console.log('[FormSubmit] Response headers:', Array.from(res.headers.entries()));
       const raw = await res.text().catch(() => '');
       console.warn('[FormSubmit] response body (error):', raw);
       let parsed = null;
       try { parsed = raw ? JSON.parse(raw) : null; } catch {}
       const message = parsed?.error || raw || `Submit failed (${res.status})`;
+      // Extra hint if likely wrong host
+      if (/webflow\.(io|com)/i.test(String(API_HOST))) {
+        console.warn('[FormSubmit] Hint: API_HOST is a Webflow domain. Set window.WEBFLOW_API_HOST to your backend domain.');
+      }
       throw new Error(message);
     }
 
