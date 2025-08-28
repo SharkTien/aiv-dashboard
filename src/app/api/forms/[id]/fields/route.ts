@@ -4,18 +4,18 @@ import { getCurrentUser } from "@/lib/auth";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const formId = params.id;
+  const { id: formId } = await ctx.params;
   const pool = getDbPool();
   
   try {
     // Verify form exists
     const [formRows] = await pool.query("SELECT id FROM forms WHERE id = ?", [formId]);
-    if (!Array.isArray(formRows) || formRows.length === 0) {
+    if (!Array.isArray(formRows) || (formRows as any).length === 0) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
@@ -28,7 +28,7 @@ export async function GET(
       [formId]
     );
     
-    const data = Array.isArray(rows) ? rows : [];
+    const data = Array.isArray(rows) ? (rows as any) : [];
     
     const response = NextResponse.json({ items: data });
     response.headers.set('Content-Type', 'application/json; charset=utf-8');
@@ -41,12 +41,12 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
-  const formId = params.id;
+  const { id: formId } = await ctx.params;
   const body = await req.json();
   const { field_name, field_label, field_type, field_options, is_required, sort_order } = body || {};
   
@@ -59,7 +59,7 @@ export async function POST(
   try {
     // Verify form exists
     const [formRows] = await pool.query("SELECT id FROM forms WHERE id = ?", [formId]);
-    if (!Array.isArray(formRows) || formRows.length === 0) {
+    if (!Array.isArray(formRows) || (formRows as any).length === 0) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
@@ -68,7 +68,7 @@ export async function POST(
       "SELECT id FROM form_fields WHERE form_id = ? AND field_name = ?", 
       [formId, field_name]
     );
-    if (Array.isArray(existingRows) && existingRows.length > 0) {
+    if (Array.isArray(existingRows) && (existingRows as any).length > 0) {
       return NextResponse.json({ error: "Field name already exists in this form" }, { status: 409 });
     }
     
@@ -100,12 +100,12 @@ export async function POST(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
-  const formId = params.id;
+  const { id: formId } = await ctx.params;
   const body = await req.json();
   const { field_id, field_name, field_label, field_type, field_options, is_required, sort_order } = body || {};
   
@@ -121,7 +121,7 @@ export async function PUT(
       "SELECT id FROM form_fields WHERE id = ? AND form_id = ?", 
       [field_id, formId]
     );
-    if (!Array.isArray(existingRows) || existingRows.length === 0) {
+    if (!Array.isArray(existingRows) || (existingRows as any).length === 0) {
       return NextResponse.json({ error: "Field not found" }, { status: 404 });
     }
     
@@ -131,7 +131,7 @@ export async function PUT(
         "SELECT id FROM form_fields WHERE form_id = ? AND field_name = ? AND id != ?", 
         [formId, field_name, field_id]
       );
-      if (Array.isArray(nameRows) && nameRows.length > 0) {
+      if (Array.isArray(nameRows) && (nameRows as any).length > 0) {
         return NextResponse.json({ error: "Field name already exists in this form" }, { status: 409 });
       }
     }
@@ -157,12 +157,12 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
-  const formId = params.id;
+  const { id: formId } = await ctx.params;
   const { searchParams } = new URL(req.url);
   const fieldId = searchParams.get("field_id");
   
