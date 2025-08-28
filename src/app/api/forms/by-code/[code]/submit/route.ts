@@ -7,17 +7,22 @@ const ALLOWED: Record<string, { valueKey: string; labelKey: string }> = {
   uni_mapping: { valueKey: "uni_id", labelKey: "uni_name" },
 };
 
-function cors(res: NextResponse) {
+function cors(res: NextResponse, req?: NextRequest) {
+  const requestedHeaders = req?.headers.get("access-control-request-headers");
   res.headers.set("Access-Control-Allow-Origin", "*");
   res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.headers.set(
+    "Access-Control-Allow-Headers",
+    requestedHeaders || "Content-Type, Authorization"
+  );
+  res.headers.set("Access-Control-Max-Age", "86400");
   res.headers.set("Vary", "Origin");
   return res;
 }
 
-export async function OPTIONS() {
+export async function OPTIONS(req: NextRequest) {
   const res = NextResponse.json({}, { status: 204 });
-  return cors(res);
+  return cors(res, req);
 }
 
 function stripCityPrefix(label: string) {
@@ -45,7 +50,7 @@ export async function POST(
       [formCode]
     );
     if (!Array.isArray(formRows) || (formRows as any).length === 0) {
-      return cors(NextResponse.json({ error: "Form not found" }, { status: 404 }));
+      return cors(NextResponse.json({ error: "Form not found" }, { status: 404 }), req);
     }
     const formId = (formRows as any)[0].id;
 
@@ -120,9 +125,9 @@ export async function POST(
     }
 
     const res = NextResponse.json({ success: true, submission_id: submissionId });
-    return cors(res);
+    return cors(res, req);
   } catch (error) {
     console.error("Error submitting form:", error);
-    return cors(NextResponse.json({ error: "Failed to submit form" }, { status: 500 }));
+    return cors(NextResponse.json({ error: "Failed to submit form" }, { status: 500 }), req);
   }
 }
