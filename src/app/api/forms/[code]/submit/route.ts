@@ -32,9 +32,9 @@ function stripEnglishParen(label: string) {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { code: string } }
+  ctx: { params: Promise<{ code: string }> }
 ) {
-  const formCode = params.code;
+  const { code: formCode } = await ctx.params;
   const body = await req.json();
   
   const pool = getDbPool();

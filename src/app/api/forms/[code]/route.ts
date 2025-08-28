@@ -3,9 +3,9 @@ import { getDbPool } from "@/lib/db";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { code: string } }
+  ctx: { params: Promise<{ code: string }> }
 ) {
-  const formCode = params.code;
+  const { code: formCode } = await ctx.params;
   const pool = getDbPool();
   
   try {
@@ -15,11 +15,11 @@ export async function GET(
       [formCode]
     );
     
-    if (!Array.isArray(formRows) || formRows.length === 0) {
+    if (!Array.isArray(formRows) || (formRows as any).length === 0) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
     
-    const form = formRows[0];
+    const form: any = (formRows as any)[0];
     
     // Get form fields
     const [fieldRows] = await pool.query(
@@ -30,10 +30,10 @@ export async function GET(
       [form.id]
     );
     
-    const fields = Array.isArray(fieldRows) ? fieldRows : [];
+    const fields = Array.isArray(fieldRows) ? (fieldRows as any) : [];
     
     // Parse field options for select/radio/checkbox fields
-    const processedFields = fields.map(field => ({
+    const processedFields = fields.map((field: any) => ({
       ...field,
       field_options: field.field_options ? JSON.parse(field.field_options) : null
     }));
