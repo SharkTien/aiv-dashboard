@@ -4,18 +4,18 @@ import { getCurrentUser } from "@/lib/auth";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const formId = params.id;
+  const { id: formId } = await ctx.params;
   const pool = getDbPool();
   
   try {
     // Verify form exists
     const [formRows] = await pool.query("SELECT id FROM forms WHERE id = ?", [formId]);
-    if (!Array.isArray(formRows) || formRows.length === 0) {
+    if (!Array.isArray(formRows) || (formRows as any).length === 0) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
@@ -28,7 +28,7 @@ export async function GET(
       [formId]
     );
     
-    const submissions = Array.isArray(submissionRows) ? submissionRows : [];
+    const submissions: any[] = Array.isArray(submissionRows) ? (submissionRows as any) : [];
     
     // Get responses for each submission
     const submissionsWithResponses = await Promise.all(
@@ -45,7 +45,7 @@ export async function GET(
         return {
           id: submission.id,
           submitted_at: submission.submitted_at,
-          responses: Array.isArray(responseRows) ? responseRows : []
+          responses: Array.isArray(responseRows) ? (responseRows as any) : []
         };
       })
     );
