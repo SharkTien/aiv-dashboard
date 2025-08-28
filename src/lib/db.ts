@@ -14,8 +14,11 @@ export function getDbPool() {
       waitForConnections: true,
       queueLimit: 0,
       charset: 'utf8mb4',
-      collation: 'utf8mb4_unicode_ci',
     });
+    // Ensure UTF-8 for Vietnamese at session level
+    // Fire-and-forget; subsequent queries will use these session settings
+    pool.query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci").catch(() => {});
+    pool.query("SET SESSION collation_connection = 'utf8mb4_unicode_ci'").catch(() => {});
   }
   return pool;
 }
