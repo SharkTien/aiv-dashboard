@@ -1,0 +1,25 @@
+import mysql from "mysql2/promise";
+
+let pool: mysql.Pool | null = null;
+
+export function getDbPool() {
+  if (!pool) {
+    pool = mysql.createPool({
+      host: process.env.DATABASE_HOST,
+      port: process.env.DATABASE_PORT ? Number(process.env.DATABASE_PORT) : 3306,
+      user: process.env.DATABASE_USER,
+      password: process.env.DATABASE_PASSWORD,
+      database: process.env.DATABASE_NAME,
+      connectionLimit: 10,
+      waitForConnections: true,
+      queueLimit: 0,
+      charset: 'utf8mb4',
+      collation: 'utf8mb4_unicode_ci',
+    });
+  }
+  return pool;
+}
+
+export type Db = ReturnType<typeof getDbPool>;
+
+
