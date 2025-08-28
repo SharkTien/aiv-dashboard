@@ -104,6 +104,13 @@ export default function FormsManager() {
     }
   };
 
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("Copied form code: " + text);
+    } catch {}
+  };
+
   return (
     <div className="space-y-6">
       {/* Header with search and create */}
@@ -163,8 +170,13 @@ export default function FormsManager() {
                         <div className="font-medium text-gray-900 dark:text-white truncate">
                           {form.name}
                         </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300">
-                          Code: {form.code}
+                        <div className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                          <span>Form Code:</span>
+                          <code className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">{form.code}</code>
+                          <button
+                            onClick={() => copy(form.code)}
+                            className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200"
+                          >Copy</button>
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           Created: {new Date(form.created_at).toLocaleDateString()}
@@ -178,6 +190,12 @@ export default function FormsManager() {
                       className="px-3 py-2 text-sm rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors"
                     >
                       Edit
+                    </Link>
+                    <Link
+                      href={`/dashboard/forms/${form.id}/submissions`}
+                      className="px-3 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
+                    >
+                      View
                     </Link>
                     <button
                       onClick={() => handleDeleteForm(form.id)}
@@ -238,6 +256,9 @@ export default function FormsManager() {
                     required
                   />
                 </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  After creating, copy the <span className="font-medium">Form Code</span> and set it as <code>data-form-code</code> on your Webflow form.
+                </p>
                 <div className="flex items-center gap-3 pt-4">
                   <button
                     type="submit"
