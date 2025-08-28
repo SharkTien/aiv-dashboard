@@ -16,8 +16,8 @@ export async function POST(req: NextRequest) {
       [email]
     );
 
-    // @ts-expect-error mysql2 types
-    const user = Array.isArray(rows) && rows.length ? rows[0] : null;
+    const list = Array.isArray(rows) ? (rows as Array<{ user_id: number; entity_id: number; name: string; password_hash: string; role: string; status: number }>) : [];
+    const user = list.length ? list[0] : null;
     if (!user) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
