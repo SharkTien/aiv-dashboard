@@ -11,6 +11,16 @@ export async function POST(req: NextRequest) {
     }
 
     const pool = getDbPool();
+
+    // Basic connectivity probe
+    try {
+      await pool.query("SELECT 1");
+    } catch (probeErr: unknown) {
+      const msg = (probeErr as any)?.message || String(probeErr);
+      console.error("[Login] DB probe failed:", msg);
+      return NextResponse.json({ error: "DB probe failed", detail: msg }, { status: 500 });
+    }
+
     const [rows] = await pool.query(
       `SELECT user_id, entity_id, name, password AS password_hash, role, status FROM user WHERE email = ? LIMIT 1`,
       [email]
@@ -45,8 +55,10 @@ export async function POST(req: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
     });
     return res;
-  } catch (err) {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const msg = (err as any)?.message || String(err);
+    console.error("[Login] Server error:", msg);
+    return NextResponse.json({ error: "Server error", detail: msg }, { status: 500 });
   }
 }
 
