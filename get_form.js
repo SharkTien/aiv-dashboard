@@ -70,7 +70,7 @@ async function submitToBackend(formData) {
     if (!code) throw new Error('Missing form-code');
 
     const API_HOST = (typeof window !== 'undefined' && (window.WEBFLOW_API_HOST || window.__FORM_API_HOST__ || window.API_HOST)) || (typeof window !== 'undefined' ? window.location.origin : '');
-    const url = `${API_HOST}/api/forms/${encodeURIComponent(code)}/submit`;
+    const url = `${API_HOST}/api/forms/by-code/${encodeURIComponent(code)}/submit`;
 
     console.log('[FormSubmit] POST URL:', url);
     console.log('[FormSubmit] form-code:', code);

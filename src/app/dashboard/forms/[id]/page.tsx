@@ -1,6 +1,8 @@
 import FormBuilder from "./FormBuilder";
 
-export default function FormEditPage({ params }: { params: { id: string } }) {
+export default async function FormEditPage(ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const formId = Number(id);
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -9,7 +11,7 @@ export default function FormEditPage({ params }: { params: { id: string } }) {
           Design and customize your form fields.
         </p>
       </div>
-      <FormBuilder formId={parseInt(params.id)} />
+      <FormBuilder formId={formId} />
     </div>
   );
 }

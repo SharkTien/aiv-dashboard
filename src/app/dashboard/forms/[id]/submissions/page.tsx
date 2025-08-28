@@ -1,6 +1,8 @@
-// import SubmissionsViewer from "./SubmissionsViewer";
+import SubmissionsViewer from "./SubmissionsViewer";
 
-export default function FormSubmissionsPage({ params }: { params: { id: string } }) {
+export default async function FormSubmissionsPage(ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const formId = Number(id);
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -9,7 +11,7 @@ export default function FormSubmissionsPage({ params }: { params: { id: string }
           View and manage form submissions.
         </p>
       </div>
-      {/* <SubmissionsViewer formId={parseInt(params.id)} /> */}
+      <SubmissionsViewer formId={formId} />
     </div>
   );
 }
