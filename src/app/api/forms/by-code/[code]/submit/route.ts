@@ -7,10 +7,18 @@ const ALLOWED: Record<string, { valueKey: string; labelKey: string }> = {
   uni_mapping: { valueKey: "uni_id", labelKey: "uni_name" },
 };
 
-function cors(res: NextResponse, req?: NextRequest) {
+const ALLOWED_ORIGINS = new Set([
+  "https://www.aiesec.vn",
+  "https://aiv-dashboard-ten.vercel.app",
+  "http://localhost:3000",
+]);
+
+function withCors(res: NextResponse, req?: NextRequest) {
+  const origin = req?.headers.get("origin") || "";
+  const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "*";
   const requestedHeaders = req?.headers.get("access-control-request-headers");
-  res.headers.set("Access-Control-Allow-Origin", "*");
-  res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.headers.set("Access-Control-Allow-Origin", allowOrigin);
+  res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.headers.set(
     "Access-Control-Allow-Headers",
     requestedHeaders || "Content-Type, Authorization"
@@ -22,7 +30,7 @@ function cors(res: NextResponse, req?: NextRequest) {
 
 export async function OPTIONS(req: NextRequest) {
   const res = NextResponse.json({}, { status: 204 });
-  return cors(res, req);
+  return withCors(res, req);
 }
 
 function stripCityPrefix(label: string) {
@@ -50,7 +58,7 @@ export async function POST(
       [formCode]
     );
     if (!Array.isArray(formRows) || (formRows as any).length === 0) {
-      return cors(NextResponse.json({ error: "Form not found" }, { status: 404 }), req);
+      return withCors(NextResponse.json({ error: "Form not found" }, { status: 404 }), req);
     }
     const formId = (formRows as any)[0].id;
 
@@ -125,9 +133,9 @@ export async function POST(
     }
 
     const res = NextResponse.json({ success: true, submission_id: submissionId });
-    return cors(res, req);
+    return withCors(res, req);
   } catch (error) {
     console.error("Error submitting form:", error);
-    return cors(NextResponse.json({ error: "Failed to submit form" }, { status: 500 }), req);
+    return withCors(NextResponse.json({ error: "Failed to submit form" }, { status: 500 }), req);
   }
 }

@@ -80,19 +80,12 @@ async function submitToBackend(formData) {
     console.log('[FormSubmit] form-code:', code);
     console.log('[FormSubmit] payload:', payload);
 
-    // Preflight GET probe to detect 405/host issues and DB reachability
+    // Manual preflight debug
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort('probe-timeout'), 8000);
-      const probe = await fetch(base, { method: 'GET', signal: ctrl.signal });
-      clearTimeout(t);
-      console.log('[FormSubmit] Probe GET', base, '→', probe.status, probe.statusText);
-      if (!probe.ok && probe.status !== 404) {
-        const probeBody = await probe.text().catch(() => '');
-        console.warn('[FormSubmit] Probe body:', probeBody);
-      }
-    } catch (probeErr) {
-      console.warn('[FormSubmit] Probe error:', probeErr);
+      const pre = await fetch(url, { method: 'OPTIONS' });
+      console.log('[FormSubmit] Manual OPTIONS →', pre.status, pre.statusText, 'Headers:', Array.from(pre.headers.entries()));
+    } catch (optErr) {
+      console.warn('[FormSubmit] Manual OPTIONS failed:', optErr);
     }
 
     const res = await fetch(url, {
@@ -165,8 +158,11 @@ async function handleSubmission(formData) {
 const TARGET_FORM_CODE = 'ogv-w24-submissions-1756364313312';
 
 if (form) {
+  // Neutralize native form submit path and any other submit handlers
+  try { form.setAttribute('action', 'about:blank'); } catch {}
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    e.stopImmediatePropagation();
     // Ensure hidden input exists and contains the target code
     let codeEl = document.getElementById('form-code');
     if (!codeEl) {
@@ -182,5 +178,5 @@ if (form) {
 
     const formData = new FormData(form);
     await handleSubmission(formData);
-  });
+  }, true); // capture to run before other listeners
 }
