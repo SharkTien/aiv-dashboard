@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   
   const { searchParams } = new URL(req.url);
   const entity_id = searchParams.get("entity_id");
-  const limit = Math.min(Number(searchParams.get("limit") || 20), 100);
+  const limit = Math.min(Number(searchParams.get("limit") || 20), 500);
   const page = Math.max(Number(searchParams.get("page") || 1), 1);
   const offset = (page - 1) * limit;
   const q = (searchParams.get("q") || "").trim();

@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   const admin = await getCurrentUser();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { searchParams } = new URL(req.url);
-  const limit = Math.min(Number(searchParams.get("limit") || 20), 100);
+  const limit = Math.min(Number(searchParams.get("limit") || 20), 500);
   const cursor = searchParams.get("cursor");
   const q = (searchParams.get("q") || "").trim();
 

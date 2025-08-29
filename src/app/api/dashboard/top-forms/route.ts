@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       WHERE f.type = 'oGV'
       GROUP BY f.id, f.name, f.type
       ORDER BY submissions DESC
-      LIMIT 5
+      LIMIT 20
     `);
 
     const topForms = Array.isArray(formsResult) ? formsResult.map((row: any) => ({

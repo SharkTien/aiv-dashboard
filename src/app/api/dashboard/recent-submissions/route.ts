@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN entity e ON fs.entity_id = e.entity_id
       WHERE f.type = 'oGV'
       ORDER BY fs.timestamp DESC
-      LIMIT 10
+      LIMIT 50
     `);
 
     const recentSubmissions = Array.isArray(submissionsResult) ? submissionsResult.map((row: any) => ({
