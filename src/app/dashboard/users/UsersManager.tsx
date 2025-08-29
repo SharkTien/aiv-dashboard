@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 
-type Entity = { id: number; name: string };
+type Entity = { entity_id: number; name: string };
 
 export default function UsersManager() {
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -15,6 +15,8 @@ export default function UsersManager() {
 
   useEffect(() => {
     fetch("/api/entities").then((r) => r.json()).then((data) => {
+      console.log('UsersManager - Entities data:', data);
+      console.log('UsersManager - Entities items:', data.items);
       setEntities(Array.isArray(data.items) ? data.items : []);
     });
   }, []);
@@ -55,13 +57,13 @@ export default function UsersManager() {
                     <div className="grid gap-2">
                       <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Entity</label>
                       <select 
-                        value={entityId as any} 
-                        onChange={(e) => setEntityId(Number(e.target.value))} 
+                        value={entityId || ""} 
+                        onChange={(e) => setEntityId(e.target.value ? Number(e.target.value) : "")} 
                         className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
                       >
                         <option value="">Select entity…</option>
                         {entities.map((e) => (
-                          <option key={e.id} value={e.id}>{e.name}</option>
+                          <option key={e.entity_id} value={e.entity_id}>{e.name}</option>
                         ))}
                       </select>
                     </div>

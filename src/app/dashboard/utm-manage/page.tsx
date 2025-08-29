@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import UTMCampaignBuilderPage from "@/app/dashboard/utm-campaigns/builder/page";
 
 type UTMCampaign = {
   id: number;
   entity_id?: number | null;
+  entity_name?: string | null;
   code: string;
   name: string;
   description: string;
@@ -43,7 +45,7 @@ export default function UTMManagePage() {
   const [campaigns, setCampaigns] = useState<UTMCampaign[]>([]);
   const [sources, setSources] = useState<UTMSource[]>([]);
   const [mediums, setMediums] = useState<UTMMedium[]>([]);
-  const [entities, setEntities] = useState<{ id: number; name: string }[]>([]);
+  const [entities, setEntities] = useState<{ entity_id: number; name: string; type?: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<{ type: TabType; id: number | null }>({ type: 'campaigns', id: null });
   const [page, setPage] = useState(1);
@@ -58,7 +60,8 @@ export default function UTMManagePage() {
     description: '',
     platform: '',
     name_required: false,
-    is_active: true
+    is_active: true,
+    entity_id: ''
   });
 
   useEffect(() => {
@@ -91,6 +94,8 @@ export default function UTMManagePage() {
       }
       if (entitiesRes.ok) {
         const entData = await entitiesRes.json();
+        console.log('UTM Manage - Entities data:', entData);
+        console.log('UTM Manage - Entities items:', entData.items);
         setEntities(Array.isArray(entData.items) ? entData.items : []);
       }
     } catch (error) {
@@ -107,7 +112,8 @@ export default function UTMManagePage() {
       description: '',
       platform: '',
       name_required: false,
-      is_active: true
+      is_active: true,
+      entity_id: ''
     });
     setEditing({ type: activeTab, id: null });
   };
@@ -119,7 +125,8 @@ export default function UTMManagePage() {
       description: item.description || '',
       platform: item.platform || '',
       name_required: item.name_required || false,
-      is_active: item.is_active
+      is_active: item.is_active,
+      entity_id: item.entity_id || ''
     });
     setEditing({ type: activeTab, id: item.id });
   };
@@ -129,6 +136,11 @@ export default function UTMManagePage() {
     
     if (!formData.code.trim() || !formData.name.trim()) {
       alert('Code and Name are required');
+      return;
+    }
+
+    if (activeTab === 'campaigns' && !formData.entity_id) {
+      alert('Entity is required for campaigns');
       return;
     }
 
@@ -190,7 +202,7 @@ export default function UTMManagePage() {
             (c.name || '').toLowerCase().includes(q) ||
             (c.description || '').toLowerCase().includes(q)
           ) : true;
-          const matchesEntity = entityFilter ? c.entity_id === entityFilter : true;
+                     const matchesEntity = entityFilter ? c.entity_id === Number(entityFilter) : true;
           return matchesSearch && matchesEntity;
         });
       }
@@ -204,6 +216,7 @@ export default function UTMManagePage() {
     switch (activeTab) {
       case 'campaigns':
         return [
+          { key: 'entity_name', label: 'Entity Code' },
           { key: 'code', label: 'Code' },
           { key: 'name', label: 'Name' },
           { key: 'description', label: 'Description' },
@@ -230,8 +243,116 @@ export default function UTMManagePage() {
     }
   };
 
+  const renderTableCell = (item: any, column: { key: string; label: string }) => {
+    switch (column.key) {
+      case 'entity_name':
+        return (
+          <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+            {item.entity_name || (item.entity_id ? `Entity ${item.entity_id}` : '-')}
+          </td>
+        );
+      case 'code':
+        return (
+          <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+            {item.code}
+          </td>
+        );
+      case 'name':
+        return (
+          <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+            {item.name}
+          </td>
+        );
+      case 'platform':
+        return (
+          <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+            {item.platform}
+          </td>
+        );
+      case 'name_required':
+        return (
+          <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+              item.name_required
+                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+            }`}>
+              {item.name_required ? 'Yes' : 'No'}
+            </span>
+          </td>
+        );
+      case 'description':
+        return (
+          <td key={column.key} className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
+            {item.description}
+          </td>
+        );
+      case 'is_active':
+        return (
+          <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+              item.is_active
+                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+            }`}>
+              {item.is_active ? 'Active' : 'Inactive'}
+            </span>
+          </td>
+        );
+      default:
+        return null;
+    }
+  };
+
   if (loading) {
-    return <LoadingOverlay isVisible={true} message="Loading UTM Management..." />;
+    return (
+      <div className="relative min-h-[400px]">
+        {/* Custom loading overlay for this section */}
+        <div className="absolute inset-0 z-[9999] flex items-center justify-center bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl">
+          <div className="bg-white/90 dark:bg-gray-800/90 rounded-2xl p-8 shadow-2xl border border-white/20 dark:border-gray-700/20 max-w-md w-full mx-4">
+            <div className="flex flex-col items-center space-y-6">
+              {/* Loading animation */}
+              <div className="relative w-24 h-24">
+                <Image
+                  src="/giphy.gif"
+                  alt="Loading animation"
+                  fill
+                  className="object-contain rounded-lg"
+                  priority
+                />
+              </div>
+
+              {/* Loading text */}
+              <div className="text-center">
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  Loading UTM Management...
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Please wait while we fetch the data...
+                </p>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-sky-500 to-blue-600 rounded-full animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Placeholder content to maintain layout */}
+        <div className="opacity-0">
+          <div className="p-6 space-y-6">
+            <div className="h-8 bg-gray-200 dark:bg-gray-600 rounded animate-pulse"></div>
+            <div className="h-6 bg-gray-200 dark:bg-gray-600 rounded animate-pulse"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="h-64 bg-gray-200 dark:bg-gray-600 rounded-lg animate-pulse"></div>
+              <div className="lg:col-span-2 h-64 bg-gray-200 dark:bg-gray-600 rounded-lg animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -308,6 +429,27 @@ export default function UTMManagePage() {
                     required
                   />
                 </div>
+
+                {activeTab === 'campaigns' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Entity *
+                    </label>
+                    <select
+                      value={formData.entity_id}
+                      onChange={(e) => setFormData({ ...formData, entity_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Select Entity</option>
+                      {entities.map((ent) => (
+                        <option key={ent.entity_id} value={ent.entity_id}>
+                          {ent.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {activeTab === 'sources' && (
                   <div>
@@ -406,9 +548,12 @@ export default function UTMManagePage() {
                         className="h-9 px-3 rounded-md ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
                       >
                         <option value="">All LC</option>
-                        {entities.map((ent) => (
-                          <option key={ent.id} value={ent.id}>{ent.name}</option>
-                        ))}
+                                                 {entities.map((ent) => {
+                           console.log('UTM Manage - Rendering entity:', ent);
+                           return (
+                             <option key={ent.entity_id} value={ent.entity_id}>{ent.name}</option>
+                           );
+                         })}
                       </select>
                     </div>
                   )}
@@ -440,60 +585,27 @@ export default function UTMManagePage() {
                       const start = (currentPage - 1) * pageSize;
                       const end = start + pageSize;
                       return data.slice(start, end);
-                    })().map((item: any) => (
-                      <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                          {item.code}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {item.name}
-                        </td>
-                        {activeTab === 'sources' && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                            {item.platform}
-                          </td>
-                        )}
-                        {activeTab === 'mediums' && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              item.name_required
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                            }`}>
-                              {item.name_required ? 'Yes' : 'No'}
-                            </span>
-                          </td>
-                        )}
-                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
-                          {item.description}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            item.is_active
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                          }`}>
-                            {item.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex justify-end space-x-2">
-                            <button
-                              onClick={() => handleEdit(item)}
-                              className="text-sky-600 hover:text-sky-900 dark:text-sky-400 dark:hover:text-sky-300"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                                         })().map((item: any) => (
+                       <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                         {getColumns().map((column) => renderTableCell(item, column))}
+                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                           <div className="flex justify-end space-x-2">
+                             <button
+                               onClick={() => handleEdit(item)}
+                               className="text-sky-600 hover:text-sky-900 dark:text-sky-400 dark:hover:text-sky-300"
+                             >
+                               Edit
+                             </button>
+                             <button
+                               onClick={() => handleDelete(item.id)}
+                               className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                             >
+                               Delete
+                             </button>
+                           </div>
+                         </td>
+                       </tr>
+                     ))}
                   </tbody>
                 </table>
               </div>

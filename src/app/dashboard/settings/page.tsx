@@ -15,7 +15,7 @@ export default function Page() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
-  const [entities, setEntities] = useState<Array<{ id: number; name: string }>>([]);
+  const [entities, setEntities] = useState<Array<{ entity_id: number; name: string }>>([]);
 
   useEffect(() => {
     (async () => {
@@ -26,11 +26,15 @@ export default function Page() {
         ]);
         if (entRes.ok) {
           const ents = await entRes.json();
+          console.log('Settings - Entities data:', ents);
+          console.log('Settings - Entities items:', ents.items);
           setEntities(Array.isArray(ents.items) ? ents.items : []);
         }
         if (meRes.ok) {
           const data = await meRes.json();
+          console.log('Settings - User data:', data);
           const user = data.user as Me;
+          console.log('Settings - User entity_id:', user.entity_id);
           setMe(user);
           setName(user.name);
           setEmail(user.email as any);
@@ -42,7 +46,7 @@ export default function Page() {
 
   const entityName = useMemo(() => {
     if (!me) return "";
-    const found = entities.find(e => e.id === Number(me.entity_id));
+    const found = entities.find(e => e.entity_id === Number(me.entity_id));
     return found ? found.name : String(me.entity_id);
   }, [entities, me]);
 

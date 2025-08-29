@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import DropdownMenu, { DropdownItem } from "@/components/DropdownMenu";
@@ -352,7 +353,49 @@ export default function FormsManager() {
         </div>
         
         {loading ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">Loading...</div>
+          <div className="relative min-h-[400px]">
+            {/* Custom loading overlay for this section */}
+            <div className="absolute inset-0 z-[9999] flex items-center justify-center bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl">
+              <div className="bg-white/90 dark:bg-gray-800/90 rounded-2xl p-8 shadow-2xl border border-white/20 dark:border-gray-700/20 max-w-md w-full mx-4">
+                <div className="flex flex-col items-center space-y-6">
+                  {/* Loading animation */}
+                  <div className="relative w-24 h-24">
+                    <Image
+                      src="/giphy.gif"
+                      alt="Loading animation"
+                      fill
+                      className="object-contain rounded-lg"
+                      priority
+                    />
+                  </div>
+
+                  {/* Loading text */}
+                  <div className="text-center">
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                      Loading forms...
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Please wait while we fetch the data...
+                    </p>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-sky-500 to-blue-600 rounded-full animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Placeholder content to maintain layout */}
+            <div className="opacity-0">
+              <div className="space-y-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-20 bg-gray-200 dark:bg-gray-600 rounded-lg animate-pulse"></div>
+                ))}
+              </div>
+            </div>
+          </div>
         ) : forms.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             No forms found

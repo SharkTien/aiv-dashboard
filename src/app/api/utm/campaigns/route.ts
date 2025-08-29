@@ -10,7 +10,19 @@ export async function GET(req: NextRequest) {
   
   try {
     const [rows] = await pool.query(
-      "SELECT id, entity_id, code, name, description, is_active, created_at, updated_at FROM utm_campaigns ORDER BY name ASC"
+      `SELECT 
+        uc.id, 
+        uc.entity_id, 
+        uc.code, 
+        uc.name, 
+        uc.description, 
+        uc.is_active, 
+        uc.created_at, 
+        uc.updated_at,
+        e.name as entity_name
+      FROM utm_campaigns uc
+      LEFT JOIN entity e ON uc.entity_id = e.entity_id
+      ORDER BY uc.name ASC`
     );
     
     const campaigns = Array.isArray(rows) ? rows : [];
@@ -54,7 +66,19 @@ export async function POST(req: NextRequest) {
     }
     
     const [rows] = await pool.query(
-      "SELECT id, entity_id, code, name, description, is_active, created_at, updated_at FROM utm_campaigns WHERE id = ?",
+      `SELECT 
+        uc.id, 
+        uc.entity_id, 
+        uc.code, 
+        uc.name, 
+        uc.description, 
+        uc.is_active, 
+        uc.created_at, 
+        uc.updated_at,
+        e.name as entity_name
+      FROM utm_campaigns uc
+      LEFT JOIN entity e ON uc.entity_id = e.entity_id
+      WHERE uc.id = ?`,
       [campaignId]
     );
     
@@ -112,7 +136,19 @@ export async function PUT(req: NextRequest) {
     }
     
     const [rows] = await pool.query(
-      "SELECT id, entity_id, code, name, description, is_active, created_at, updated_at FROM utm_campaigns WHERE id = ?",
+      `SELECT 
+        uc.id, 
+        uc.entity_id, 
+        uc.code, 
+        uc.name, 
+        uc.description, 
+        uc.is_active, 
+        uc.created_at, 
+        uc.updated_at,
+        e.name as entity_name
+      FROM utm_campaigns uc
+      LEFT JOIN entity e ON uc.entity_id = e.entity_id
+      WHERE uc.id = ?`,
       [id]
     );
     

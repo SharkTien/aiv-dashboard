@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import ExcelTemplate from "./ExcelTemplate";
 import LoadingOverlay from "@/components/LoadingOverlay";
 
@@ -27,7 +28,7 @@ type FormResponse = {
   value_label?: string | null;
 };
 
-export default function SubmissionsViewer({ formId, options, inlineLoading }: { formId: number; options?: { showBack?: boolean; allowImport?: boolean; allowBulkActions?: boolean; showTemplate?: boolean }, inlineLoading?: boolean }) {
+export default function SubmissionsViewer({ formId, options, inlineLoading }: { formId: number; options?: { showBack?: boolean; allowImport?: boolean; allowBulkActions?: boolean; showTemplate?: boolean; showEntity?: boolean }, inlineLoading?: boolean }) {
   const [form, setForm] = useState<Form | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -232,6 +233,20 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId]);
+
+  // Listen for export event
+  useEffect(() => {
+    const handleExport = (event: CustomEvent) => {
+      if (event.detail?.type === 'raw') {
+        exportToCSV();
+      }
+    };
+
+    window.addEventListener('exportCSV', handleExport as EventListener);
+    return () => {
+      window.removeEventListener('exportCSV', handleExport as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     if (showMoveModal) {
@@ -489,7 +504,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   const exportToCSV = () => {
     if (filteredSubmissions.length === 0) return;
 
-    // Prepare CSV data
+    // Prepare CSV data - export all filtered data, not just current page
     const csvHeaders = ['Timestamp', 'Entity', ...fieldHeaders.map(h => h.label)];
     const csvRows = filteredSubmissions.map(sub => {
       const map = new Map(sub.responses.map((r) => [r.field_name, r]));
@@ -516,7 +531,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `${form?.name || 'submissions'}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `raw_data_${form?.name || 'submissions'}_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -606,11 +621,61 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
     return inlineLoading ? (
       <div className="p-6 text-sm text-gray-600 dark:text-gray-300">Loading submissions...</div>
     ) : (
-      <LoadingOverlay 
-        isVisible={true} 
-        message="Loading submissions..." 
-        showProgress={false}
-      />
+      <div className="relative min-h-[400px]">
+        {/* Custom loading overlay for this section */}
+        <div className="absolute inset-0 z-[9999] flex items-center justify-center bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl">
+          <div className="bg-white/90 dark:bg-gray-800/90 rounded-2xl p-8 shadow-2xl border border-white/20 dark:border-gray-700/20 max-w-md w-full mx-4">
+            <div className="flex flex-col items-center space-y-6">
+              {/* Loading animation */}
+              <div className="relative w-24 h-24">
+                <Image
+                  src="/giphy.gif"
+                  alt="Loading animation"
+                  fill
+                  className="object-contain rounded-lg"
+                  priority
+                />
+              </div>
+
+              {/* Loading text */}
+              <div className="text-center">
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  Loading submissions...
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Please wait while we fetch the data...
+                </p>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-sky-500 to-blue-600 rounded-full animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Placeholder content to maintain layout */}
+        <div className="opacity-0">
+          <div className="space-y-6">
+            <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50">
+              <div className="h-8 bg-gray-200 dark:bg-gray-600 rounded animate-pulse"></div>
+            </div>
+            <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl border border-gray-200/50 dark:border-gray-600/50 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200/50 dark:border-gray-600/50">
+                <div className="h-6 bg-gray-200 dark:bg-gray-600 rounded animate-pulse"></div>
+              </div>
+              <div className="p-6">
+                <div className="space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="h-16 bg-gray-200 dark:bg-gray-600 rounded animate-pulse"></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -890,7 +955,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
                   </div>
                 </button>
                 
-                {options?.allowImport !== false && submissions.length > 0 && (
+                {filteredSubmissions.length > 0 && (
                   <button
                     onClick={() => exportToCSV()}
                     className="px-3 py-2 text-sm rounded-lg bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50 text-green-600 dark:text-green-400 font-medium transition-colors"
@@ -1017,7 +1082,9 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
                       </div>
                     </th>
                     <th className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">Timestamp</th>
-                    <th className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">Entity</th>
+                    {options?.showEntity !== false && (
+                      <th className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">Entity</th>
+                    )}
                     {fieldHeaders.map((h) => (
                       <th key={h.name} className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">
                         {h.label}
@@ -1054,15 +1121,17 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
                             }
                           })()}
                         </td>
-                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                          {sub.entityName ? (
-                            <span className="text-blue-600 dark:text-blue-400 font-medium">
-                              {sub.entityName}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">NOT FOUND</span>
-                          )}
-                        </td>
+                        {options?.showEntity !== false && (
+                          <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                            {sub.entityName ? (
+                              <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                {sub.entityName}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">NOT FOUND</span>
+                            )}
+                          </td>
+                        )}
                         {fieldHeaders.map((h) => {
                           const resp = map.get(h.name) as FormResponse | undefined;
                           const fieldValue = resp?.value || "";

@@ -5,9 +5,9 @@ import LoadingOverlay from "@/components/LoadingOverlay";
 export default function UTMCampaignBuilderPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  type Campaign = { id: number; entity_id: number | null; code: string; name: string; description: string | null; is_active: boolean };
+  type Campaign = { id: number; entity_id: number | null; entity_name?: string | null; code: string; name: string; description: string | null; is_active: boolean };
   type CampaignBlock = { type: "text"; value: string } | { type: "entity_id" };
-  type Entity = { id: number; name: string };
+  type Entity = { entity_id: number; name: string };
   const [blocks, setBlocks] = useState<CampaignBlock[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -26,10 +26,13 @@ export default function UTMCampaignBuilderPage() {
       ]);
       if (entRes.ok) {
         const entData = await entRes.json();
+        console.log('UTM Campaign Builder - Entities data:', entData);
+        console.log('UTM Campaign Builder - Entities items:', entData.items);
         setEntities(Array.isArray(entData.items) ? entData.items : []);
       }
       if (campRes.ok) {
         const data: Campaign[] = await campRes.json();
+        console.log('UTM Campaign Builder - Campaigns data:', data);
         setActiveCampaigns(Array.isArray(data) ? data.filter(c => c.is_active) : []);
       }
     } catch (e) {
@@ -77,12 +80,12 @@ export default function UTMCampaignBuilderPage() {
 
   const entityNameById = (id: number | null) => {
     if (!id) return '-';
-    const found = entities.find(e => e.id === id);
+    const found = entities.find(e => e.entity_id === id);
     return found ? found.name : '-';
   };
 
   const filteredCampaigns = activeCampaigns.filter(c => {
-    const matchesEntity = entityFilter ? c.entity_id === entityFilter : true;
+    const matchesEntity = entityFilter ? c.entity_id === Number(entityFilter) : true;
     const q = search.trim().toLowerCase();
     const matchesSearch = q
       ? (c.name?.toLowerCase().includes(q) || c.code?.toLowerCase().includes(q))
@@ -162,7 +165,7 @@ export default function UTMCampaignBuilderPage() {
             >
               <option value="">All LC</option>
               {entities.map(ent => (
-                <option key={ent.id} value={ent.id}>{ent.name}</option>
+                <option key={ent.entity_id} value={ent.entity_id}>{ent.name}</option>
               ))}
             </select>
           </div>
@@ -181,7 +184,7 @@ export default function UTMCampaignBuilderPage() {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredCampaigns.map(c => (
                   <tr key={c.id}>
-                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white font-mono">{entityNameById(c.entity_id)}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white font-mono">{c.entity_name || entityNameById(c.entity_id)}</td>
                     <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{c.name}</td>
                   </tr>
                 ))}
