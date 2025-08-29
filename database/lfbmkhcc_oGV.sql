@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Aug 28, 2025 at 04:33 PM
+-- Generation Time: Aug 29, 2025 at 09:49 AM
 -- Server version: 10.6.16-MariaDB-cll-lve-log
 -- PHP Version: 8.2.15
 
@@ -70,7 +70,9 @@ CREATE TABLE `forms` (
 --
 
 INSERT INTO `forms` (`id`, `code`, `name`, `created_at`, `updated_at`) VALUES
-(4, 'ogv-w24-submissions-1756364313312', 'oGV W24 Submissions', '2025-08-28 06:58:34', '2025-08-28 06:58:34');
+(4, 'ogv-w24-submissions-1756364313312', 'oGV W24 Submissions', '2025-08-28 06:58:34', '2025-08-28 06:58:34'),
+(12, 'ogv-s24-submissions-1756402896602', 'oGV S24 Submissions', '2025-08-28 17:41:27', '2025-08-28 17:41:37'),
+(13, 'ogv-s25-submissions-1756404098370', 'oGV S25 Submissions', '2025-08-28 18:01:27', '2025-08-28 18:01:39');
 
 -- --------------------------------------------------------
 
@@ -96,7 +98,6 @@ CREATE TABLE `form_fields` (
 --
 
 INSERT INTO `form_fields` (`id`, `form_id`, `field_name`, `field_label`, `field_type`, `field_options`, `is_required`, `sort_order`, `created_at`, `updated_at`) VALUES
-(10, 4, 'timestamp', 'timestamp', 'datetime', NULL, 0, 1, '2025-08-28 07:00:25', '2025-08-28 07:00:25'),
 (11, 4, 'form-code', 'form-code', 'text', NULL, 0, 2, '2025-08-28 07:00:37', '2025-08-28 07:00:37'),
 (12, 4, 'name', 'name', 'text', NULL, 0, 3, '2025-08-28 07:00:43', '2025-08-28 07:00:43'),
 (13, 4, 'birth', 'birth', 'number', NULL, 0, 4, '2025-08-28 07:00:51', '2025-08-28 07:00:51'),
@@ -118,7 +119,52 @@ INSERT INTO `form_fields` (`id`, `form_id`, `field_name`, `field_label`, `field_
 (29, 4, 'utm_medium', 'utm_medium', 'text', NULL, 0, 20, '2025-08-28 07:11:59', '2025-08-28 07:11:59'),
 (30, 4, 'utm_campaign', 'utm_campaign', 'text', NULL, 0, 21, '2025-08-28 07:12:03', '2025-08-28 07:12:03'),
 (31, 4, 'utm_id', 'utm_id', 'number', NULL, 0, 22, '2025-08-28 07:12:12', '2025-08-28 07:12:12'),
-(32, 4, 'utm_content', 'utm_content', 'text', NULL, 0, 23, '2025-08-28 07:12:19', '2025-08-28 07:12:19');
+(32, 4, 'utm_content', 'utm_content', 'text', NULL, 0, 23, '2025-08-28 07:12:19', '2025-08-28 07:12:19'),
+(121, 12, 'form-code', 'form-code', 'text', NULL, 0, 2, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(122, 12, 'name', 'name', 'text', NULL, 0, 3, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(123, 12, 'birth', 'birth', 'number', NULL, 0, 4, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(124, 12, 'fb', 'fb', 'text', NULL, 0, 5, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(125, 12, 'phone', 'phone', 'text', NULL, 0, 6, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(126, 12, 'email', 'email', 'email', NULL, 0, 7, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(127, 12, 'livewhere', 'livewhere', 'text', NULL, 0, 8, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(128, 12, 'uni', 'uni', 'database', '{\"source\":\"uni_mapping\"}', 0, 9, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(129, 12, 'other--uni', 'other--uni', 'text', NULL, 0, 10, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(130, 12, 'UniversityYear', 'UniversityYear', 'number', NULL, 0, 11, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(131, 12, 'Major', 'Major', 'text', NULL, 0, 12, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(132, 12, 'startdate', 'startdate', 'text', NULL, 0, 13, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(133, 12, 'enddate', 'enddate', 'text', NULL, 0, 14, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(134, 12, 'Channel', 'Channel', 'text', NULL, 0, 15, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(135, 12, 'promoteLeadership', 'promoteLeadership', 'number', NULL, 0, 16, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(136, 12, 'ReceiveInformation', 'ReceiveInformation', 'text', NULL, 0, 17, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(137, 12, 'categorize', 'categorize', 'text', NULL, 0, 18, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(138, 12, 'utm_source', 'utm_source', 'text', NULL, 0, 19, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(139, 12, 'utm_medium', 'utm_medium', 'text', NULL, 0, 20, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(140, 12, 'utm_campaign', 'utm_campaign', 'text', NULL, 0, 21, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(141, 12, 'utm_id', 'utm_id', 'number', NULL, 0, 22, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(142, 12, 'utm_content', 'utm_content', 'text', NULL, 0, 23, '2025-08-28 17:41:27', '2025-08-28 17:41:27'),
+(143, 13, 'form-code', 'form-code', 'text', NULL, 0, 2, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(144, 13, 'name', 'name', 'text', NULL, 0, 3, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(145, 13, 'birth', 'birth', 'number', NULL, 0, 4, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(146, 13, 'fb', 'fb', 'text', NULL, 0, 5, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(147, 13, 'phone', 'phone', 'text', NULL, 0, 6, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(148, 13, 'email', 'email', 'email', NULL, 0, 7, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(149, 13, 'livewhere', 'livewhere', 'text', NULL, 0, 8, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(150, 13, 'uni', 'uni', 'database', '{\"source\":\"uni_mapping\"}', 0, 9, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(151, 13, 'other--uni', 'other--uni', 'text', NULL, 0, 10, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(152, 13, 'UniversityYear', 'UniversityYear', 'number', NULL, 0, 11, '2025-08-28 18:01:27', '2025-08-28 18:01:27'),
+(153, 13, 'Major', 'Major', 'text', NULL, 0, 12, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(154, 13, 'startdate', 'startdate', 'text', NULL, 0, 13, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(155, 13, 'enddate', 'enddate', 'text', NULL, 0, 14, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(156, 13, 'Channel', 'Channel', 'text', NULL, 0, 15, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(157, 13, 'promoteLeadership', 'promoteLeadership', 'number', NULL, 0, 16, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(158, 13, 'ReceiveInformation', 'ReceiveInformation', 'text', NULL, 0, 17, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(159, 13, 'categorize', 'categorize', 'text', NULL, 0, 18, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(160, 13, 'utm_source', 'utm_source', 'text', NULL, 0, 19, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(161, 13, 'utm_medium', 'utm_medium', 'text', NULL, 0, 20, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(162, 13, 'utm_campaign', 'utm_campaign', 'text', NULL, 0, 21, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(163, 13, 'utm_id', 'utm_id', 'number', NULL, 0, 22, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(164, 13, 'utm_content', 'utm_content', 'text', NULL, 0, 23, '2025-08-28 18:01:28', '2025-08-28 18:01:28'),
+(165, 4, 'Timestamp', 'Timestamp', 'datetime', NULL, 0, 1, '2025-08-28 19:02:34', '2025-08-28 19:26:06');
 
 -- --------------------------------------------------------
 
@@ -142,7 +188,7 @@ CREATE TABLE `form_responses` (
 CREATE TABLE `form_submissions` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `form_id` bigint(20) UNSIGNED NOT NULL,
-  `submitted_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `timestamp` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -873,7 +919,11 @@ INSERT INTO `uni_mapping` (`uni_id`, `entity_id`, `uni_name`, `created_at`, `upd
 (860, 4, 'Danang - Đại học Huế - Khoa Du Lịch (Hue University - Faculty of Tourism)', '2025-08-28 08:48:02', '2025-08-28 08:48:02'),
 (861, 4, 'Danang - Đại học Huế - Khoa Giáo Dục Thể Chất (Hue University - Faculty of Physical Education)', '2025-08-28 08:48:02', '2025-08-28 08:48:02'),
 (862, 4, 'Danang - Đại học Huế - Khoa Luật (Hue University - Faculty of Law)', '2025-08-28 08:48:02', '2025-08-28 08:48:02'),
-(863, 5, 'HCMC - Đại học FPT HCM (FPT University)', '2025-08-28 08:48:02', '2025-08-28 08:48:02');
+(863, 5, 'HCMC - Đại học FPT HCM (FPT University)', '2025-08-28 08:48:02', '2025-08-28 08:48:02'),
+(864, 2, 'Hanoi - Đại học Quốc gia Hà Nội (Vietnam National University)', '2025-08-28 10:11:36', '2025-08-28 10:11:36'),
+(865, 2, 'Hanoi - Đại học Ngoại thương (Foreign Trade University)', '2025-08-28 10:11:36', '2025-08-28 10:11:36'),
+(866, 6, 'HCMC - Đại học Kinh tế (University of Economics)', '2025-08-28 10:11:36', '2025-08-28 10:11:36'),
+(867, 6, 'HCMC - Đại học Hoa Sen (Hoa Sen University)', '2025-08-28 10:11:36', '2025-08-28 10:11:36');
 
 -- --------------------------------------------------------
 
@@ -940,7 +990,7 @@ ALTER TABLE `form_responses`
 ALTER TABLE `form_submissions`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_form_id` (`form_id`),
-  ADD KEY `idx_submitted_at` (`submitted_at`);
+  ADD KEY `idx_submitted_at` (`timestamp`);
 
 --
 -- Indexes for table `uni_mapping`
@@ -966,37 +1016,37 @@ ALTER TABLE `user`
 -- AUTO_INCREMENT for table `entity`
 --
 ALTER TABLE `entity`
-  MODIFY `entity_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `entity_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `forms`
 --
 ALTER TABLE `forms`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `form_fields`
 --
 ALTER TABLE `form_fields`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=166;
 
 --
 -- AUTO_INCREMENT for table `form_responses`
 --
 ALTER TABLE `form_responses`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=256633;
 
 --
 -- AUTO_INCREMENT for table `form_submissions`
 --
 ALTER TABLE `form_submissions`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24786;
 
 --
 -- AUTO_INCREMENT for table `uni_mapping`
 --
 ALTER TABLE `uni_mapping`
-  MODIFY `uni_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=864;
+  MODIFY `uni_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=871;
 
 --
 -- AUTO_INCREMENT for table `user`
@@ -1012,20 +1062,20 @@ ALTER TABLE `user`
 -- Constraints for table `form_fields`
 --
 ALTER TABLE `form_fields`
-  ADD CONSTRAINT `form_fields_ibfk_1` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `fk_form_fields_form` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `form_responses`
 --
 ALTER TABLE `form_responses`
-  ADD CONSTRAINT `form_responses_ibfk_1` FOREIGN KEY (`submission_id`) REFERENCES `form_submissions` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `form_responses_ibfk_2` FOREIGN KEY (`field_id`) REFERENCES `form_fields` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `fk_responses_field` FOREIGN KEY (`field_id`) REFERENCES `form_fields` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_responses_submission` FOREIGN KEY (`submission_id`) REFERENCES `form_submissions` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `form_submissions`
 --
 ALTER TABLE `form_submissions`
-  ADD CONSTRAINT `form_submissions_ibfk_1` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `fk_submissions_form` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `uni_mapping`

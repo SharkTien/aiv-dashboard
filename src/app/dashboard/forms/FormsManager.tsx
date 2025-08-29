@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import LoadingOverlay from "@/components/LoadingOverlay";
+import DropdownMenu, { DropdownItem } from "@/components/DropdownMenu";
 
 type Form = {
   id: number;
@@ -27,6 +29,9 @@ export default function FormsManager() {
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "" });
+  const [duplicatingForm, setDuplicatingForm] = useState<number | null>(null);
+  const [editingForm, setEditingForm] = useState<Form | null>(null);
+  const [editFormName, setEditFormName] = useState("");
 
   async function load(page: number = 1) {
     setLoading(true);
@@ -111,9 +116,169 @@ export default function FormsManager() {
     } catch {}
   };
 
+  const handleDuplicateForm = async (formId: number) => {
+    if (!confirm("Are you sure you want to duplicate this form? This will create a copy with all fields but no submissions.")) return;
+    
+    setDuplicatingForm(formId);
+    try {
+      const res = await fetch(`/api/forms/${formId}/duplicate`, {
+        method: "POST",
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Form duplicated successfully! New form: ${data.newForm.name} (Code: ${data.newForm.code})`);
+        load(currentPage);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to duplicate form");
+      }
+    } catch (error) {
+      console.error("Error duplicating form:", error);
+      alert("Failed to duplicate form");
+    } finally {
+      setDuplicatingForm(null);
+    }
+  };
+
+  const startEditForm = (form: Form) => {
+    setEditingForm(form);
+    setEditFormName(form.name);
+  };
+
+  const handleDropdownAction = (action: () => void) => {
+    action();
+  };
+
+  const handleEditForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingForm) return;
+
+    try {
+      const res = await fetch(`/api/forms/${editingForm.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editFormName }),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Form updated successfully! New code: ${data.form.code}`);
+        setEditingForm(null);
+        setEditFormName("");
+        load(currentPage);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to update form");
+      }
+    } catch (error) {
+      console.error("Error updating form:", error);
+      alert("Failed to update form");
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingForm(null);
+    setEditFormName("");
+  };
+
   return (
     <div className="space-y-6">
       {/* Header with search and create */}
+      {/* Create Form Modal */}
+      {/* Edit Form Name Modal */}
+      {editingForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={cancelEdit} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white text-slate-900 dark:bg-gray-800 dark:text-white shadow-2xl">
+            <div className="p-6">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Rename Form</h3>
+              <form onSubmit={handleEditForm} className="space-y-4">
+                
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Form Name</label>
+                  <input
+                    type="text"
+                    placeholder="Enter new form name"
+                    value={editFormName}
+                    onChange={(e) => setEditFormName(e.target.value)}
+                    className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
+                    required
+                  />
+                </div>
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    <strong>Note:</strong> The form code will be automatically updated based on the new name.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 pt-4">
+                  <button
+                    type="submit"
+                    className="flex-1 h-11 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors"
+                  >
+                    Update Form
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEdit}
+                    className="flex-1 h-11 rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Loading Overlay for Duplicate */}
+      <LoadingOverlay 
+        isVisible={duplicatingForm !== null} 
+        message="Duplicating form..." 
+      />
+      {/* Modal Create Form */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowCreateModal(false)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white text-slate-900 dark:bg-gray-800 dark:text-white shadow-2xl">
+            <div className="p-6">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Create New Form</h3>
+              <form onSubmit={handleCreateForm} className="space-y-4">
+                
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Form Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Recruitment 2025"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  After creating, copy the <span className="font-medium">Form Code</span> and set it as <code>data-form-code</code> on your Webflow form.
+                </p>
+                <div className="flex items-center gap-3 pt-4">
+                  <button
+                    type="submit"
+                    className="flex-1 h-11 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors"
+                  >
+                    Create Form
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className="flex-1 h-11 rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50">
         <div className="flex items-center justify-between">
           <div className="flex-1 max-w-md">
@@ -186,23 +351,51 @@ export default function FormsManager() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Link
-                      href={`/dashboard/forms/${form.id}`}
-                      className="px-3 py-2 text-sm rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors"
-                    >
-                      Edit
-                    </Link>
-                    <Link
                       href={`/dashboard/forms/${form.id}/submissions`}
                       className="px-3 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
                     >
                       View
                     </Link>
-                    <button
-                      onClick={() => handleDeleteForm(form.id)}
-                      className="px-3 py-2 text-sm rounded-lg bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 font-medium transition-colors"
-                    >
-                      Delete
-                    </button>
+                    <DropdownMenu>
+                      <DropdownItem onClick={() => handleDropdownAction(() => window.location.href = `/dashboard/forms/${form.id}`)}>
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit Fields
+                        </div>
+                      </DropdownItem>
+                      <DropdownItem onClick={() => handleDropdownAction(() => startEditForm(form))}>
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          Rename
+                        </div>
+                      </DropdownItem>
+                      <DropdownItem 
+                        onClick={() => handleDropdownAction(() => handleDuplicateForm(form.id))}
+                        disabled={duplicatingForm === form.id}
+                      >
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          {duplicatingForm === form.id ? 'Duplicating...' : 'Duplicate'}
+                        </div>
+                      </DropdownItem>
+                      <DropdownItem 
+                        onClick={() => handleDropdownAction(() => handleDeleteForm(form.id))}
+                        className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete
+                        </div>
+                      </DropdownItem>
+                    </DropdownMenu>
                   </div>
                 </div>
               ))}
@@ -236,49 +429,7 @@ export default function FormsManager() {
         )}
       </div>
 
-      {/* Create Form Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setShowCreateModal(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white text-slate-900 dark:bg-gray-800 dark:text-white shadow-2xl">
-            <div className="p-6">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Create New Form</h3>
-              <form onSubmit={handleCreateForm} className="space-y-4">
-                
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Form Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Recruitment 2025"
-                    value={createForm.name}
-                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                    className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
-                    required
-                  />
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  After creating, copy the <span className="font-medium">Form Code</span> and set it as <code>data-form-code</code> on your Webflow form.
-                </p>
-                <div className="flex items-center gap-3 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 h-11 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors"
-                  >
-                    Create Form
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="flex-1 h-11 rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 }

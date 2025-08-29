@@ -10,12 +10,15 @@ export async function GET(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: formId } = await ctx.params;
+  console.log("API: Fetching fields for formId:", formId);
   const pool = getDbPool();
   
   try {
     // Verify form exists
     const [formRows] = await pool.query("SELECT id FROM forms WHERE id = ?", [formId]);
+    console.log("API: Form rows:", formRows);
     if (!Array.isArray(formRows) || (formRows as any).length === 0) {
+      console.log("API: Form not found");
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
@@ -29,8 +32,9 @@ export async function GET(
     );
     
     const data = Array.isArray(rows) ? (rows as any) : [];
+    console.log("API: Fields data:", data);
     
-    const response = NextResponse.json({ items: data });
+    const response = NextResponse.json({ fields: data });
     response.headers.set('Content-Type', 'application/json; charset=utf-8');
     return response;
   } catch (error) {
@@ -71,10 +75,17 @@ export async function POST(
     if (Array.isArray(existingRows) && (existingRows as any).length > 0) {
       return NextResponse.json({ error: "Field name already exists in this form" }, { status: 409 });
     }
+
+    // Get the next sort_order value
+    const [maxOrderResult] = await pool.query(
+      "SELECT COALESCE(MAX(sort_order), 0) as max_order FROM form_fields WHERE form_id = ?",
+      [formId]
+    );
+    const nextSortOrder = ((maxOrderResult as any)[0]?.max_order || 0) + 1;
     
     const [result] = await pool.query(
       "INSERT INTO form_fields (form_id, field_name, field_label, field_type, field_options, is_required, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [formId, field_name, field_label, field_type, field_options || null, is_required || false, sort_order || 0]
+      [formId, field_name, field_label, field_type, field_options || null, is_required || false, nextSortOrder]
     );
     
     const fieldId = (result as any).insertId;
