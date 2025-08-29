@@ -11,16 +11,19 @@ export async function GET(req: NextRequest) {
   const pool = getDbPool();
 
   try {
-    // Get recent submissions with form names (oGV forms only)
+    // Get recent submissions with form names and entity names (oGV forms only)
     const [submissionsResult] = await pool.query(`
       SELECT 
         fs.id,
         f.name as form_name,
         fs.timestamp,
+        fs.entity_id,
+        e.name as entity_name,
         'completed' as status,
         'Anonymous User' as user
       FROM form_submissions fs
       JOIN forms f ON fs.form_id = f.id
+      LEFT JOIN entity e ON fs.entity_id = e.entity_id
       WHERE f.type = 'oGV'
       ORDER BY fs.timestamp DESC
       LIMIT 10
@@ -30,6 +33,8 @@ export async function GET(req: NextRequest) {
       id: row.id,
       formName: row.form_name,
       timestamp: row.timestamp,
+      entityId: row.entity_id,
+      entityName: row.entity_name || 'Unknown Entity',
       status: row.status,
       user: row.user
     })) : [];

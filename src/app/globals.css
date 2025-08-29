@@ -107,3 +107,12 @@ input:checked + .slider:before {
 .dark .thin-scrollbar::-webkit-scrollbar-thumb {
   background-color: rgba(148,163,184,0.5);
 }
+
+/* Hide scrollbar utility (keep scroll functional) */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none;    /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar { /* Chrome, Safari and Opera */
+  display: none;
+}

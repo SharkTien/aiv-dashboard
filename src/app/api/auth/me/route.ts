@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { getDbPool } from "@/lib/db";
 
 export async function GET(_req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  return NextResponse.json({ user });
+  try {
+    const pool = getDbPool();
+    const [rows] = await pool.query(
+      "SELECT user_id as sub, email, name, role, entity_id FROM user WHERE user_id = ?",
+      [user.sub]
+    );
+    const dbUser = Array.isArray(rows) && rows.length ? rows[0] : null;
+    // Fallback to session values if not found
+    const merged = dbUser || user;
+    return NextResponse.json({ user: merged });
+  } catch (e) {
+    // On error, still return session user
+    return NextResponse.json({ user });
+  }
 }
 
 

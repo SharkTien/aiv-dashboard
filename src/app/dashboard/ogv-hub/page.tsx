@@ -34,6 +34,8 @@ type RecentSubmission = {
   id: number;
   formName: string;
   timestamp: string;
+  entityId: number | null;
+  entityName: string;
   status: 'completed' | 'pending' | 'error';
   user: string;
 };
@@ -44,6 +46,8 @@ type TopForm = {
   submissions: number;
   growth: number;
   type: 'oGV' | 'TMR' | 'EWA';
+  entityCount: number;
+  entityNames: string;
 };
 
 export default function OGVHubDashboard() {
@@ -234,7 +238,15 @@ export default function OGVHubDashboard() {
                       </div>
                       <div>
                         <p className="font-medium text-gray-900 dark:text-white">{submission.formName}</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{submission.user}</p>
+                        <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+                          <span>{submission.user}</span>
+                          {submission.entityName && (
+                            <>
+                              <span>•</span>
+                              <span className="text-blue-600 dark:text-blue-400 font-medium">{submission.entityName}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-3">
@@ -275,9 +287,21 @@ export default function OGVHubDashboard() {
                       </div>
                       <div>
                         <p className="font-medium text-gray-900 dark:text-white">{form.name}</p>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTypeColor(form.type)}`}>
-                          {form.type}
-                        </span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTypeColor(form.type)}`}>
+                            {form.type}
+                          </span>
+                          {form.entityCount > 0 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {form.entityCount} entity{form.entityCount > 1 ? 'ies' : 'y'}
+                            </span>
+                          )}
+                        </div>
+                        {form.entityNames && form.entityNames !== 'No entities' && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                            {form.entityNames}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">

@@ -15,6 +15,8 @@ type Submission = {
   id: number;
   submitted_at?: string; // legacy
   timestamp?: string;    // new
+  entityId?: number | null;
+  entityName?: string | null;
   responses: FormResponse[];
 };
 
@@ -25,7 +27,7 @@ type FormResponse = {
   value_label?: string | null;
 };
 
-export default function SubmissionsViewer({ formId }: { formId: number }) {
+export default function SubmissionsViewer({ formId, options, inlineLoading }: { formId: number; options?: { showBack?: boolean; allowImport?: boolean; allowBulkActions?: boolean; showTemplate?: boolean }, inlineLoading?: boolean }) {
   const [form, setForm] = useState<Form | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,7 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
             adjustedSerial = serialNumber - 1;
           }
           
-          date = new Date(excelEpoch.getTime() + (adjustedSerial - 2) * millisecondsPerDay);
+          date = new Date(excelEpoch.getTime() + (adjustedSerial - 1) * millisecondsPerDay);
           if (isNaN(date.getTime())) {
             // Fall back to other parsing methods
             date = new Date(value);
@@ -151,6 +153,8 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
       if (formRes.ok) {
         const formData = await formRes.json();
         setForm(formData.form);
+      } else {
+        console.error("Failed to load form:", formRes.status, formRes.statusText);
       }
 
       // Load submissions
@@ -158,9 +162,13 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
       if (submissionsRes.ok) {
         const submissionsData = await submissionsRes.json();
         setSubmissions(Array.isArray(submissionsData.items) ? submissionsData.items : []);
+      } else {
+        console.error("Failed to load submissions:", submissionsRes.status, submissionsRes.statusText);
+        const errorData = await submissionsRes.json().catch(() => ({}));
+        console.error("Error details:", errorData);
       }
     } catch (error) {
-      // Handle error silently
+      console.error("Error in loadData:", error);
     }
     setLoading(false);
   }
@@ -234,6 +242,61 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
   // Get form fields for template
   const [formFields, setFormFields] = useState<Array<{ field_name: string; field_label: string; field_type: string }>>([]);
 
+  // Text search across key fields
+  const [textQuery, setTextQuery] = useState("");
+  // Facet filters
+  const [selectedYear, setSelectedYear] = useState<Set<string>>(new Set());
+  const [selectedMajor, setSelectedMajor] = useState<Set<string>>(new Set());
+  const [selectedStartDate, setSelectedStartDate] = useState<Set<string>>(new Set());
+  const [selectedReceiveInfo, setSelectedReceiveInfo] = useState<Set<string>>(new Set());
+  const [selectedChannel, setSelectedChannel] = useState<Set<string>>(new Set());
+
+  const FIELD_MAP = {
+    year: ["year", "năm", "Year"],
+    major: ["major", "ngành", "Major"],
+    startDate: [
+      "start date",
+      "start_date",
+      "startdate",
+      "desired start",
+      "khi nào",
+      "thời điểm",
+      "thoi diem",
+      "ngày bắt đầu",
+      "ngay bat dau",
+      "plan time",
+      "expected time",
+      "start",
+      "Start Date"
+    ],
+    receiveInfo: [
+      "receive info",
+      "receive_info",
+      "receiveinfo",
+      "subscription",
+      "opt in",
+      "opt_in",
+      "optin",
+      "contact preference",
+      "nhận thông tin",
+      "nhan thong tin",
+      "Receive Info"
+    ],
+    channel: ["channel", "kênh", "Channel"],
+    formCode: ["form-code", "form_code", "code", "mã"],
+    name: ["name", "họ tên", "full name"],
+    phone: ["phone", "số điện thoại"],
+    email: ["email"],
+    uni: ["uni", "university", "trường"],
+    otherUni: ["other--uni", "other_uni", "trường khác", "other university"],
+  } as const;
+
+  function findFieldValue(sub: Submission, keys: string[]): string {
+    const lower = keys.map(k => k.toLowerCase());
+    const r = sub.responses.find(r => lower.some(k => r.field_name?.toLowerCase().includes(k) || r.field_label?.toLowerCase().includes(k)));
+    return (r?.value_label || r?.value || "").trim();
+  }
+
   // Reset to first page when submissions change
   useEffect(() => {
     setCurrentPage(1);
@@ -286,50 +349,76 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
     loadFormFields();
   }, [formId]);
 
-  // Filter submissions by date range
+  // Build facet options from current submissions
+  const facetOptions = useMemo(() => {
+    const collect = (keys: readonly string[]) => {
+      const set = new Set<string>();
+      submissions.forEach(sub => {
+        const v = findFieldValue(sub, Array.from(keys));
+        if (v) set.add(v);
+      });
+      return Array.from(set);
+    };
+    return {
+      years: collect(FIELD_MAP.year).sort(),
+      majors: collect(FIELD_MAP.major).sort(),
+      startDates: collect(FIELD_MAP.startDate).sort(),
+      receiveInfos: collect(FIELD_MAP.receiveInfo).sort(),
+      channels: collect(FIELD_MAP.channel).sort(),
+    };
+  }, [submissions]);
+
+  // Filter submissions by date range + facets + text query
   const filteredSubmissions = useMemo(() => {
     if (!startDate && !endDate) {
-      return submissions;
+      // Continue to facet/text filtering
     }
 
     return submissions.filter(submission => {
       const submissionDate = submission.timestamp || submission.submitted_at;
-      if (!submissionDate) {
-        return false;
+
+      // Date range check
+      if ((startDate || endDate) && submissionDate) {
+        let date: Date;
+        if (submissionDate.includes(' ') && submissionDate.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
+          date = new Date(submissionDate.replace(' ', 'T') + '.000Z');
+        } else if (submissionDate.includes('T')) {
+          date = new Date(submissionDate);
+        } else {
+          date = new Date(submissionDate);
+        }
+        if (isNaN(date.getTime())) return false;
+        const submissionDateOnly = date.toISOString().split('T')[0];
+        if (startDate && endDate && !(submissionDateOnly >= startDate && submissionDateOnly <= endDate)) return false;
+        if (startDate && !endDate && !(submissionDateOnly >= startDate)) return false;
+        if (!startDate && endDate && !(submissionDateOnly <= endDate)) return false;
       }
 
-      let date: Date;
-      
-      // Handle different timestamp formats
-      if (submissionDate.includes(' ') && submissionDate.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
-        // MySQL DATETIME format: "2024-12-31 07:00:00"
-        date = new Date(submissionDate.replace(' ', 'T') + '.000Z');
-      } else if (submissionDate.includes('T')) {
-        // ISO format: "2024-12-31T07:00:00.000Z"
-        date = new Date(submissionDate);
-      } else {
-        // Try standard parsing
-        date = new Date(submissionDate);
+      // Text search over key fields
+      if (textQuery.trim()) {
+        const q = textQuery.toLowerCase();
+        const values = [
+          findFieldValue(submission, Array.from(FIELD_MAP.formCode)),
+          findFieldValue(submission, Array.from(FIELD_MAP.name)),
+          findFieldValue(submission, Array.from(FIELD_MAP.phone)),
+          findFieldValue(submission, Array.from(FIELD_MAP.email)),
+          findFieldValue(submission, Array.from(FIELD_MAP.uni)),
+          findFieldValue(submission, Array.from(FIELD_MAP.otherUni)),
+        ];
+        if (!values.some(v => v.toLowerCase().includes(q))) return false;
       }
 
-      if (isNaN(date.getTime())) {
-        return false;
-      }
+      // Facet checks
+      const checkSet = (set: Set<string>, keys: readonly string[]) => set.size === 0 || set.has(findFieldValue(submission, Array.from(keys)));
 
-      // Convert to YYYY-MM-DD format for comparison
-      const submissionDateOnly = date.toISOString().split('T')[0];
-
-      if (startDate && endDate) {
-        return submissionDateOnly >= startDate && submissionDateOnly <= endDate;
-      } else if (startDate) {
-        return submissionDateOnly >= startDate;
-      } else if (endDate) {
-        return submissionDateOnly <= endDate;
-      }
-
-      return false;
+      if (!checkSet(selectedYear, FIELD_MAP.year)) return false;
+      if (!checkSet(selectedMajor, FIELD_MAP.major)) return false;
+      if (!checkSet(selectedStartDate, FIELD_MAP.startDate)) return false;
+      if (!checkSet(selectedReceiveInfo, FIELD_MAP.receiveInfo)) return false;
+      if (!checkSet(selectedChannel, FIELD_MAP.channel)) return false;
+      return true;
     });
-  }, [submissions, startDate, endDate]);
+  }, [submissions, startDate, endDate, textQuery, selectedYear, selectedMajor, selectedStartDate, selectedReceiveInfo, selectedChannel]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredSubmissions.length / itemsPerPage);
@@ -401,13 +490,13 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
     if (filteredSubmissions.length === 0) return;
 
     // Prepare CSV data
-    const csvHeaders = ['Timestamp', ...fieldHeaders.map(h => h.label)];
+    const csvHeaders = ['Timestamp', 'Entity', ...fieldHeaders.map(h => h.label)];
     const csvRows = filteredSubmissions.map(sub => {
       const map = new Map(sub.responses.map((r) => [r.field_name, r]));
       const ts = (sub.timestamp || sub.submitted_at) as string;
       const timestamp = new Date(ts).toLocaleString();
       
-      const row = [timestamp];
+      const row = [timestamp, sub.entityName || 'No entity'];
       fieldHeaders.forEach(h => {
         const resp = map.get(h.name) as FormResponse | undefined;
         const display = resp?.value_label || resp?.value || "";
@@ -514,7 +603,9 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
   };
 
   if (loading) {
-    return (
+    return inlineLoading ? (
+      <div className="p-6 text-sm text-gray-600 dark:text-gray-300">Loading submissions...</div>
+    ) : (
       <LoadingOverlay 
         isVisible={true} 
         message="Loading submissions..." 
@@ -530,8 +621,84 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
   return (
     
     <div className="space-y-6">
+      {/* Date Filter Modal */}
+      {showDateFilter && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Filter by Date Range
+              </h3>
+              <button
+                onClick={() => setShowDateFilter(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              {(startDate || endDate) && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    <strong>Filter:</strong> {startDate || 'Any'} to {endDate || 'Any'}
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex items-center justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2 text-sm rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
+              >
+                Clear Filter
+              </button>
+              <button
+                onClick={() => {
+                  setShowDateFilter(false);
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2 text-sm rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+              >
+                Apply Filter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Move Submissions Modal */}
-      {showMoveModal && (
+      {options?.allowBulkActions !== false && showMoveModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-4">
@@ -595,7 +762,7 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
         </div>
       )}
       {/* Form Info */}
-      <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50 overflow-x-hidden">
+      <div className="bg-white/60 !overflow-visible dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50 overflow-x-hidden">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{form.name}</h2>
@@ -606,22 +773,24 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
               </span>
             </div>
           </div>
-          <Link
-            href={`/dashboard/forms/${formId}`}
-            className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
-          >
-            Back to Form
-          </Link>
+          {options?.showBack !== false && (
+            <Link
+              href={`/dashboard/forms/${formId}`}
+              className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
+            >
+              Back to Form
+            </Link>
+          )}
         </div>
       </div>
 
       {/* Excel Template */}
-      {formFields.length > 0 && (
+      {options?.showTemplate !== false && formFields.length > 0 && (
         <ExcelTemplate fields={formFields} formName={form?.name || 'Form'} />
       )}
 
       {/* Submissions Table */}
-      <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50 overflow-x-hidden">
+      <div className="bg-white/60 !overflow-visible dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50 overflow-x-hidden">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -642,7 +811,7 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
             </p>
           </div>
           <div className="flex items-center space-x-4">
-              {selectedSubmissions.size > 0 && (
+              {options?.allowBulkActions !== false && selectedSubmissions.size > 0 && (
                 <>
                   <button
                     onClick={() => setShowMoveModal(true)}
@@ -720,7 +889,7 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                   </div>
                 </button>
                 
-                {submissions.length > 0 && (
+                {options?.allowImport !== false && submissions.length > 0 && (
                   <button
                     onClick={() => exportToCSV()}
                     className="px-3 py-2 text-sm rounded-lg bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50 text-green-600 dark:text-green-400 font-medium transition-colors"
@@ -733,38 +902,60 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                     </div>
                   </button>
                 )}
-              <label className="relative cursor-pointer">
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileImport}
-                  className="hidden"
-                  disabled={importing}
-                />
-                <span className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
-                  importing
-                    ? 'bg-gray-100 dark:bg-gray-600 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer'
-                }`}>
-                  {importing ? 'Importing...' : 'Import Excel'}
-                </span>
-              </label>
+              {options?.allowImport !== false && (
+                <label className="relative cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileImport}
+                    className="hidden"
+                    disabled={importing}
+                  />
+                  <span className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+                    importing
+                      ? 'bg-gray-100 dark:bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer'
+                  }`}>
+                    {importing ? 'Importing...' : 'Import Excel'}
+                  </span>
+                </label>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Facet Filters (dropdowns) */}
+        <div className="flex flex-wrap gap-3 mb-4">
+            <div className="hidden md:block">
+              <label className="sr-only">Search</label>
+              <input
+                value={textQuery}
+                onChange={(e) => { setTextQuery(e.target.value); setCurrentPage(1); }}
+                placeholder="Search submission-code, name, phone, email, uni, other--uni"
+                className="h-10 w-80 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50"
+              />
+            </div>
+          <FacetDropdown title="Year" options={facetOptions.years} selected={selectedYear} onChange={setSelectedYear} />
+          <FacetDropdown title="Major" options={facetOptions.majors} selected={selectedMajor} onChange={setSelectedMajor} />
+          <FacetDropdown title="Start Date" options={facetOptions.startDates} selected={selectedStartDate} onChange={setSelectedStartDate} />
+          <FacetDropdown title="Receive Info" options={facetOptions.receiveInfos} selected={selectedReceiveInfo} onChange={setSelectedReceiveInfo} />
+          <FacetDropdown title="Channel" options={facetOptions.channels} selected={selectedChannel} onChange={setSelectedChannel} />
+        </div>
               {/* Loading Overlay for Import */}
-            <LoadingOverlay
-        isVisible={importing}
-        message="Importing submissions..."
-        progress={importProgress}
-        showProgress={true}
-      />
+      {options?.allowImport !== false && (
+        <LoadingOverlay
+          isVisible={importing}
+          message="Importing submissions..."
+          progress={importProgress}
+          showProgress={true}
+        />
+      )}
       <LoadingOverlay
-        isVisible={deleting}
+        isVisible={deleting && options?.allowBulkActions !== false}
         message="Deleting submissions..."
       />
         {/* Import Result Message */}
-        {importResult && (
+        {options?.allowImport !== false && importResult && (
           <div className={`mb-4 p-4 rounded-lg ${
             importResult.success 
               ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
@@ -824,7 +1015,8 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                         />
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">timestamp</th>
+                    <th className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">Timestamp</th>
+                    <th className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">Entity</th>
                     {fieldHeaders.map((h) => (
                       <th key={h.name} className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">
                         {h.label}
@@ -861,17 +1053,26 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                             }
                           })()}
                         </td>
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {sub.entityName ? (
+                            <span className="text-blue-600 dark:text-blue-400 font-medium">
+                              {sub.entityName}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">NOT FOUND</span>
+                          )}
+                        </td>
                         {fieldHeaders.map((h) => {
                           const resp = map.get(h.name) as FormResponse | undefined;
                           const fieldValue = resp?.value || "";
                           const display = resp?.value_label || fieldValue || "";
                           
-                          // Only apply date formatting to fields that are likely to be dates
-                          const isDateField = h.name.toLowerCase().includes('date') || 
-                                            h.name.toLowerCase().includes('time') || 
-                                            h.name.toLowerCase().includes('timestamp');
+                          // Only apply date formatting when the VALUE looks like a real date/time
+                          const nameLower = h.name.toLowerCase();
+                          const looksLikeDateValue = /\d{2,4}[\/-]\d{1,2}|T\d{2}:\d{2}|^\d{9,13}$/.test(fieldValue);
+                          const shouldFormatDate = (nameLower.includes('time') || nameLower.includes('timestamp') || nameLower.includes('date')) && looksLikeDateValue;
                           
-                          const displayValue = isDateField ? formatDateTime(fieldValue) : display;
+                          const displayNode = shouldFormatDate ? formatDateTime(fieldValue) : (display || "");
                           
                           return (
                             <td
@@ -881,8 +1082,6 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                               onClick={() => {
                                 if (display) {
                                   navigator.clipboard.writeText(display).then(() => {
-                                    // Show a temporary toast or alert for copy success
-                                    // You can replace this with a better toast/notification system if available
                                     const toast = document.createElement('div');
                                     toast.textContent = 'Copied!';
                                     toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50 text-sm animate-fade-in';
@@ -896,7 +1095,7 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                               }}
                             >
                               <span className="block overflow-clip text-ellipsis" style={{ maxWidth: '12rem' }}>
-                                {displayValue || <span className="text-gray-400">(empty)</span>}
+                                {displayNode || <span className="text-gray-400">(empty)</span>}
                               </span>
                             </td>
                           );
@@ -965,85 +1164,85 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
             )}
           </>
         )}
-      </div>
+      </div>      
+    </div>
+  );
+}
 
-      {/* Date Filter Modal */}
-      {showDateFilter && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Filter by Date Range
-              </h3>
-              <button
-                onClick={() => setShowDateFilter(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              {(startDate || endDate) && (
-                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    <strong>Filter:</strong> {startDate || 'Any'} to {endDate || 'Any'}
-                  </p>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex items-center justify-end space-x-3 mt-6">
-              <button
-                onClick={() => {
-                  setStartDate('');
-                  setEndDate('');
-                  setCurrentPage(1);
-                }}
-                className="px-4 py-2 text-sm rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
-              >
-                Clear Filter
-              </button>
-              <button
-                onClick={() => {
-                  setShowDateFilter(false);
-                  setCurrentPage(1);
-                }}
-                className="px-4 py-2 text-sm rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
-              >
-                Apply Filter
-              </button>
-            </div>
+function Facet({ title, options, selected, onChange }: { title: string; options: string[]; selected: Set<string>; onChange: (s: Set<string>) => void }) {
+  const [q, setQ] = useState("");
+  const filtered = useMemo(() => options.filter(o => o.toLowerCase().includes(q.toLowerCase())), [options, q]);
+  const toggle = (v: string) => {
+    const s = new Set(selected);
+    if (s.has(v)) s.delete(v); else s.add(v);
+    onChange(s);
+  };
+  return (
+    <div className="rounded-lg ring-1 ring-black/10 dark:ring-white/10 p-3 bg-white/70 dark:bg-gray-800/70 max-h-80 overflow-y-auto thin-scrollbar">
+      <div className="text-sm font-medium text-gray-800 dark:text-gray-100 mb-2">{title}</div>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Type to search" className="w-full h-9 mb-2 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-2 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white" />
+      <div className="space-y-2">
+        {filtered.map(o => (
+          <label key={o} className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-100">
+            <input type="checkbox" checked={selected.has(o)} onChange={() => toggle(o)} className="w-4 h-4" />
+            <span className="truncate" title={o}>{o}</span>
+          </label>
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-xs text-gray-500">No options</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FacetDropdown({ title, options, selected, onChange }: { title: string; options: string[]; selected: Set<string>; onChange: (s: Set<string>) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const filtered = useMemo(() => options.filter(o => o.toLowerCase().includes(q.toLowerCase())), [options, q]);
+
+  // close on outside click
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest?.('[data-facet="'+title+'"]')) setOpen(false);
+    }
+    if (open) document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, [open, title]);
+
+  const toggle = (v: string) => {
+    const s = new Set(selected);
+    if (s.has(v)) s.delete(v); else s.add(v);
+    onChange(s);
+  };
+
+  const selectedCount = selected.size;
+
+  return (
+    <div className="relative" data-facet={title}>
+      <button onClick={() => setOpen(v => !v)} className="h-10 px-3 rounded-md ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/60 text-sm text-gray-800 dark:text-gray-100 inline-flex items-center gap-2">
+        <span className="font-medium">{title}</span>
+        <span className="text-gray-500">{selectedCount > 0 ? `(${selectedCount})` : 'Select'}</span>
+        <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clipRule="evenodd"/></svg>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-2 w-72 rounded-lg ring-1 ring-black/10 dark:ring-white/10 bg-white dark:bg-gray-800 shadow-lg p-3 max-h-80 overflow-y-auto no-scrollbar">
+          <div className="text-sm font-semibold text-gray-900 dark:text-white mb-2">{title}</div>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Type to search" className="w-full h-9 mb-2 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-2 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white" />
+          <div className="space-y-2">
+            {filtered.map(o => (
+              <label key={o} className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-100">
+                <input type="checkbox" checked={selected.has(o)} onChange={() => toggle(o)} className="w-4 h-4" />
+                <span className="truncate" title={o}>{o}</span>
+              </label>
+            ))}
+            {filtered.length === 0 && (
+              <div className="text-xs text-gray-500">No options</div>
+            )}
           </div>
         </div>
       )}
-      
     </div>
   );
 }

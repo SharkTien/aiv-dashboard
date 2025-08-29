@@ -172,7 +172,7 @@ if (form) {
       codeEl.id = 'form-code';
       form.appendChild(codeEl);
     }
-    codeEl.value = TARGET_FORM_CODE;
+    codeEl.value = code;
     // Also set data attribute for debugging/consistency
     form.setAttribute('data-form-code', TARGET_FORM_CODE);
 

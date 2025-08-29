@@ -71,6 +71,7 @@ export default function UTMGeneratorPage() {
   const [activeTab, setActiveTab] = useState<'create' | 'links'>('create');
   const [links, setLinks] = useState<UTMLink[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [activeLoading, setActiveLoading] = useState(true);
 
   // Form state
   const [selectedEntity, setSelectedEntity] = useState<number | "">("");
@@ -99,6 +100,7 @@ export default function UTMGeneratorPage() {
     const loadActiveForEntity = async () => {
       if (!selectedEntity) { return; }
       try {
+        setActiveLoading(true);
         const res = await fetch(`/api/utm/campaigns/active?entity_id=${selectedEntity}`);
         if (res.ok) {
           const data = await res.json();
@@ -107,7 +109,7 @@ export default function UTMGeneratorPage() {
         }
       } catch (e) {
         console.error('Failed to load active campaign for entity', e);
-      }
+      } finally { setActiveLoading(false); }
     };
     loadActiveForEntity();
   }, [selectedEntity]);
@@ -165,7 +167,7 @@ export default function UTMGeneratorPage() {
         setActiveCampaign(active || null);
       }
 
-      
+      setActiveLoading(false);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -294,7 +296,7 @@ export default function UTMGeneratorPage() {
       {activeTab === 'create' && (
       <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Create New UTM Link</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Active campaign format: <span className="font-mono text-gray-800 dark:text-gray-200">{activeCampaignString || '(no active format)'}</span></p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Active campaign format: <span className="font-mono text-gray-800 dark:text-gray-200">{activeLoading ? 'loading…' : (activeCampaignString || '(no active format)')}</span></p>
         <form onSubmit={handleCreateUTM} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

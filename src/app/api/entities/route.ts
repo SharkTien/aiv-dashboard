@@ -10,10 +10,12 @@ export async function GET(req: NextRequest) {
   
   try {
     const [rows] = await pool.query(
-      "SELECT entity_id as id, name, type FROM entity ORDER BY name ASC"
+      "SELECT entity_id, name, type FROM entity ORDER BY name ASC"
     );
     
+    console.log("Raw database rows:", rows);
     const data = Array.isArray(rows) ? rows : [];
+    console.log("Processed data:", data);
     
     const response = NextResponse.json({ items: data });
     response.headers.set('Content-Type', 'application/json; charset=utf-8');

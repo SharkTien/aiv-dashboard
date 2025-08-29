@@ -165,7 +165,7 @@ export async function POST(
     for (let batchStart = 0; batchStart < dataRows.length; batchStart += batchSize) {
       const batchEnd = Math.min(batchStart + batchSize, dataRows.length);
       const batch = dataRows.slice(batchStart, batchEnd);
-      
+
       try {
         // Prepare batch data
         const submissionsToInsert: Array<[number, string]> = []; // [formId, timestamp]
@@ -378,6 +378,56 @@ export async function POST(
       }
     }
 
+    // Update entity_id for submissions that have 'uni' field
+    let entityUpdateCount = 0;
+    try {
+      // Find the 'uni' field
+      const uniField = fields.find(f => f.field_name === 'uni');
+      if (uniField) {
+        // Get all submissions that were just created and have a 'uni' response
+        const [submissionRows] = await pool.query(
+          `SELECT fs.id, fr.value as uni_value
+           FROM form_submissions fs
+           JOIN form_responses fr ON fs.id = fr.submission_id
+           WHERE fs.form_id = ? AND fr.field_id = ? AND fr.value IS NOT NULL AND fr.value != ''`,
+          [formId, uniField.id]
+        );
+
+        if (Array.isArray(submissionRows) && submissionRows.length > 0) {
+          for (const submission of submissionRows as any[]) {
+            try {
+              const uniValue = submission.uni_value;
+              
+              // Skip if uni_value is "other--uni-2" or empty
+              if (!uniValue || uniValue === "other--uni-2") {
+                continue;
+              }
+              
+              // Look up entity_id from uni_mapping
+              const [uniMappingRows] = await pool.query(
+                "SELECT entity_id FROM uni_mapping WHERE uni_id = ?",
+                [uniValue]
+              );
+
+              if (Array.isArray(uniMappingRows) && uniMappingRows.length > 0) {
+                const entityId = (uniMappingRows as any)[0].entity_id;
+                // Update the submission's entity_id
+                await pool.query(
+                  "UPDATE form_submissions SET entity_id = ? WHERE id = ?",
+                  [entityId, submission.id]
+                );
+                entityUpdateCount++;
+              }
+            } catch (error) {
+              console.error(`Error updating entity_id for submission ${submission.id}:`, error);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error updating entity_id for submissions:", error);
+    }
+
     return NextResponse.json({
       success: true,
       message: `Import completed. ${successCount} submissions imported successfully, ${errorCount} failed.`,
@@ -389,6 +439,7 @@ export async function POST(
         formCodeField,
         timestampField,
         duplicateCount: dataRows.length - successCount - errorCount,
+        entityUpdateCount,
         errors: errors.slice(0, 10) // Limit error messages
       }
     });

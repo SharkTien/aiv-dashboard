@@ -19,10 +19,11 @@ export async function GET(
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
-    // Get submissions with responses
+    // Get submissions with responses and entity information
     const [submissionRows] = await pool.query(
-      `SELECT fs.id, fs.timestamp
+      `SELECT fs.id, fs.timestamp, fs.entity_id, e.name as entity_name
        FROM form_submissions fs
+       LEFT JOIN entity e ON fs.entity_id = e.entity_id
        WHERE fs.form_id = ?
        ORDER BY fs.timestamp DESC`,
       [formId]
@@ -30,41 +31,44 @@ export async function GET(
     
     const submissions: any[] = Array.isArray(submissionRows) ? (submissionRows as any) : [];
     
-    
-    // Test timestamp parsing
-    submissions.forEach(s => {
-      if (s.timestamp) {
-        try {
-          const date = new Date(s.timestamp);
-          console.log(`Submission ${s.id}: "${s.timestamp}" -> ${date.toISOString()} -> ${date.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}`);
-        } catch (error) {
-          console.error(`Submission ${s.id}: Error parsing "${s.timestamp}":`, error);
-        }
-      }
-    });
-    
     // Get responses for each submission, include value_label when sourced from uni_mapping
     const submissionsWithResponses = await Promise.all(
       submissions.map(async (submission) => {
-        const [responseRows] = await pool.query(
+        try {
+                  const [responseRows] = await pool.query(
           `SELECT ff.field_name, ff.field_label, fr.value,
-                  um.uni_name AS value_label
+                  CASE 
+                    WHEN fr.value = 'other--uni-2' THEN 'other--uni-2'
+                    WHEN um.uni_name IS NOT NULL THEN um.uni_name
+                    ELSE fr.value
+                  END AS value_label
            FROM form_responses fr
            JOIN form_fields ff ON fr.field_id = ff.id
            LEFT JOIN uni_mapping um
-             ON ff.field_type = 'database'
-            AND ff.field_options LIKE '%"source":"uni_mapping"%'
-            AND CAST(fr.value AS UNSIGNED) = um.uni_id
+             ON ff.field_name = 'uni'
+            AND fr.value = um.uni_id
            WHERE fr.submission_id = ?
            ORDER BY ff.sort_order ASC`,
           [submission.id]
         );
-        
-        return {
-          id: submission.id,
-          timestamp: submission.timestamp,
-          responses: Array.isArray(responseRows) ? (responseRows as any) : []
-        };
+          
+          return {
+            id: submission.id,
+            timestamp: submission.timestamp,
+            entityId: submission.entity_id,
+            entityName: submission.entity_name || null,
+            responses: Array.isArray(responseRows) ? (responseRows as any) : []
+          };
+        } catch (error) {
+          console.error(`Error fetching responses for submission ${submission.id}:`, error);
+          return {
+            id: submission.id,
+            timestamp: submission.timestamp,
+            entityId: submission.entity_id,
+            entityName: submission.entity_name || null,
+            responses: []
+          };
+        }
       })
     );
     
@@ -73,6 +77,8 @@ export async function GET(
     return response;
   } catch (error) {
     console.error("Error fetching form submissions:", error);
+    console.error("Error details:", error instanceof Error ? error.message : "Unknown error");
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
     return NextResponse.json({ error: "Failed to fetch form submissions" }, { status: 500 });
   }
 }

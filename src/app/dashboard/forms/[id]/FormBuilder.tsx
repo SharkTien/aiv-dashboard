@@ -184,10 +184,13 @@ export default function FormBuilder({ formId }: { formId: number }) {
         is_required: newField.is_required,
       };
 
-      const res = await fetch(`/api/forms/${formId}/fields?field_id=${editingField.id}`, {
+      const res = await fetch(`/api/forms/${formId}/fields`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          field_id: editingField.id
+        }),
       });
 
       if (res.ok) {
