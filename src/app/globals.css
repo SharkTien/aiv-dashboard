@@ -84,3 +84,26 @@ input:checked + .slider:before {
 .dark .slider:before {
   background: linear-gradient(40deg,#ff0080,#ff8c00 70%);
 }
+
+/* Thin scrollbar utility */
+.thin-scrollbar {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(100,116,139,0.6) transparent; /* Firefox */
+}
+.thin-scrollbar::-webkit-scrollbar {
+  height: 6px; /* horizontal */
+  width: 6px;  /* vertical */
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(100,116,139,0.5);
+  border-radius: 9999px;
+}
+.dark .thin-scrollbar {
+  scrollbar-color: rgba(148,163,184,0.5) transparent;
+}
+.dark .thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(148,163,184,0.5);
+}

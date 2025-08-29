@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { HomeIcon, DatabaseIcon, ChartIcon, HandshakeIcon, UsersIcon, SettingsIcon, LogoutIcon, MenuIcon, XIcon } from "@/components/icons";
+import { HomeIcon, DatabaseIcon, ChartIcon, HandshakeIcon, UsersIcon, SettingsIcon, LogoutIcon, MenuIcon, XIcon, LinkIcon } from "@/components/icons";
 import { useSidebar } from "./SidebarContext";
 
 type NavItemProps = {
@@ -19,6 +19,8 @@ function NavItem({ href, children, icon, isCollapsed }: NavItemProps) {
   return (
     <Link 
       href={href} 
+      title={isCollapsed ? String(children) : undefined}
+      aria-label={isCollapsed ? String(children) : undefined}
       className={`rounded-lg w-full ${isCollapsed ? 'px-2 py-3 justify-center' : 'px-3 py-2'} hover:bg-black/5 dark:hover:bg-white/10 inline-flex items-center gap-2 text-gray-700 dark:text-gray-200 transition-colors ${
         isActive ? 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300' : ''
       }`}
@@ -95,6 +97,9 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
                 <NavItem href="/dashboard/ogv-hub" icon={<HomeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                   Dashboard
                 </NavItem>
+                <NavItem href="/dashboard/utm-generator" icon={<LinkIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                  UTM Generator
+                </NavItem>
                 <NavItem href="/dashboard/ogv/data" icon={<DatabaseIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                   Data
                 </NavItem>
@@ -109,7 +114,7 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
 
             {/* Separator */}
             <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
+ 
             {/* Administration Section */}
             {isAdmin && (
               <div>
@@ -127,6 +132,9 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
                    </NavItem>
                    <NavItem href="/dashboard/forms" icon={<DatabaseIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                      Form Management
+                   </NavItem>
+                   <NavItem href="/dashboard/utm-manage" icon={<LinkIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                     UTM Management
                    </NavItem>
                  </div>
               </div>
@@ -152,7 +160,7 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
 
                      {/* Logout */}
            <form action="/api/auth/logout" method="post" className="mt-auto">
-             <button className={`w-full text-left rounded-lg ${isCollapsed ? 'px-2 py-3 justify-center' : 'px-3 py-2'} hover:bg-black/5 dark:hover:bg-white/10 inline-flex items-center gap-2 text-gray-700 dark:text-gray-200 transition-colors`}>
+             <button title={isCollapsed ? 'Sign Out' : undefined} aria-label={isCollapsed ? 'Sign Out' : undefined} className={`w-full text-left rounded-lg ${isCollapsed ? 'px-2 py-3 justify-center' : 'px-3 py-2'} hover:bg-black/5 dark:hover:bg-white/10 inline-flex items-center gap-2 text-gray-700 dark:text-gray-200 transition-colors`}>
                <LogoutIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />
                {!isCollapsed && <span>Sign Out</span>}
              </button>

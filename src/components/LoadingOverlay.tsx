@@ -49,8 +49,27 @@ export default function LoadingOverlay({ isVisible, message = "Loading...", prog
 
           {/* Animated Text */}
           <div className="text-center">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Importing Data
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2 flex gap-1">
+              {Array.from("Loading ...").map((char, idx) => (
+                <span
+                  key={idx}
+                  className="inline-block animate-float"
+                  style={{
+                    animationDelay: `${idx * 0.08}s`
+                  }}
+                >
+                  {char === " " ? "\u00A0" : char}
+                </span>
+              ))}
+              <style jsx>{`
+                @keyframes float {
+                  0%, 100% { transform: translateY(0); }
+                  50% { transform: translateY(-10px); }
+                }
+                .animate-float {
+                  animation: float 1.2s ease-in-out infinite;
+                }
+              `}</style>
             </h3>
             <div className="h-6 flex items-center justify-center">
               <span className="text-lg text-gray-600 dark:text-gray-300 font-mono">

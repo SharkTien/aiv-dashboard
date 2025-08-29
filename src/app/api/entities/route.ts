@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   
   try {
     const [rows] = await pool.query(
-      "SELECT entity_id, name, type FROM entity ORDER BY name ASC"
+      "SELECT entity_id as id, name, type FROM entity ORDER BY name ASC"
     );
     
     const data = Array.isArray(rows) ? rows : [];

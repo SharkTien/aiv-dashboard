@@ -85,7 +85,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md justify-self-center">
           <div className="rounded-3xl ring-1 ring-black/10 dark:ring-white/10 bg-white/85 dark:bg-gray-800/85 backdrop-blur px-6 py-8 md:px-8 md:py-10 shadow-[0_10px_30px_rgba(2,6,23,0.08)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.3)]">
             <div className="inline-flex items-center gap-2 rounded-full bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200 px-3 py-1 text-xs font-medium ring-1 ring-sky-200 dark:ring-sky-800">
-              AIESEC EXPA
+              AIESEC Tracking System
             </div>
             <h2 className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">Welcome back</h2>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">

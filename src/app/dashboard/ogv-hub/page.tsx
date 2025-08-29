@@ -14,7 +14,8 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ArrowUpIcon,
-  ArrowDownIcon
+  ArrowDownIcon,
+  LinkIcon
 } from "@/components/icons";
 import LoadingOverlay from "@/components/LoadingOverlay";
 
@@ -295,6 +296,66 @@ export default function OGVHubDashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="mt-8">
+          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/50">
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">Quick Actions</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Link
+                href="/dashboard/forms?type=oGV"
+                className="flex items-center space-x-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+              >
+                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                  <DocumentTextIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Create Form</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Build new form</p>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/utm-generator"
+                className="flex items-center space-x-3 p-4 bg-orange-50 dark:bg-orange-900/20 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors"
+              >
+                <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
+                  <LinkIcon className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">UTM Generator</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Create tracking links</p>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/users"
+                className="flex items-center space-x-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+              >
+                <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                  <UsersIcon className="w-5 h-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Manage Users</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">User administration</p>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/settings"
+                className="flex items-center space-x-3 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-colors"
+              >
+                <div className="w-10 h-10 bg-gray-100 dark:bg-gray-600 rounded-lg flex items-center justify-center">
+                  <AcademicCapIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Settings</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Configure system</p>
+                </div>
+              </Link>
             </div>
           </div>
         </div>
