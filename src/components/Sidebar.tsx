@@ -91,13 +91,16 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
                   oGV Hub
                 </div>
               )}
-                             <div className="space-y-1">
-                 <NavItem href="/dashboard/ogv/data" icon={<DatabaseIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
-                   Data
-                 </NavItem>
-                 <NavItem href="/dashboard/ogv/analytics" icon={<ChartIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
-                   Analytics
-                 </NavItem>
+              <div className="space-y-1">
+                <NavItem href="/dashboard/ogv-hub" icon={<HomeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                  Dashboard
+                </NavItem>
+                <NavItem href="/dashboard/ogv/data" icon={<DatabaseIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                  Data
+                </NavItem>
+                <NavItem href="/dashboard/ogv/analytics" icon={<ChartIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                  Analytics
+                </NavItem>
                  <NavItem href="/dashboard/ogv/crm" icon={<HandshakeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                    CRM
                  </NavItem>

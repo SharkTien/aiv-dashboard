@@ -11,14 +11,27 @@ export async function GET(req: NextRequest) {
   const page = Math.max(Number(searchParams.get("page") || 1), 1);
   const offset = (page - 1) * limit;
   const q = (searchParams.get("q") || "").trim();
+  const type = searchParams.get("type");
 
   const pool = getDbPool();
   const params: any[] = [];
   let where = "";
   
-  if (q) {
-    where += " WHERE name LIKE ? OR code LIKE ?";
-    params.push(`%${q}%`, `%${q}%`);
+  if (q || type) {
+    where += " WHERE";
+    const conditions = [];
+    
+    if (q) {
+      conditions.push("(name LIKE ? OR code LIKE ?)");
+      params.push(`%${q}%`, `%${q}%`);
+    }
+    
+    if (type) {
+      conditions.push("type = ?");
+      params.push(type);
+    }
+    
+    where += " " + conditions.join(" AND ");
   }
 
   // Get total count
@@ -31,7 +44,7 @@ export async function GET(req: NextRequest) {
 
   // Get paginated data
   const [rows] = await pool.query(
-    `SELECT id, code, name, created_at, updated_at
+    `SELECT id, code, name, type, created_at, updated_at
      FROM forms ${where}
      ORDER BY created_at DESC
      LIMIT ? OFFSET ?`,
@@ -61,10 +74,14 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
   const body = await req.json();
-  const { name } = body || {};
+  const { name, type = 'oGV' } = body || {};
   
   if (!name) {
     return NextResponse.json({ error: "Missing required field: name" }, { status: 400 });
+  }
+
+  if (!['oGV', 'TMR', 'EWA'].includes(type)) {
+    return NextResponse.json({ error: "Invalid type. Must be one of: oGV, TMR, EWA" }, { status: 400 });
   }
 
   const pool = getDbPool();
@@ -75,15 +92,15 @@ export async function POST(req: NextRequest) {
     const code = `${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${timestamp}`;
     
     const [result] = await pool.query(
-      "INSERT INTO forms (code, name) VALUES (?, ?)",
-      [code, name]
+      "INSERT INTO forms (code, name, type) VALUES (?, ?, ?)",
+      [code, name, type]
     );
     
     const formId = (result as any).insertId;
     
     return NextResponse.json({ 
       success: true, 
-      form: { id: formId, code, name }
+      form: { id: formId, code, name, type }
     });
   } catch (error) {
     console.error("Error creating form:", error);
@@ -96,10 +113,14 @@ export async function PUT(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
   const body = await req.json();
-  const { id, code, name } = body || {};
+  const { id, code, name, type } = body || {};
   
   if (!id) {
     return NextResponse.json({ error: "Missing form id" }, { status: 400 });
+  }
+
+  if (type && !['oGV', 'TMR', 'EWA'].includes(type)) {
+    return NextResponse.json({ error: "Invalid type. Must be one of: oGV, TMR, EWA" }, { status: 400 });
   }
 
   const pool = getDbPool();
@@ -120,8 +141,8 @@ export async function PUT(req: NextRequest) {
     }
     
     await pool.query(
-      "UPDATE forms SET code = COALESCE(?, code), name = COALESCE(?, name) WHERE id = ?",
-      [code ?? null, name ?? null, id]
+      "UPDATE forms SET code = COALESCE(?, code), name = COALESCE(?, name), type = COALESCE(?, type) WHERE id = ?",
+      [code ?? null, name ?? null, type ?? null, id]
     );
     
     return NextResponse.json({ success: true });

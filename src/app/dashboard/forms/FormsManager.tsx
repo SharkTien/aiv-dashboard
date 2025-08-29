@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import DropdownMenu, { DropdownItem } from "@/components/DropdownMenu";
 
@@ -8,6 +9,7 @@ type Form = {
   id: number;
   code: string;
   name: string;
+  type: 'oGV' | 'TMR' | 'EWA';
   created_at: string;
   updated_at: string;
 };
@@ -22,13 +24,15 @@ type Pagination = {
 };
 
 export default function FormsManager() {
+  const searchParams = useSearchParams();
   const [forms, setForms] = useState<Form[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState<'all' | 'oGV' | 'TMR' | 'EWA'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: "" });
+  const [createForm, setCreateForm] = useState({ name: "", type: "oGV" as 'oGV' | 'TMR' | 'EWA' });
   const [duplicatingForm, setDuplicatingForm] = useState<number | null>(null);
   const [editingForm, setEditingForm] = useState<Form | null>(null);
   const [editFormName, setEditFormName] = useState("");
@@ -45,6 +49,10 @@ export default function FormsManager() {
         params.append("q", searchTerm.trim());
       }
 
+      if (typeFilter !== 'all') {
+        params.append("type", typeFilter);
+      }
+
       const res = await fetch(`/api/forms?${params}`);
       const data = await res.json();
       
@@ -57,9 +65,17 @@ export default function FormsManager() {
   }
 
   useEffect(() => {
+    // Initialize type filter from URL params
+    const typeFromUrl = searchParams.get('type');
+    if (typeFromUrl && ['oGV', 'TMR', 'EWA'].includes(typeFromUrl)) {
+      setTypeFilter(typeFromUrl as 'oGV' | 'TMR' | 'EWA');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     setCurrentPage(1);
     load(1);
-  }, [searchTerm]);
+  }, [searchTerm, typeFilter]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -77,7 +93,7 @@ export default function FormsManager() {
       
       if (res.ok) {
         setShowCreateModal(false);
-        setCreateForm({ name: "" });
+        setCreateForm({ name: "", type: "oGV" });
         load(currentPage);
       } else {
         const data = await res.json();
@@ -256,6 +272,19 @@ export default function FormsManager() {
                     required
                   />
                 </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Form Type</label>
+                  <select
+                    value={createForm.type}
+                    onChange={(e) => setCreateForm({ ...createForm, type: e.target.value as 'oGV' | 'TMR' | 'EWA' })}
+                    className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
+                    required
+                  >
+                    <option value="oGV">oGV</option>
+                    <option value="TMR">TMR</option>
+                    <option value="EWA">EWA</option>
+                  </select>
+                </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   After creating, copy the <span className="font-medium">Form Code</span> and set it as <code>data-form-code</code> on your Webflow form.
                 </p>
@@ -280,7 +309,7 @@ export default function FormsManager() {
         </div>
       )}
       <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="flex-1 max-w-md">
             <input
               type="text"
@@ -290,12 +319,24 @@ export default function FormsManager() {
               className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
             />
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="h-11 px-6 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors"
-          >
-            Create Form
-          </button>
+          <div className="flex items-center gap-3">
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as 'all' | 'oGV' | 'TMR' | 'EWA')}
+              className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
+            >
+              <option value="all">All Types</option>
+              <option value="oGV">oGV</option>
+              <option value="TMR">TMR</option>
+              <option value="EWA">EWA</option>
+            </select>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="h-11 px-6 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors"
+            >
+              Create Form
+            </button>
+          </div>
         </div>
       </div>
 
@@ -342,6 +383,10 @@ export default function FormsManager() {
                             onClick={() => copy(form.code)}
                             className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200"
                           >Copy</button>
+                          <span className="mx-2">•</span>
+                          <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium">
+                            {form.type}
+                          </span>
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           Created: {new Date(form.created_at).toLocaleDateString()}

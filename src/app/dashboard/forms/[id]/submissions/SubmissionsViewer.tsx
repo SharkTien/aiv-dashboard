@@ -8,6 +8,7 @@ type Form = {
   id: number;
   code: string;
   name: string;
+  type: 'oGV' | 'TMR' | 'EWA';
 };
 
 type Submission = {
@@ -40,6 +41,11 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [availableForms, setAvailableForms] = useState<Array<{ id: number; name: string; code: string }>>([]);
   const [selectedTargetForm, setSelectedTargetForm] = useState<number | null>(null);
+  
+  // Date filter state
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [showDateFilter, setShowDateFilter] = useState(false);
 
   // Helper function to format any datetime value (Excel serial, MySQL datetime, etc.)
   const formatDateTime = (value: string, fieldType?: string) => {
@@ -123,16 +129,15 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
         return <span className="text-gray-400">Invalid date</span>;
       }
       
-      // Format for Vietnam timezone
-      return date.toLocaleString('vi-VN', {
+      // Format in local timezone (no timezone conversion)
+      return date.toLocaleString('en-US', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Ho_Chi_Minh'
+        hour12: false
       });
     } catch (error) {
       return <span className="text-gray-400">Error parsing date</span>;
@@ -281,11 +286,58 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
     loadFormFields();
   }, [formId]);
 
+  // Filter submissions by date range
+  const filteredSubmissions = useMemo(() => {
+    if (!startDate && !endDate) {
+      return submissions;
+    }
+
+    return submissions.filter(submission => {
+      const submissionDate = submission.timestamp || submission.submitted_at;
+      if (!submissionDate) {
+        return false;
+      }
+
+      let date: Date;
+      
+      // Handle different timestamp formats
+      if (submissionDate.includes(' ') && submissionDate.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
+        // MySQL DATETIME format: "2024-12-31 07:00:00"
+        date = new Date(submissionDate.replace(' ', 'T') + '.000Z');
+      } else if (submissionDate.includes('T')) {
+        // ISO format: "2024-12-31T07:00:00.000Z"
+        date = new Date(submissionDate);
+      } else {
+        // Try standard parsing
+        date = new Date(submissionDate);
+      }
+
+      if (isNaN(date.getTime())) {
+        return false;
+      }
+
+      // Convert to YYYY-MM-DD format for comparison
+      const submissionDateOnly = date.toISOString().split('T')[0];
+
+      if (startDate && endDate) {
+        return submissionDateOnly >= startDate && submissionDateOnly <= endDate;
+      } else if (startDate) {
+        return submissionDateOnly >= startDate;
+      } else if (endDate) {
+        return submissionDateOnly <= endDate;
+      }
+
+      return false;
+    });
+  }, [submissions, startDate, endDate]);
+
   // Pagination logic
-  const totalPages = Math.ceil(submissions.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredSubmissions.length / itemsPerPage);
+  
+  // Get current page submissions
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentSubmissions = submissions.slice(startIndex, endIndex);
+  const currentSubmissions = filteredSubmissions.slice(startIndex, endIndex);
 
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -346,11 +398,11 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
   };
 
   const exportToCSV = () => {
-    if (submissions.length === 0) return;
+    if (filteredSubmissions.length === 0) return;
 
     // Prepare CSV data
     const csvHeaders = ['Timestamp', ...fieldHeaders.map(h => h.label)];
-    const csvRows = submissions.map(sub => {
+    const csvRows = filteredSubmissions.map(sub => {
       const map = new Map(sub.responses.map((r) => [r.field_name, r]));
       const ts = (sub.timestamp || sub.submitted_at) as string;
       const timestamp = new Date(ts).toLocaleString();
@@ -462,7 +514,13 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
   };
 
   if (loading) {
-    return <div className="text-center py-8 text-gray-500 dark:text-gray-400">Loading...</div>;
+    return (
+      <LoadingOverlay 
+        isVisible={true} 
+        message="Loading submissions..." 
+        showProgress={false}
+      />
+    );
   }
 
   if (!form) {
@@ -541,7 +599,12 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{form.name}</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">Code: {form.code}</p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-sm text-gray-600 dark:text-gray-300">Code: {form.code}</p>
+              <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium">
+                {form.type}
+              </span>
+            </div>
           </div>
           <Link
             href={`/dashboard/forms/${formId}`}
@@ -562,7 +625,12 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Submissions ({submissions.length})
+              Submissions ({filteredSubmissions.length})
+              {startDate || endDate ? (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  (filtered from {submissions.length} total)
+                </span>
+              ) : null}
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Showing {fieldHeaders.length} fields • {currentSubmissions.length} submissions on this page
@@ -602,10 +670,10 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                 </button>
                 </>
               )}
-              {submissions.length > 0 && (
+              {filteredSubmissions.length > 0 && (
                 <div className="flex items-center space-x-3">
                   <div className="text-sm text-gray-600 dark:text-gray-300">
-                    Showing {startIndex + 1}-{Math.min(endIndex, submissions.length)} of {submissions.length}
+                    Showing {startIndex + 1}-{Math.min(endIndex, filteredSubmissions.length)} of {filteredSubmissions.length}
                   </div>
                   <div className="flex items-center space-x-2">
                     <label className="text-sm text-gray-600 dark:text-gray-300">Show:</label>
@@ -630,6 +698,28 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                 </div>
               )}
               <div className="flex items-center space-x-2">
+                {/* Date Filter Button */}
+                <button
+                  onClick={() => setShowDateFilter(true)}
+                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
+                    startDate || endDate
+                      ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                      : 'bg-gray-50 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-500'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Filter by Date
+                    {(startDate || endDate) && (
+                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300 rounded-full">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                </button>
+                
                 {submissions.length > 0 && (
                   <button
                     onClick={() => exportToCSV()}
@@ -734,7 +824,7 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                         />
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">Submission Time</th>
+                    <th className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">timestamp</th>
                     {fieldHeaders.map((h) => (
                       <th key={h.name} className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">
                         {h.label}
@@ -775,8 +865,13 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                           const resp = map.get(h.name) as FormResponse | undefined;
                           const fieldValue = resp?.value || "";
                           const display = resp?.value_label || fieldValue || "";
-                          // Check if this field value looks like Excel serial number (datetime from Excel)
-                          const isExcelSerial = /^\d+(\.\d+)?$/.test(fieldValue) && parseFloat(fieldValue) > 40000;
+                          
+                          // Only apply date formatting to fields that are likely to be dates
+                          const isDateField = h.name.toLowerCase().includes('date') || 
+                                            h.name.toLowerCase().includes('time') || 
+                                            h.name.toLowerCase().includes('timestamp');
+                          
+                          const displayValue = isDateField ? formatDateTime(fieldValue) : display;
                           
                           return (
                             <td
@@ -801,7 +896,7 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
                               }}
                             >
                               <span className="block overflow-clip text-ellipsis" style={{ maxWidth: '12rem' }}>
-                                {isExcelSerial ? formatDateTime(fieldValue) : (display || <span className="text-gray-400">(empty)</span>)}
+                                {displayValue || <span className="text-gray-400">(empty)</span>}
                               </span>
                             </td>
                           );
@@ -872,6 +967,82 @@ export default function SubmissionsViewer({ formId }: { formId: number }) {
         )}
       </div>
 
+      {/* Date Filter Modal */}
+      {showDateFilter && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Filter by Date Range
+              </h3>
+              <button
+                onClick={() => setShowDateFilter(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              {(startDate || endDate) && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    <strong>Filter:</strong> {startDate || 'Any'} to {endDate || 'Any'}
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex items-center justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2 text-sm rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
+              >
+                Clear Filter
+              </button>
+              <button
+                onClick={() => {
+                  setShowDateFilter(false);
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2 text-sm rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+              >
+                Apply Filter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
     </div>
   );

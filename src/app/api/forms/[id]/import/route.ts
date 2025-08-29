@@ -67,7 +67,6 @@ export async function POST(
           normalizedHeader.includes('submitted')) {
         timestampField = header;
         timestampColumnIndex = index;
-        console.log(`✅ Found timestamp column: ${header} at column index ${index}`);
       }
     });
 
@@ -260,32 +259,53 @@ export async function POST(
                   if (/^\d+(\.\d+)?$/.test(timestampStr)) {
                     const serialNumber = parseFloat(timestampStr);
                     if (serialNumber >= 1 && serialNumber <= 100000) {
+                      // Excel dates are days since 1900-01-01
+                      // Note: Excel incorrectly treats 1900 as a leap year, so we need to adjust
                       const excelEpoch = new Date(1900, 0, 1);
                       const millisecondsPerDay = 24 * 60 * 60 * 1000;
                       let adjustedSerial = serialNumber;
                       if (serialNumber > 59) {
-                        adjustedSerial = serialNumber - 1;
+                        adjustedSerial = serialNumber - 1; // Excel leap year bug
                       }
-                      parsedDate = new Date(excelEpoch.getTime() + (adjustedSerial - 2) * millisecondsPerDay);
-                      console.log(`Row ${globalRowIndex + 2}: Excel serial ${timestampStr} -> ${parsedDate.toISOString()}`);
+                      parsedDate = new Date(excelEpoch.getTime() + (adjustedSerial - 1) * millisecondsPerDay);
+                      // Convert to Vietnam time (+7)
+                      const vietnamTime = new Date(parsedDate.getTime() + (8 * 60 * 60 * 1000));
+                      parsedDate = vietnamTime;
                     }
                   }
                   
                   // If not Excel serial, try standard date parsing
                   if (!parsedDate || isNaN(parsedDate.getTime())) {
-                    parsedDate = new Date(timestampStr);
+                    // Check if it's a date-only format (like "8/1/2025") and add time
+                    let dateStr = timestampStr; 
+                    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(timestampStr)) {
+                      // Format: M/D/YYYY or MM/DD/YYYY - treat as UTC date at 00:00:00
+                      const [month, day, year] = timestampStr.split('/');
+                      const monthNum = parseInt(month) - 1; // JavaScript months are 0-based
+                      const dayNum = parseInt(day);
+                      const yearNum = parseInt(year);
+                      parsedDate = new Date(Date.UTC(yearNum, monthNum, dayNum, 0, 0, 0));
+                    } else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(timestampStr)) {
+                      // Format: YYYY-M-D or YYYY-MM-DD - treat as UTC date at 00:00:00
+                      const [year, month, day] = timestampStr.split('-');
+                      const monthNum = parseInt(month) - 1; // JavaScript months are 0-based
+                      const dayNum = parseInt(day);
+                      const yearNum = parseInt(year);
+                      parsedDate = new Date(Date.UTC(yearNum, monthNum, dayNum, 0, 0, 0));
+                    } else {
+                      // Other formats, try standard parsing
+                      parsedDate = new Date(timestampStr);
+                    }
                   }
                   
                   // If valid date, use it
                   if (parsedDate && !isNaN(parsedDate.getTime())) {
-                    const vietnamTime = new Date(parsedDate.getTime() + (7 * 60 * 60 * 1000));
-                    submissionTimestamp = vietnamTime.toISOString().slice(0, 19).replace('T', ' ');
-                    console.log(`Row ${globalRowIndex + 2}: ✅ Using timestamp from Excel: ${timestampValue} -> ${submissionTimestamp}`);
+                    submissionTimestamp = parsedDate.toISOString().slice(0, 19).replace('T', ' ');
                   } else {
-                    console.log(`Row ${globalRowIndex + 2}: ⚠️ Invalid timestamp format, using current time`);
+                    // Invalid timestamp format, will use current time
                   }
                 } catch (error) {
-                  console.log(`Row ${globalRowIndex + 2}: ⚠️ Error parsing timestamp, using current time`);
+                  // Error parsing timestamp, will use current time
                 }
               }
             }
@@ -295,7 +315,6 @@ export async function POST(
               const now = new Date();
               const vietnamTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
               submissionTimestamp = vietnamTime.toISOString().slice(0, 19).replace('T', ' ');
-              console.log(`Row ${globalRowIndex + 2}: 🕐 Using current time: ${submissionTimestamp}`);
             }
             
             // Mark that we need to create a submission for this row
@@ -311,8 +330,6 @@ export async function POST(
 
         // Batch insert submissions
         if (submissionsToInsert.length > 0) {
-          console.log(`Inserting ${submissionsToInsert.length} submissions with individual timestamps`);
-          console.log(`Submissions to insert:`, submissionsToInsert);
           
           const [submissionResult] = await pool.query(
             "INSERT INTO form_submissions (form_id, timestamp) VALUES ?",

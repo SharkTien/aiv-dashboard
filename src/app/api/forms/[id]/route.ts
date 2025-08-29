@@ -14,7 +14,7 @@ export async function GET(
   
   try {
     const [rows] = await pool.query(
-      "SELECT id, code, name, created_at, updated_at FROM forms WHERE id = ?",
+      "SELECT id, code, name, type, created_at, updated_at FROM forms WHERE id = ?",
       [formId]
     );
     
@@ -46,10 +46,14 @@ export async function PUT(
   const pool = getDbPool();
 
   try {
-    const { name } = await req.json();
+    const { name, type } = await req.json();
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return NextResponse.json({ error: "Form name is required" }, { status: 400 });
+    }
+
+    if (type && !['oGV', 'TMR', 'EWA'].includes(type)) {
+      return NextResponse.json({ error: "Invalid type. Must be one of: oGV, TMR, EWA" }, { status: 400 });
     }
 
     // Generate new form code based on name
@@ -72,10 +76,10 @@ export async function PUT(
       return NextResponse.json({ error: "A form with this name already exists" }, { status: 409 });
     }
 
-    // Update form name and code
+    // Update form name, code, and type
     const [result] = await pool.query(
-      "UPDATE forms SET name = ?, code = ? WHERE id = ?",
-      [name.trim(), newFormCode, formId]
+      "UPDATE forms SET name = ?, code = ?, type = COALESCE(?, type) WHERE id = ?",
+      [name.trim(), newFormCode, type || null, formId]
     );
 
     if ((result as any).affectedRows === 0) {
@@ -88,7 +92,8 @@ export async function PUT(
       form: {
         id: formId,
         name: name.trim(),
-        code: newFormCode
+        code: newFormCode,
+        type: type || 'oGV'
       }
     });
 
