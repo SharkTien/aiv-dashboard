@@ -61,4 +61,44 @@ function generatePassword(length = 10) {
   return out;
 }
 
+export async function PUT(req: NextRequest) {
+  const admin = await getCurrentUser();
+  if (admin?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const body = await req.json();
+  const { user_id, name, role, status, entity_id } = body || {};
+  if (!user_id) return NextResponse.json({ error: "user_id is required" }, { status: 400 });
+  const pool = getDbPool();
+  try {
+    await pool.query(
+      "UPDATE user SET name = COALESCE(?, name), role = COALESCE(?, role), status = COALESCE(?, status), entity_id = COALESCE(?, entity_id) WHERE user_id = ?",
+      [name ?? null, role ?? null, status ?? null, entity_id ?? null, user_id]
+    );
+    const [rows] = await pool.query(
+      "SELECT user_id, entity_id, email, name, role, status, created_at FROM user WHERE user_id = ?",
+      [user_id]
+    );
+    const user = Array.isArray(rows) && rows.length ? rows[0] : null;
+    return NextResponse.json({ success: true, user });
+  } catch (e) {
+    console.error("Failed to update user", e);
+    return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const admin = await getCurrentUser();
+  if (admin?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { searchParams } = new URL(req.url);
+  const id = Number(searchParams.get("id"));
+  if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+  const pool = getDbPool();
+  try {
+    await pool.query("DELETE FROM user WHERE user_id = ?", [id]);
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    console.error("Failed to delete user", e);
+    return NextResponse.json({ error: "Failed to delete user" }, { status: 500 });
+  }
+}
+
 

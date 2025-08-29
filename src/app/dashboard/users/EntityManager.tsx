@@ -68,7 +68,7 @@ export default function EntityManager() {
   }
 
   function startEdit(e: any) {
-    setEditingId(e.entity_id);
+    setEditingId(e.id ?? e.entity_id);
     setEditName(e.name);
     setEditType(e.type);
   }
@@ -208,8 +208,8 @@ export default function EntityManager() {
                   </div>
                   <div className="space-y-2">
                     {items.filter(e => e.type === 'national').map((e) => (
-                      <div key={e.entity_id} className="flex items-center justify-between gap-3 p-3 rounded-lg hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50">
-                        {editingId === e.entity_id ? (
+                      <div key={e.id ?? e.entity_id} className="flex items-center justify-between gap-3 p-3 rounded-lg hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50">
+                        {editingId === (e.id ?? e.entity_id) ? (
                           <div className="flex flex-wrap items-end gap-3">
                             <input 
                               value={editName} 
@@ -239,7 +239,7 @@ export default function EntityManager() {
                           </div>
                         )}
                         <div className="ml-auto flex items-center gap-1">
-                          {editingId === e.entity_id ? (
+                          {editingId === (e.id ?? e.entity_id) ? (
                             <>
                               <button onClick={saveEdit} className="h-7 px-3 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors">
                                 Save
@@ -253,7 +253,7 @@ export default function EntityManager() {
                               <button onClick={() => startEdit(e)} className="h-7 px-3 rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors">
                                 Edit
                               </button>
-                              <button onClick={() => remove(e.entity_id)} className="h-7 px-3 rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 text-xs font-medium transition-colors">
+                              <button onClick={() => remove(e.id ?? e.entity_id)} className="h-7 px-3 rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 text-xs font-medium transition-colors">
                                 Delete
                               </button>
                             </>
@@ -277,8 +277,8 @@ export default function EntityManager() {
                   </div>
                   <div className="space-y-2">
                     {items.filter(e => e.type === 'local').map((e) => (
-                      <div key={e.entity_id} className="flex items-center justify-between gap-3 p-3 rounded-lg hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50">
-                        {editingId === e.entity_id ? (
+                      <div key={e.id ?? e.entity_id} className="flex items-center justify-between gap-3 p-3 rounded-lg hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50">
+                        {editingId === (e.id ?? e.entity_id) ? (
                           <div className="flex flex-wrap items-end gap-3">
                             <input 
                               value={editName} 
@@ -308,7 +308,7 @@ export default function EntityManager() {
                           </div>
                         )}
                         <div className="ml-auto flex items-center gap-1">
-                          {editingId === e.entity_id ? (
+                          {editingId === (e.id ?? e.entity_id) ? (
                             <>
                               <button onClick={saveEdit} className="h-7 px-3 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors">
                                 Save
@@ -322,7 +322,7 @@ export default function EntityManager() {
                               <button onClick={() => startEdit(e)} className="h-7 px-3 rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors">
                                 Edit
                               </button>
-                              <button onClick={() => remove(e.entity_id)} className="h-7 px-3 rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 text-xs font-medium transition-colors">
+                              <button onClick={() => remove(e.id ?? e.entity_id)} className="h-7 px-3 rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 text-xs font-medium transition-colors">
                                 Delete
                               </button>
                             </>

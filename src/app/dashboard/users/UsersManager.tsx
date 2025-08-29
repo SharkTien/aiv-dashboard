@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 
-type Entity = { entity_id: number; name: string };
+type Entity = { id: number; name: string };
 
 export default function UsersManager() {
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -61,7 +61,7 @@ export default function UsersManager() {
                       >
                         <option value="">Select entity…</option>
                         {entities.map((e) => (
-                          <option key={e.entity_id} value={e.entity_id}>{e.name}</option>
+                          <option key={e.id} value={e.id}>{e.name}</option>
                         ))}
                       </select>
                     </div>
