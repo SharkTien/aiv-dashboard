@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import LoadingOverlay from "@/components/LoadingOverlay";
 
 type Entity = {
-  id: number;
+  entity_id: number;
   name: string;
 };
 
@@ -120,9 +120,27 @@ export default function UTMGeneratorPage() {
     }
   }, [activeTab]);
 
+  // Close dropdown menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      // Close all dropdown menus if click is outside any dropdown
+      document.querySelectorAll('[id^="menu-"]').forEach(menu => {
+        if (!menu.contains(target) && !target.closest('.dropdown-menu')) {
+          menu.classList.add('hidden');
+        }
+      });
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const buildCampaignString = (blocks: CampaignBlock[] | null, entityId: number | ""): string => {
     if (!blocks || blocks.length === 0) return activeCampaign?.code || "";
-    const entity = typeof entityId === "number" ? entities.find(e => e.id === entityId) : null;
+    const entity = typeof entityId === "number" ? entities.find(e => e.entity_id === entityId) : null;
     return blocks
       .map(b => (b.type === "text" ? b.value : (entity ? entity.name : String(entityId || ""))))
       .join("");
@@ -152,7 +170,9 @@ export default function UTMGeneratorPage() {
 
       if (entitiesRes.ok) {
         const entitiesData = await entitiesRes.json();
-        setEntities(Array.isArray(entitiesData.items) ? entitiesData.items : []);
+        // Filter out national entities and organic (only show local entities)
+        const localEntities = Array.isArray(entitiesData.items) ? entitiesData.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
+        setEntities(localEntities);
       }
       if (sourcesRes.ok) {
         const sourcesData = await sourcesRes.json();
@@ -301,21 +321,21 @@ export default function UTMGeneratorPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Entity Name *</label>
-              <select value={selectedEntity} onChange={(e) => setSelectedEntity(e.target.value ? Number(e.target.value) : "")} disabled={role !== 'admin'} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all disabled:opacity-60" required>
+              <select value={selectedEntity.toString()} onChange={(e) => setSelectedEntity(e.target.value ? Number(e.target.value) : "")} disabled={role !== 'admin'} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all disabled:opacity-60" required>
                 <option value="">Select Entity</option>
-                {entities.map((entity) => (<option key={entity.id} value={entity.id}>{entity.name}</option>))}
+                {entities.map((entity) => (<option key={entity.entity_id} value={entity.entity_id}>{entity.name}</option>))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">UTM Source *</label>
-              <select value={selectedSource} onChange={(e) => setSelectedSource(e.target.value ? Number(e.target.value) : "")} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required>
+              <select value={selectedSource.toString()} onChange={(e) => setSelectedSource(e.target.value ? Number(e.target.value) : "")} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required>
                 <option value="">Select Source</option>
                 {sources.map((source) => (<option key={source.id} value={source.id}>{source.name} ({source.platform})</option>))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">UTM Medium *</label>
-              <select value={selectedMedium} onChange={(e) => setSelectedMedium(e.target.value ? Number(e.target.value) : "")} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required>
+              <select value={selectedMedium.toString()} onChange={(e) => setSelectedMedium(e.target.value ? Number(e.target.value) : "")} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required>
                 <option value="">Select Medium</option>
                 {mediums.map((medium) => (<option key={medium.id} value={medium.id}>{medium.name} {medium.name_required ? '(Name Required)' : ''}</option>))}
               </select>
@@ -423,9 +443,60 @@ export default function UTMGeneratorPage() {
                           <td className="py-3 px-4 text-sm"><div className="max-w-xs truncate text-blue-600 dark:text-blue-400">{utmUrl}</div></td>
                           <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{new Date(link.created_at).toLocaleDateString()}</td>
                           <td className="py-3 px-4 text-sm">
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => copyToClipboard(utmUrl)} className="px-3 py-1 text-xs rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-medium transition-colors">Copy URL</button>
-                              <button onClick={() => handleDeleteLink(link.id)} className="px-3 py-1 text-xs rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 font-medium transition-colors">Delete</button>
+                            <div className="relative">
+                              <button
+                                onClick={() => {
+                                  // Close all other menus first
+                                  document.querySelectorAll('[id^="menu-"]').forEach(otherMenu => {
+                                    if (otherMenu.id !== `menu-${link.id}`) {
+                                      otherMenu.classList.add('hidden');
+                                    }
+                                  });
+                                  
+                                  const menu = document.getElementById(`menu-${link.id}`);
+                                  if (menu) {
+                                    menu.classList.toggle('hidden');
+                                  }
+                                }}
+                                className="dropdown-menu p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                </svg>
+                              </button>
+                              <div
+                                id={`menu-${link.id}`}
+                                className="dropdown-menu hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10"
+                              >
+                                <div className="py-1">
+                                  <button
+                                    onClick={() => {
+                                      copyToClipboard(utmUrl);
+                                      // Close menu after action
+                                      const menu = document.getElementById(`menu-${link.id}`);
+                                      if (menu) {
+                                        menu.classList.add('hidden');
+                                      }
+                                    }}
+                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                  >
+                                    Copy URL
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      handleDeleteLink(link.id);
+                                      // Close menu after action
+                                      const menu = document.getElementById(`menu-${link.id}`);
+                                      if (menu) {
+                                        menu.classList.add('hidden');
+                                      }
+                                    }}
+                                    className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </td>
                         </tr>

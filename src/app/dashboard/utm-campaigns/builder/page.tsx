@@ -5,38 +5,49 @@ import LoadingOverlay from "@/components/LoadingOverlay";
 export default function UTMCampaignBuilderPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  type Campaign = { id: number; entity_id: number | null; entity_name?: string | null; code: string; name: string; description: string | null; is_active: boolean };
+  type Campaign = { id: number; entity_id: number | null; entity_name?: string | null; code: string; name: string; description: string | null; form_id: number; form_name?: string };
   type CampaignBlock = { type: "text"; value: string } | { type: "entity_id" };
   type Entity = { entity_id: number; name: string };
+  type Form = { id: number; name: string; code: string };
   const [blocks, setBlocks] = useState<CampaignBlock[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [description, setDescription] = useState("");
-  const [activate, setActivate] = useState(true);
+  const [selectedForm, setSelectedForm] = useState<number | null>(null);
   const [activeCampaigns, setActiveCampaigns] = useState<Campaign[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
+  const [forms, setForms] = useState<Form[]>([]);
   const [search, setSearch] = useState("");
   const [entityFilter, setEntityFilter] = useState<number | "">("");
+  const [formFilter, setFormFilter] = useState<number | "">("");
 
   const loadActiveCampaigns = async () => {
     try {
-      const [campRes, entRes] = await Promise.all([
+      const [campRes, entRes, formsRes] = await Promise.all([
         fetch('/api/utm/campaigns'),
-        fetch('/api/entities')
+        fetch('/api/entities'),
+        fetch('/api/forms')
       ]);
       if (entRes.ok) {
         const entData = await entRes.json();
         console.log('UTM Campaign Builder - Entities data:', entData);
         console.log('UTM Campaign Builder - Entities items:', entData.items);
-        setEntities(Array.isArray(entData.items) ? entData.items : []);
+        // Filter out national entities and organic (only show local entities)
+        const localEntities = Array.isArray(entData.items) ? entData.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
+        setEntities(localEntities);
+      }
+      if (formsRes.ok) {
+        const formsData = await formsRes.json();
+        console.log('UTM Campaign Builder - Forms data:', formsData);
+        setForms(Array.isArray(formsData.items) ? formsData.items : []);
       }
       if (campRes.ok) {
         const data: Campaign[] = await campRes.json();
         console.log('UTM Campaign Builder - Campaigns data:', data);
-        setActiveCampaigns(Array.isArray(data) ? data.filter(c => c.is_active) : []);
+        setActiveCampaigns(Array.isArray(data) ? data : []);
       }
     } catch (e) {
-      console.error('Failed to load campaigns/entities', e);
+      console.error('Failed to load campaigns/entities/forms', e);
     }
   };
 
@@ -56,20 +67,22 @@ export default function UTMCampaignBuilderPage() {
 
   const createFromFormat = async () => {
     if (blocks.length === 0) { alert('Add at least one block'); return; }
+    if (!selectedForm) { alert('Please select a form first'); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/utm/campaigns/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format_blocks: blocks, description: description || null, activate })
+        body: JSON.stringify({ format_blocks: blocks, description: description || null, form_id: selectedForm })
       });
       const data = await res.json();
       if (!res.ok) {
         alert(data.error || 'Create failed');
       } else {
-        alert(`Created ${data.created}/${data.total} campaigns${activate ? ' and activated them' : ''}`);
+        alert(`Created ${data.created}/${data.total} campaigns`);
         setBlocks([]);
         setDescription("");
+        setSelectedForm(null);
         await loadActiveCampaigns();
       }
     } catch (e) {
@@ -84,13 +97,36 @@ export default function UTMCampaignBuilderPage() {
     return found ? found.name : '-';
   };
 
+  // Get all entities that should be displayed
+  const displayEntities = entities.filter(e => {
+    const matchesEntity = entityFilter ? e.entity_id === Number(entityFilter) : true;
+    return matchesEntity;
+  });
+
+  // Get campaigns filtered by form
   const filteredCampaigns = activeCampaigns.filter(c => {
-    const matchesEntity = entityFilter ? c.entity_id === Number(entityFilter) : true;
+    const matchesForm = formFilter ? c.form_id === Number(formFilter) : true;
     const q = search.trim().toLowerCase();
     const matchesSearch = q
       ? (c.name?.toLowerCase().includes(q) || c.code?.toLowerCase().includes(q))
       : true;
-    return matchesEntity && matchesSearch;
+    return matchesForm && matchesSearch;
+  });
+
+  // Create a map of campaigns by entity_id for quick lookup
+  const campaignsByEntity = new Map();
+  filteredCampaigns.forEach(c => {
+    campaignsByEntity.set(c.entity_id, c);
+  });
+
+  // Create display data: show all entities, with campaign if exists
+  const displayData = displayEntities.map(entity => {
+    const campaign = campaignsByEntity.get(entity.entity_id);
+    return {
+      entity,
+      campaign,
+      hasCampaign: !!campaign
+    };
   });
 
   if (loading) return <LoadingOverlay isVisible={true} message="Loading Campaign Builder..." />;
@@ -99,7 +135,7 @@ export default function UTMCampaignBuilderPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">UTM Campaign Builder</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">Compose a format (e.g. [Entity_id]-oGV2025). Click Create to generate one campaign per entity with the same description, and optionally activate them.</p>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">Compose a format (e.g. [Entity_id]-oGV2025). Select a phase first, then click Create to generate one campaign per entity for that phase.</p>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
@@ -107,10 +143,17 @@ export default function UTMCampaignBuilderPage() {
           <button onClick={addTextBlock} className="h-11 px-4 rounded-lg bg-sky-600 hover:bg-sky-700 text-white">+ Text</button>
           <button onClick={addEntityBlock} className="h-11 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">[Entity_id]</button>
           <div className="ml-auto flex items-center gap-4">
-            <label className="text-sm text-gray-700 dark:text-gray-200">Activate after create
-              <input type="checkbox" className="ml-2 align-middle" checked={activate} onChange={e => setActivate(e.target.checked)} />
-            </label>
-            <button onClick={createFromFormat} disabled={saving} className="h-11 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white">Create</button>
+            <select
+              value={selectedForm || ""}
+              onChange={(e) => setSelectedForm(e.target.value ? Number(e.target.value) : null)}
+              className="h-11 px-3 rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
+            >
+              <option value="">Select Phase *</option>
+              {forms.map(form => (
+                <option key={form.id} value={form.id}>{form.name} ({form.code})</option>
+              ))}
+            </select>
+            <button onClick={createFromFormat} disabled={saving || !selectedForm} className="h-11 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white">Create</button>
           </div>
         </div>
 
@@ -150,7 +193,7 @@ export default function UTMCampaignBuilderPage() {
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Active Campaigns</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Campaigns by Entity</h3>
           <div className="flex items-center gap-2">
             <input
               value={search}
@@ -168,24 +211,36 @@ export default function UTMCampaignBuilderPage() {
                 <option key={ent.entity_id} value={ent.entity_id}>{ent.name}</option>
               ))}
             </select>
+            <select
+              value={formFilter}
+              onChange={(e) => setFormFilter(e.target.value ? Number(e.target.value) : "")}
+              className="h-9 px-3 rounded-md ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
+            >
+              <option value="">All Phases</option>
+              {forms.map(form => (
+                <option key={form.id} value={form.id}>{form.name}</option>
+              ))}
+            </select>
           </div>
         </div>
-        {filteredCampaigns.length === 0 ? (
-          <div className="text-sm text-gray-500 dark:text-gray-400">No active campaigns.</div>
+        {displayData.length === 0 ? (
+          <div className="text-sm text-gray-500 dark:text-gray-400">No entities found.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Entity code</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">UTM campaign</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Entity</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">UTM Campaign</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredCampaigns.map(c => (
-                  <tr key={c.id}>
-                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white font-mono">{c.entity_name || entityNameById(c.entity_id)}</td>
-                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{c.name}</td>
+                {displayData.map(({ entity, campaign, hasCampaign }) => (
+                  <tr key={entity.entity_id}>
+                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white font-mono">{entity.name}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">
+                      {hasCampaign ? campaign.name : 'không có'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

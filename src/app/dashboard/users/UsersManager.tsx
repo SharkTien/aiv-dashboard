@@ -17,7 +17,9 @@ export default function UsersManager() {
     fetch("/api/entities").then((r) => r.json()).then((data) => {
       console.log('UsersManager - Entities data:', data);
       console.log('UsersManager - Entities items:', data.items);
-      setEntities(Array.isArray(data.items) ? data.items : []);
+      // Filter out national entities and organic (only show local entities)
+      const localEntities = Array.isArray(data.items) ? data.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
+      setEntities(localEntities);
     });
   }, []);
 
@@ -95,9 +97,9 @@ export default function UsersManager() {
                         onChange={(e) => setRole(e.target.value as any)} 
                         className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
                       >
-                        <option value="member">Member</option>
-                        <option value="lead">Lead</option>
-                        <option value="admin">Admin</option>
+                        <option key="member" value="member">Member</option>
+                        <option key="lead" value="lead">Lead</option>
+                        <option key="admin" value="admin">Admin</option>
                       </select>
                     </div>
                     <div className="grid gap-2">

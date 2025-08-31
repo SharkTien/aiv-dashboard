@@ -11,7 +11,8 @@ type UTMCampaign = {
   code: string;
   name: string;
   description: string;
-  is_active: boolean;
+  form_id: number;
+  form_name?: string;
   created_at: string;
   updated_at: string;
 };
@@ -46,12 +47,14 @@ export default function UTMManagePage() {
   const [sources, setSources] = useState<UTMSource[]>([]);
   const [mediums, setMediums] = useState<UTMMedium[]>([]);
   const [entities, setEntities] = useState<{ entity_id: number; name: string; type?: string }[]>([]);
+  const [forms, setForms] = useState<{ id: number; name: string; code: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<{ type: TabType; id: number | null }>({ type: 'campaigns', id: null });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
   const [entityFilter, setEntityFilter] = useState<number | ''>('');
+  const [formFilter, setFormFilter] = useState<number | ''>('');
 
   // Form states
   const [formData, setFormData] = useState({
@@ -60,8 +63,9 @@ export default function UTMManagePage() {
     description: '',
     platform: '',
     name_required: false,
-    is_active: true,
-    entity_id: ''
+    entity_id: '',
+    form_id: '',
+    is_active: true
   });
 
   useEffect(() => {
@@ -71,11 +75,12 @@ export default function UTMManagePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [campaignsRes, sourcesRes, mediumsRes, entitiesRes] = await Promise.all([
+      const [campaignsRes, sourcesRes, mediumsRes, entitiesRes, formsRes] = await Promise.all([
         fetch('/api/utm/campaigns'),
         fetch('/api/utm/sources'),
         fetch('/api/utm/mediums'),
-        fetch('/api/entities')
+        fetch('/api/entities'),
+        fetch('/api/forms')
       ]);
 
       if (campaignsRes.ok) {
@@ -96,7 +101,13 @@ export default function UTMManagePage() {
         const entData = await entitiesRes.json();
         console.log('UTM Manage - Entities data:', entData);
         console.log('UTM Manage - Entities items:', entData.items);
-        setEntities(Array.isArray(entData.items) ? entData.items : []);
+        // Filter out organic entity (show both local and national entities)
+        const filteredEntities = Array.isArray(entData.items) ? entData.items.filter((e: any) => e.name.toLowerCase() !== 'organic') : [];
+        setEntities(filteredEntities);
+      }
+      if (formsRes.ok) {
+        const formsData = await formsRes.json();
+        setForms(Array.isArray(formsData.items) ? formsData.items : []);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -112,8 +123,9 @@ export default function UTMManagePage() {
       description: '',
       platform: '',
       name_required: false,
-      is_active: true,
-      entity_id: ''
+      entity_id: '',
+      form_id: '',
+      is_active: true
     });
     setEditing({ type: activeTab, id: null });
   };
@@ -125,8 +137,9 @@ export default function UTMManagePage() {
       description: item.description || '',
       platform: item.platform || '',
       name_required: item.name_required || false,
-      is_active: item.is_active,
-      entity_id: item.entity_id || ''
+      entity_id: item.entity_id || '',
+      form_id: item.form_id || '',
+      is_active: item.is_active !== undefined ? item.is_active : true
     });
     setEditing({ type: activeTab, id: item.id });
   };
@@ -141,6 +154,10 @@ export default function UTMManagePage() {
 
     if (activeTab === 'campaigns' && !formData.entity_id) {
       alert('Entity is required for campaigns');
+      return;
+    }
+    if (activeTab === 'campaigns' && !formData.form_id) {
+      alert('Form is required for campaigns');
       return;
     }
 
@@ -202,8 +219,9 @@ export default function UTMManagePage() {
             (c.name || '').toLowerCase().includes(q) ||
             (c.description || '').toLowerCase().includes(q)
           ) : true;
-                     const matchesEntity = entityFilter ? c.entity_id === Number(entityFilter) : true;
-          return matchesSearch && matchesEntity;
+          const matchesEntity = entityFilter ? c.entity_id === Number(entityFilter) : true;
+          const matchesForm = formFilter ? c.form_id === Number(formFilter) : true;
+          return matchesSearch && matchesEntity && matchesForm;
         });
       }
       case 'sources': return sources;
@@ -219,8 +237,7 @@ export default function UTMManagePage() {
           { key: 'entity_name', label: 'Entity Code' },
           { key: 'code', label: 'Code' },
           { key: 'name', label: 'Name' },
-          { key: 'description', label: 'Description' },
-          { key: 'is_active', label: 'Status' }
+          { key: 'description', label: 'Description' }
         ];
       case 'sources':
         return [
@@ -431,24 +448,44 @@ export default function UTMManagePage() {
                 </div>
 
                 {activeTab === 'campaigns' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                      Entity *
-                    </label>
-                    <select
-                      value={formData.entity_id}
-                      onChange={(e) => setFormData({ ...formData, entity_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                      required
-                    >
-                      <option value="">Select Entity</option>
-                      {entities.map((ent) => (
-                        <option key={ent.entity_id} value={ent.entity_id}>
-                          {ent.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        Entity *
+                      </label>
+                      <select
+                        value={formData.entity_id}
+                        onChange={(e) => setFormData({ ...formData, entity_id: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                        required
+                      >
+                        <option value="">Select Entity</option>
+                        {entities.map((ent) => (
+                          <option key={ent.entity_id} value={ent.entity_id}>
+                            {ent.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        Phase *
+                      </label>
+                      <select
+                        value={formData.form_id}
+                        onChange={(e) => setFormData({ ...formData, form_id: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                        required
+                      >
+                        <option value="">Select Phase</option>
+                        {forms.map((form) => (
+                          <option key={form.id} value={form.id}>
+                            Phase {form.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
                 )}
 
                 {activeTab === 'sources' && (
@@ -480,6 +517,21 @@ export default function UTMManagePage() {
                   </div>
                 )}
 
+                {(activeTab === 'sources' || activeTab === 'mediums') && (
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="is_active"
+                      checked={formData.is_active}
+                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                      className="h-4 w-4 text-sky-600 focus:ring-sky-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="is_active" className="ml-2 block text-sm text-gray-700 dark:text-gray-200">
+                      Active
+                    </label>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Description
@@ -492,18 +544,7 @@ export default function UTMManagePage() {
                   />
                 </div>
 
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_active"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="h-4 w-4 text-sky-600 focus:ring-sky-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="is_active" className="ml-2 block text-sm text-gray-700 dark:text-gray-200">
-                    Active
-                  </label>
-                </div>
+
 
                 <div className="flex space-x-3 pt-4">
                   <button
@@ -548,12 +589,22 @@ export default function UTMManagePage() {
                         className="h-9 px-3 rounded-md ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
                       >
                         <option value="">All LC</option>
-                                                 {entities.map((ent) => {
-                           console.log('UTM Manage - Rendering entity:', ent);
-                           return (
-                             <option key={ent.entity_id} value={ent.entity_id}>{ent.name}</option>
-                           );
-                         })}
+                        {entities.map((ent) => {
+                          console.log('UTM Manage - Rendering entity:', ent);
+                          return (
+                            <option key={ent.entity_id} value={ent.entity_id}>{ent.name}</option>
+                          );
+                        })}
+                      </select>
+                      <select
+                        value={formFilter}
+                        onChange={(e) => { setFormFilter(e.target.value ? Number(e.target.value) : ''); setPage(1); }}
+                        className="h-9 px-3 rounded-md ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
+                      >
+                        <option value="">All Phases</option>
+                        {forms.map((form) => (
+                          <option key={form.id} value={form.id}>{form.name}</option>
+                        ))}
                       </select>
                     </div>
                   )}

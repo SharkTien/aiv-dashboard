@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Image from "next/image";
 import LoadingOverlay from "@/components/LoadingOverlay";
 
@@ -31,6 +31,136 @@ type FacetOptions = {
   receiveInfos: FacetOption[];
   channels: FacetOption[];
   entities: FacetOption[];
+  utmCampaigns: FacetOption[];
+};
+
+// MultiSelectFilter Component
+const MultiSelectFilter = ({ 
+  title, 
+  options, 
+  selected, 
+  onChange 
+}: {
+  title: string;
+  options: FacetOption[];
+  selected: string[];
+  onChange: (value: string[]) => void;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setSearchQuery(""); // Clear search when closing
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          setIsOpen(false);
+          setSearchQuery("");
+        }
+      });
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const filteredOptions = options.filter(option =>
+    option.label.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleToggle = (value: string) => {
+    if (selected.includes(value)) {
+      onChange(selected.filter(v => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  };
+
+  const handleReset = () => {
+    onChange([]);
+  };
+
+  const selectedLabels = selected.map(s => options.find(o => o.value === s)?.label).filter(Boolean);
+
+  return (
+    <div className="relative multi-select-filter" ref={dropdownRef}>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => {
+            setIsOpen(!isOpen);
+            if (!isOpen) {
+              setSearchQuery(""); // Clear search when opening
+            }
+          }}
+          className="h-10 px-3 rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 flex items-center gap-2 min-w-[200px]"
+        >
+          <span className="truncate">
+            {selected.length === 0 ? title : `${title} (${selected.length})`}
+          </span>
+          <svg className={`w-4 h-4 ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {selected.length > 0 && (
+          <button
+            onClick={handleReset}
+            className="px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+          <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
+            <input
+              type="text"
+              placeholder="Type to search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-sky-500/50"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {filteredOptions.map((option) => (
+              <label
+                key={option.value}
+                className="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option.value)}
+                  onChange={() => handleToggle(option.value)}
+                  className="mr-3 rounded border-gray-300 dark:border-gray-600 text-sky-500 focus:ring-sky-500/50"
+                />
+                <span className="text-sm text-gray-900 dark:text-white">
+                  {option.label} ({option.count})
+                </span>
+              </label>
+            ))}
+            {filteredOptions.length === 0 && (
+              <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                No options found
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default function CleanDataViewer({ formId }: { formId: number }) {
@@ -39,16 +169,22 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [textQuery, setTextQuery] = useState("");
-  const [selectedYear, setSelectedYear] = useState<string>("");
-  const [selectedMajor, setSelectedMajor] = useState<string>("");
-  const [selectedStartDate, setSelectedStartDate] = useState<string>("");
-  const [selectedReceiveInfo, setSelectedReceiveInfo] = useState<string>("");
-  const [selectedChannel, setSelectedChannel] = useState<string>("");
-  const [selectedEntity, setSelectedEntity] = useState<string>("");
+  const [selectedYear, setSelectedYear] = useState<string[]>([]);
+  const [selectedMajor, setSelectedMajor] = useState<string[]>([]);
+  const [selectedStartDate, setSelectedStartDate] = useState<string[]>([]);
+  const [selectedReceiveInfo, setSelectedReceiveInfo] = useState<string[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState<string[]>([]);
+  const [selectedEntity, setSelectedEntity] = useState<string[]>([]);
+  const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<string[]>([]);
 
   useEffect(() => {
     loadCleanData();
   }, [formId]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [textQuery, selectedEntity, selectedYear, selectedMajor, selectedStartDate, selectedReceiveInfo, selectedChannel, selectedUtmCampaign]);
 
   // Listen for export event
   useEffect(() => {
@@ -67,7 +203,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   async function loadCleanData() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/forms/${formId}/submissions/clean`);
+      const res = await fetch(`/api/forms/${formId}/submissions/clean?unlimited=true`);
       if (res.ok) {
         const data = await res.json();
         setSubmissions(Array.isArray(data.items) ? data.items : []);
@@ -91,7 +227,8 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       startDates: [],
       receiveInfos: [],
       channels: [],
-      entities: []
+      entities: [],
+      utmCampaigns: []
     };
 
     const yearCounts = new Map<string, number>();
@@ -100,6 +237,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
     const receiveInfoCounts = new Map<string, number>();
     const channelCounts = new Map<string, number>();
     const entityCounts = new Map<string, number>();
+    const utmCampaignCounts = new Map<string, number>();
 
     submissions.forEach(submission => {
       // Count entities
@@ -127,6 +265,9 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
           case 'Channel':
             channelCounts.set(value, (channelCounts.get(value) || 0) + 1);
             break;
+          case 'utm_campaign':
+            utmCampaignCounts.set(value, (utmCampaignCounts.get(value) || 0) + 1);
+            break;
         }
       });
     });
@@ -153,6 +294,11 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       .sort((a, b) => b.count - a.count);
 
     options.entities = Array.from(entityCounts.entries())
+      .filter(([value]) => value.toLowerCase() !== 'organic') // Filter out organic entity
+      .map(([value, count]) => ({ value, label: value, count }))
+      .sort((a, b) => b.count - a.count);
+
+    options.utmCampaigns = Array.from(utmCampaignCounts.entries())
       .map(([value, count]) => ({ value, label: value, count }))
       .sort((a, b) => b.count - a.count);
 
@@ -173,40 +319,45 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       }
 
       // Entity filter
-      if (selectedEntity) {
+      if (selectedEntity.length > 0) {
         const entityName = submission.entityName || "Unknown";
-        if (entityName !== selectedEntity) return false;
+        if (!selectedEntity.includes(entityName)) return false;
       }
 
       // Other filters
-      const hasYearMatch = !selectedYear || submission.responses.some(r => 
-        r.field_name === 'birth' && (r.value_label || r.value).split('-')[0] === selectedYear
+      const hasYearMatch = selectedYear.length === 0 || submission.responses.some(r => 
+        r.field_name === 'birth' && selectedYear.includes((r.value_label || r.value).split('-')[0])
       );
       if (!hasYearMatch) return false;
 
-      const hasMajorMatch = !selectedMajor || submission.responses.some(r => 
-        r.field_name === 'Major' && (r.value_label || r.value) === selectedMajor
+      const hasMajorMatch = selectedMajor.length === 0 || submission.responses.some(r => 
+        r.field_name === 'Major' && selectedMajor.includes(r.value_label || r.value)
       );
       if (!hasMajorMatch) return false;
 
-      const hasStartDateMatch = !selectedStartDate || submission.responses.some(r => 
-        r.field_name === 'startdate' && (r.value_label || r.value) === selectedStartDate
+      const hasStartDateMatch = selectedStartDate.length === 0 || submission.responses.some(r => 
+        r.field_name === 'startdate' && selectedStartDate.includes(r.value_label || r.value)
       );
       if (!hasStartDateMatch) return false;
 
-      const hasReceiveInfoMatch = !selectedReceiveInfo || submission.responses.some(r => 
-        r.field_name === 'ReceiveInformation' && (r.value_label || r.value) === selectedReceiveInfo
+      const hasReceiveInfoMatch = selectedReceiveInfo.length === 0 || submission.responses.some(r => 
+        r.field_name === 'ReceiveInformation' && selectedReceiveInfo.includes(r.value_label || r.value)
       );
       if (!hasReceiveInfoMatch) return false;
 
-      const hasChannelMatch = !selectedChannel || submission.responses.some(r => 
-        r.field_name === 'Channel' && (r.value_label || r.value) === selectedChannel
+      const hasChannelMatch = selectedChannel.length === 0 || submission.responses.some(r => 
+        r.field_name === 'Channel' && selectedChannel.includes(r.value_label || r.value)
       );
       if (!hasChannelMatch) return false;
 
+      const hasUtmCampaignMatch = selectedUtmCampaign.length === 0 || submission.responses.some(r => 
+        r.field_name === 'utm_campaign' && selectedUtmCampaign.includes(r.value_label || r.value)
+      );
+      if (!hasUtmCampaignMatch) return false;
+
       return true;
     });
-  }, [submissions, textQuery, selectedEntity, selectedYear, selectedMajor, selectedStartDate, selectedReceiveInfo, selectedChannel]);
+  }, [submissions, textQuery, selectedEntity, selectedYear, selectedMajor, selectedStartDate, selectedReceiveInfo, selectedChannel, selectedUtmCampaign]);
 
   // Pagination
   const totalPages = Math.ceil(filteredSubmissions.length / itemsPerPage);
@@ -360,12 +511,13 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
               className="h-10 w-80 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50"
             />
           </div>
-          <FacetDropdown title="Entity" options={facetOptions.entities} selected={selectedEntity} onChange={setSelectedEntity} />
-          <FacetDropdown title="Year" options={facetOptions.years} selected={selectedYear} onChange={setSelectedYear} />
-          <FacetDropdown title="Major" options={facetOptions.majors} selected={selectedMajor} onChange={setSelectedMajor} />
-          <FacetDropdown title="Start Date" options={facetOptions.startDates} selected={selectedStartDate} onChange={setSelectedStartDate} />
-          <FacetDropdown title="Receive Info" options={facetOptions.receiveInfos} selected={selectedReceiveInfo} onChange={setSelectedReceiveInfo} />
-          <FacetDropdown title="Channel" options={facetOptions.channels} selected={selectedChannel} onChange={setSelectedChannel} />
+          <MultiSelectFilter title="Entity" options={facetOptions.entities} selected={selectedEntity} onChange={setSelectedEntity} />
+          <MultiSelectFilter title="Year" options={facetOptions.years} selected={selectedYear} onChange={setSelectedYear} />
+          <MultiSelectFilter title="Major" options={facetOptions.majors} selected={selectedMajor} onChange={setSelectedMajor} />
+          <MultiSelectFilter title="Start Date" options={facetOptions.startDates} selected={selectedStartDate} onChange={setSelectedStartDate} />
+          <MultiSelectFilter title="Receive Info" options={facetOptions.receiveInfos} selected={selectedReceiveInfo} onChange={setSelectedReceiveInfo} />
+          <MultiSelectFilter title="Channel" options={facetOptions.channels} selected={selectedChannel} onChange={setSelectedChannel} />
+          <MultiSelectFilter title="UTM Campaign" options={facetOptions.utmCampaigns} selected={selectedUtmCampaign} onChange={setSelectedUtmCampaign} />
         </div>
       </div>
 
@@ -465,12 +617,12 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                     }}
                     className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={500}>500</option>
+                    <option key="5" value={5}>5</option>
+                    <option key="10" value={10}>10</option>
+                    <option key="25" value={25}>25</option>
+                    <option key="50" value={50}>50</option>
+                    <option key="100" value={100}>100</option>
+                    <option key="500" value={500}>500</option>
                   </select>
                   <span className="text-sm text-gray-600 dark:text-gray-300">per page</span>
                 </div>

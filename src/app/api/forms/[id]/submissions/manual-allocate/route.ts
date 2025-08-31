@@ -4,13 +4,14 @@ import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const formId = parseInt(params.id);
+    const { id } = await params;
+    const formId = parseInt(id);
     
     if (isNaN(formId)) {
       return NextResponse.json({ error: 'Invalid form ID' }, { status: 400 });
@@ -25,7 +26,7 @@ export async function GET(
     const [testResult] = await pool.query(testQuery, [formId]);
     console.log('Test query result:', testResult);
 
-    // Get submissions with empty entity_id
+    // Get submissions with empty entity_id or organic entity_id
     const submissionsQuery = `
       SELECT 
         fs.id,
@@ -43,7 +44,8 @@ export async function GET(
       LEFT JOIN form_responses fr ON fs.id = fr.submission_id
       LEFT JOIN form_fields ff ON fr.field_id = ff.id
       LEFT JOIN uni_mapping um ON ff.field_name = 'uni' AND fr.value = um.uni_id
-      WHERE fs.form_id = ? AND (fs.entity_id IS NULL OR fs.entity_id = 0)
+      LEFT JOIN entity e ON fs.entity_id = e.entity_id
+      WHERE fs.form_id = ? AND (fs.entity_id IS NULL OR fs.entity_id = 0 OR e.name = 'organic')
       ORDER BY fs.timestamp DESC
     `;
     console.log('Executing query with formId:', formId);

@@ -3,11 +3,12 @@ import { getDbPool } from '@/lib/db';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string; submissionId: string } }
+  { params }: { params: Promise<{ id: string; submissionId: string }> }
 ) {
   try {
-    const formId = parseInt(params.id);
-    const submissionId = parseInt(params.submissionId);
+    const { id, submissionId: submissionIdParam } = await params;
+    const formId = parseInt(id);
+    const submissionId = parseInt(submissionIdParam);
     
     if (isNaN(formId) || isNaN(submissionId)) {
       return NextResponse.json({ error: 'Invalid form ID or submission ID' }, { status: 400 });

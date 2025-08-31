@@ -15,9 +15,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { format_blocks, description = null, activate = true } = body || {} as { format_blocks: CampaignBlock[]; description?: string | null; activate?: boolean };
+  const { format_blocks, description = null, form_id } = body || {} as { format_blocks: CampaignBlock[]; description?: string | null; form_id: number };
   if (!Array.isArray(format_blocks) || format_blocks.length === 0) {
     return NextResponse.json({ error: "format_blocks is required" }, { status: 400 });
+  }
+  if (!form_id || isNaN(Number(form_id))) {
+    return NextResponse.json({ error: "form_id is required and must be a number" }, { status: 400 });
   }
 
   const pool = getDbPool();
@@ -39,25 +42,19 @@ export async function POST(req: NextRequest) {
     const createdIds: number[] = [];
 
     for (const c of built) {
-      if (activate) {
-        await pool.query("UPDATE utm_campaigns SET is_active = FALSE WHERE entity_id = ?", [c.entity_id]);
-      }
       try {
         const [result] = await pool.query(
-          "INSERT INTO utm_campaigns (entity_id, code, name, description, is_active) VALUES (?, ?, ?, ?, ?)",
-          [c.entity_id, c.code, c.name, description, !!activate]
+          "INSERT INTO utm_campaigns (entity_id, code, name, description, form_id) VALUES (?, ?, ?, ?, ?)",
+          [c.entity_id, c.code, c.name, description, Number(form_id)]
         );
         created++;
         createdIds.push((result as any).insertId);
       } catch (err: any) {
-        if (activate) {
-          await pool.query("UPDATE utm_campaigns SET is_active = TRUE, description = COALESCE(?, description) WHERE entity_id = ? AND code = ?", [description, c.entity_id, c.code]);
-        }
         continue;
       }
     }
 
-    return NextResponse.json({ success: true, created, total: built.length, activated: !!activate, createdIds });
+    return NextResponse.json({ success: true, created, total: built.length, createdIds });
   } catch (error) {
     console.error("Error generating campaigns:", error);
     return NextResponse.json({ error: "Failed to generate campaigns" }, { status: 500 });

@@ -43,7 +43,9 @@ export default function UsersList() {
   useEffect(() => { load(true); /* initial */ }, []);
   useEffect(() => {
     fetch('/api/entities').then(r => r.json()).then(data => {
-      setEntities(Array.isArray(data.items) ? data.items : []);
+      // Filter out national entities and organic (only show local entities)
+      const localEntities = Array.isArray(data.items) ? data.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
+      setEntities(localEntities);
     }).catch(() => setEntities([]));
   }, []);
 
@@ -202,16 +204,16 @@ function EditUserModal({ user, entities, onClose, onSaved }: { user: User; entit
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Role</label>
                 <select value={role} onChange={(e) => setRole(e.target.value as any)} className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all">
-                  <option value="member">Member</option>
-                  <option value="lead">Lead</option>
-                  <option value="admin">Admin</option>
+                  <option key="member" value="member">Member</option>
+                  <option key="lead" value="lead">Lead</option>
+                  <option key="admin" value="admin">Admin</option>
                 </select>
               </div>
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Status</label>
                 <select value={status} onChange={(e) => setStatus(Number(e.target.value))} className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all">
-                  <option value={1}>Active</option>
-                  <option value={0}>Inactive</option>
+                  <option key="1" value={1}>Active</option>
+                  <option key="0" value={0}>Inactive</option>
                 </select>
               </div>
               <div className="flex gap-3 pt-4">

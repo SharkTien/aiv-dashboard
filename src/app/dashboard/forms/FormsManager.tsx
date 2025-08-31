@@ -281,9 +281,9 @@ export default function FormsManager() {
                     className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
                     required
                   >
-                    <option value="oGV">oGV</option>
-                    <option value="TMR">TMR</option>
-                    <option value="EWA">EWA</option>
+                    <option key="oGV" value="oGV">oGV</option>
+                    <option key="TMR" value="TMR">TMR</option>
+                    <option key="EWA" value="EWA">EWA</option>
                   </select>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -326,10 +326,10 @@ export default function FormsManager() {
               onChange={(e) => setTypeFilter(e.target.value as 'all' | 'oGV' | 'TMR' | 'EWA')}
               className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
             >
-              <option value="all">All Types</option>
-              <option value="oGV">oGV</option>
-              <option value="TMR">TMR</option>
-              <option value="EWA">EWA</option>
+              <option key="all" value="all">All Types</option>
+              <option key="oGV" value="oGV">oGV</option>
+              <option key="TMR" value="TMR">TMR</option>
+              <option key="EWA" value="EWA">EWA</option>
             </select>
             <button
               onClick={() => setShowCreateModal(true)}

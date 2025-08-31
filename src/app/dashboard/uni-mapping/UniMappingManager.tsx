@@ -57,8 +57,10 @@ export default function UniMappingManager() {
         setEntities([]);
       } else {
         const entitiesArray = Array.isArray(data.items) ? data.items : [];
-        console.log("Entities array:", entitiesArray);
-        setEntities(entitiesArray);
+        // Filter out national entities and organic (only show local entities)
+        const localEntities = entitiesArray.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic');
+        console.log("Local entities array:", localEntities);
+        setEntities(localEntities);
       }
     } catch (error) {
       console.error("Error loading entities:", error);
@@ -203,7 +205,7 @@ export default function UniMappingManager() {
               onChange={(e) => setSelectedEntity(e.target.value)}
               className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
             >
-              <option value="">All Entities</option>
+                              <option value="">All Entities</option>
               {Array.isArray(entities) && entities.length > 0 ? (
                 entities.map((entity) => (
                   <option key={entity.entity_id} value={entity.entity_id}>
@@ -211,7 +213,7 @@ export default function UniMappingManager() {
                   </option>
                 ))
               ) : (
-                <option value="" disabled>Loading entities...</option>
+                <option key="loading" value="" disabled>Loading entities...</option>
               )}
             </select>
           </div>
@@ -348,7 +350,7 @@ export default function UniMappingManager() {
                    onChange={(e) => setNewEntityId(e.target.value)}
                    className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
                  >
-                   <option value="0">Select an entity</option>
+                   <option key="0" value="0">Select an entity</option>
                    {Array.isArray(entities) && entities.length > 0 ? (
                      entities.map((entity) => (
                        <option key={entity.entity_id} value={entity.entity_id}>
@@ -356,7 +358,7 @@ export default function UniMappingManager() {
                        </option>
                      ))
                    ) : (
-                     <option value="0" disabled>Loading entities...</option>
+                     <option key="loading" value="0" disabled>Loading entities...</option>
                    )}
                  </select>
               </div>

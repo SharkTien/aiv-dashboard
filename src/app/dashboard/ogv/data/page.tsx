@@ -111,7 +111,7 @@ export default function Page() {
           <div className="md:w-1/2">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Select Phase</label>
             <div className="flex gap-2">
-              <select value={selectedFormId ?? ''} onChange={(e) => setSelectedFormId(e.target.value ? Number(e.target.value) : null)} className="flex-1 h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all">
+              <select value={selectedFormId?.toString() || ''} onChange={(e) => setSelectedFormId(e.target.value ? Number(e.target.value) : null)} className="flex-1 h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all">
                 {forms.length === 0 ? (
                   <option value="">{loadingForms ? 'Loading…' : 'No forms found'}</option>
                 ) : (
@@ -184,7 +184,16 @@ export default function Page() {
           </div>
         ) : selectedFormId ? (
           activeTab === 'raw' ? (
-            <SubmissionsViewer inlineLoading formId={selectedFormId} options={{ showBack: false, allowImport: false, allowBulkActions: false, showTemplate: false, showEntity: false }} />
+            <SubmissionsViewer 
+              formId={selectedFormId} 
+              options={{ 
+                showBack: false, 
+                allowImport: false, 
+                allowBulkActions: false, 
+                showTemplate: false, 
+                showEntity: true 
+              }} 
+            />
           ) : activeTab === 'clean' ? (
             <CleanDataViewer formId={selectedFormId} />
           ) : (

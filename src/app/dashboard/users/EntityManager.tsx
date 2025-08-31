@@ -120,8 +120,8 @@ export default function EntityManager() {
                         onChange={(e) => setType(e.target.value as any)} 
                         className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
                       >
-                        <option value="national">National</option>
-                        <option value="local">Local</option>
+                        <option key="national" value="national">National</option>
+                        <option key="local" value="local">Local</option>
                       </select>
                     </div>
                     <div className="flex gap-3 pt-4">
@@ -207,60 +207,77 @@ export default function EntityManager() {
                     </span>
                   </div>
                   <div className="space-y-2">
-                    {items.filter(e => e.type === 'national').map((e) => (
-                      <div key={e.id ?? e.entity_id} className="flex items-center justify-between gap-3 p-3 rounded-lg hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50">
-                        {editingId === (e.id ?? e.entity_id) ? (
-                          <div className="flex flex-wrap items-end gap-3">
-                            <input 
-                              value={editName} 
-                              onChange={(ev) => setEditName(ev.target.value)} 
-                              className="h-10 rounded-lg ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" 
-                            />
-                            <select 
-                              value={editType} 
-                              onChange={(ev) => setEditType(ev.target.value as any)} 
-                              className="h-10 rounded-lg ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
-                            >
-                              <option value="national">National</option>
-                              <option value="local">Local</option>
-                            </select>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            <div>
-                              <div className="font-medium text-gray-900 dark:text-white text-sm">{e.name}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 ring-blue-200 dark:ring-blue-800 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium text-xs">
-                                  National
-                                </span>
+                    {items.filter(e => e.type === 'national').map((e) => {
+                      const isOrganic = e.name.toLowerCase() === 'organic';
+                      return (
+                        <div key={e.id ?? e.entity_id} className={`flex items-center justify-between gap-3 p-3 rounded-lg transition-all bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50 ${isOrganic ? 'opacity-60' : 'hover:bg-white/80 dark:hover:bg-gray-700/80'}`}>
+                          {editingId === (e.id ?? e.entity_id) ? (
+                            <div className="flex flex-wrap items-end gap-3">
+                              <input 
+                                value={editName} 
+                                onChange={(ev) => setEditName(ev.target.value)} 
+                                className="h-10 rounded-lg ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" 
+                              />
+                              <select 
+                                value={editType} 
+                                onChange={(ev) => setEditType(ev.target.value as any)} 
+                                className="h-10 rounded-lg ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
+                              >
+                                <option key="national" value="national">National</option>
+                                <option key="local" value="local">Local</option>
+                              </select>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                              <div>
+                                <div className="font-medium text-gray-900 dark:text-white text-sm">
+                                  {e.name}
+                                  {isOrganic && (
+                                    <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(System)</span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 ring-blue-200 dark:ring-blue-800 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium text-xs">
+                                    National
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )}
-                        <div className="ml-auto flex items-center gap-1">
-                          {editingId === (e.id ?? e.entity_id) ? (
-                            <>
-                              <button onClick={saveEdit} className="h-7 px-3 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors">
-                                Save
-                              </button>
-                              <button onClick={cancelEdit} className="h-7 px-3 rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors">
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button onClick={() => startEdit(e)} className="h-7 px-3 rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors">
-                                Edit
-                              </button>
-                              <button onClick={() => remove(e.id ?? e.entity_id)} className="h-7 px-3 rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 text-xs font-medium transition-colors">
-                                Delete
-                              </button>
-                            </>
                           )}
+                          <div className="ml-auto flex items-center gap-1">
+                            {editingId === (e.id ?? e.entity_id) ? (
+                              <>
+                                <button onClick={saveEdit} className="h-7 px-3 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors">
+                                  Save
+                                </button>
+                                <button onClick={cancelEdit} className="h-7 px-3 rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors">
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {!isOrganic && (
+                                  <button onClick={() => startEdit(e)} className="h-7 px-3 rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors">
+                                    Edit
+                                  </button>
+                                )}
+                                {!isOrganic && (
+                                  <button onClick={() => remove(e.id ?? e.entity_id)} className="h-7 px-3 rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 text-xs font-medium transition-colors">
+                                    Delete
+                                  </button>
+                                )}
+                                {isOrganic && (
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1">
+                                    Protected
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -290,8 +307,8 @@ export default function EntityManager() {
                               onChange={(ev) => setEditType(ev.target.value as any)} 
                               className="h-10 rounded-lg ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
                             >
-                              <option value="national">National</option>
-                              <option value="local">Local</option>
+                              <option key="national" value="national">National</option>
+                              <option key="local" value="local">Local</option>
                             </select>
                           </div>
                         ) : (

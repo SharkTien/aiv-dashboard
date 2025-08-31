@@ -209,6 +209,8 @@ export async function POST(
 
     // 3-5) Map uni_id -> entity_id and update submission
     console.log(`Final uniIdFromPayload: ${uniIdFromPayload}`);
+    let entityId = null;
+    
     if (uniIdFromPayload != null) {
       console.log(`Looking up entity_id for uni_id: ${uniIdFromPayload}`);
       const [mapRows] = await conn.query(
@@ -218,17 +220,39 @@ export async function POST(
       const list = Array.isArray(mapRows) ? (mapRows as any) : [];
       console.log(`Entity mapping result:`, list);
       if (list.length > 0 && list[0].entity_id != null) {
-        console.log(`Updating submission ${submissionId} with entity_id: ${list[0].entity_id}`);
-        await conn.query(
-          "UPDATE form_submissions SET entity_id = ? WHERE id = ?",
-          [list[0].entity_id, submissionId]
-        );
-        console.log(`Successfully updated entity_id for submission ${submissionId}`);
+        entityId = list[0].entity_id;
+        console.log(`Found entity_id: ${entityId} for uni_id: ${uniIdFromPayload}`);
       } else {
         console.log(`No entity_id found for uni_id: ${uniIdFromPayload}`);
       }
+    }
+    
+    // If no entity_id found from uni mapping, assign organic entity
+    if (entityId == null) {
+      console.log(`No entity_id found from uni mapping, looking up organic entity`);
+      const [organicRows] = await conn.query(
+        "SELECT entity_id FROM entity WHERE name = 'organic' LIMIT 1",
+        []
+      );
+      const organicList = Array.isArray(organicRows) ? (organicRows as any) : [];
+      if (organicList.length > 0 && organicList[0].entity_id != null) {
+        entityId = organicList[0].entity_id;
+        console.log(`Assigned organic entity_id: ${entityId}`);
+      } else {
+        console.log(`Organic entity not found in database`);
+      }
+    }
+    
+    // Update submission with entity_id
+    if (entityId != null) {
+      console.log(`Updating submission ${submissionId} with entity_id: ${entityId}`);
+      await conn.query(
+        "UPDATE form_submissions SET entity_id = ? WHERE id = ?",
+        [entityId, submissionId]
+      );
+      console.log(`Successfully updated entity_id for submission ${submissionId}`);
     } else {
-      console.log(`uniIdFromPayload is null, skipping entity mapping`);
+      console.log(`No entity_id available for submission ${submissionId}`);
     }
 
     await conn.commit();

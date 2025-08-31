@@ -56,7 +56,9 @@ export default function ManualAllocateViewer({ formId }: ManualAllocateViewerPro
            console.log('Entities items:', entitiesData.items);
            console.log('Entities items length:', entitiesData.items?.length);
            setSubmissions(submissionsData.submissions || []);
-           setEntities(entitiesData.items || []);
+           // Filter out national entities and organic (only show local entities)
+           const localEntities = Array.isArray(entitiesData.items) ? entitiesData.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
+           setEntities(localEntities);
                  } else {
            console.error('API responses not ok:', {
              submissionsOk: submissionsRes.ok,
@@ -207,7 +209,7 @@ export default function ManualAllocateViewer({ formId }: ManualAllocateViewerPro
               Manual Entity Allocation
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Allocate submissions to entities that don't have entity_id assigned
+              Allocate submissions that have no entity_id or are assigned to organic entity
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -253,10 +255,10 @@ export default function ManualAllocateViewer({ formId }: ManualAllocateViewerPro
               </svg>
             </div>
             <div className="text-lg font-medium mb-2">
-              {searchTerm ? 'No submissions found' : 'All submissions allocated'}
+              {searchTerm ? 'No submissions found' : 'No submissions need manual allocation'}
             </div>
             <div className="text-sm">
-              {searchTerm ? 'Try adjusting your search terms.' : 'Great job! All submissions have been assigned to entities.'}
+              {searchTerm ? 'Try adjusting your search terms.' : 'All submissions are properly allocated to non-organic entities.'}
             </div>
           </div>
         ) : (
@@ -314,33 +316,43 @@ export default function ManualAllocateViewer({ formId }: ManualAllocateViewerPro
 
                   {/* Allocate Entity */}
                   <div className="col-span-3">
-                    <div className="flex items-center gap-2">
-                      <select
-                        onChange={(e) => {
-                          const entityId = Number(e.target.value);
-                          if (entityId) {
-                            handleAllocateEntity(submission.id, entityId);
-                          }
-                        }}
-                        disabled={allocating === submission.id}
-                        className="flex-1 px-3 py-2 text-sm rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all disabled:opacity-50"
-                      >
-                        <option value="">Select entity...</option>
-                                                 {entities.map(entity => {
-                           console.log('Rendering entity:', entity);
-                           return (
-                             <option key={entity.entity_id} value={entity.entity_id}>
-                               {entity.name}
-                             </option>
-                           );
-                         })}
-                      </select>
-                      {allocating === submission.id && (
-                        <div className="flex items-center gap-1 text-xs text-sky-600 dark:text-sky-400">
-                          <div className="w-3 h-3 border-2 border-sky-600 border-t-transparent rounded-full animate-spin"></div>
-                          Allocating...
+                    <div className="space-y-2">
+                      {/* Current Entity */}
+                      {submission.entity_id && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Current: <span className="font-medium text-gray-700 dark:text-gray-300">
+                            {entities.find(e => e.entity_id === submission.entity_id)?.name || 'Unknown'}
+                          </span>
                         </div>
                       )}
+                      <div className="flex items-center gap-2">
+                        <select
+                          onChange={(e) => {
+                            const entityId = Number(e.target.value);
+                            if (entityId) {
+                              handleAllocateEntity(submission.id, entityId);
+                            }
+                          }}
+                          disabled={allocating === submission.id}
+                          className="flex-1 px-3 py-2 text-sm rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all disabled:opacity-50"
+                        >
+                          <option value="">Select entity...</option>
+                          {entities.map(entity => {
+                            console.log('Rendering entity:', entity);
+                            return (
+                              <option key={entity.entity_id} value={entity.entity_id}>
+                                {entity.name}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {allocating === submission.id && (
+                          <div className="flex items-center gap-1 text-xs text-sky-600 dark:text-sky-400">
+                            <div className="w-3 h-3 border-2 border-sky-600 border-t-transparent rounded-full animate-spin"></div>
+                            Allocating...
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -380,11 +392,11 @@ export default function ManualAllocateViewer({ formId }: ManualAllocateViewerPro
                       }}
                       className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
+                      <option key="5" value={5}>5</option>
+                      <option key="10" value={10}>10</option>
+                      <option key="25" value={25}>25</option>
+                      <option key="50" value={50}>50</option>
+                      <option key="100" value={100}>100</option>
                     </select>
                     <span className="text-sm text-gray-600 dark:text-gray-300">per page</span>
                   </div>

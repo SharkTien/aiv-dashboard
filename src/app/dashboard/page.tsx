@@ -1,8 +1,43 @@
-import Image from "next/image";
-import { getCurrentUser } from "@/lib/auth";
+'use client';
 
-export default async function DashboardHome() {
-  const user = await getCurrentUser();
+import Image from "next/image";
+import { useState, useEffect } from 'react';
+
+interface StatsData {
+  totalForms: number;
+  activeUsers: number;
+  submissions: number;
+  conversionRate: number;
+}
+
+export default function DashboardHome() {
+  const [stats, setStats] = useState<StatsData>({
+    totalForms: 0,
+    activeUsers: 0,
+    submissions: 0,
+    conversionRate: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      const response = await fetch('/api/dashboard/overview-stats');
+      const result = await response.json();
+      
+      if (result.success) {
+        setStats(result.data);
+      }
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="relative min-h-screen">
       {/* Loading-like intro layer */}
@@ -13,21 +48,58 @@ export default async function DashboardHome() {
         <div className="inline-flex items-center gap-3 rounded-xl bg-white/70 dark:bg-gray-800/70 backdrop-blur px-4 py-3 ring-1 ring-black/10 dark:ring-white/10">
           <Image src="/giphy.gif" alt="loading" width={40} height={40} />
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Welcome, {user?.name || "AIESECer"}</h1>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Welcome, AIESECer</h1>
             <p className="text-sm text-gray-600 dark:text-gray-300">Empowering leadership through impactful experiences</p>
           </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {/* Stats Cards */}
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+          <StatCard 
+            title="Total Forms" 
+            value={loading ? "..." : stats.totalForms.toLocaleString()}
+            change="+12%"
+            changeType="positive"
+            icon="📊"
+          />
+          <StatCard 
+            title="Active Users" 
+            value={loading ? "..." : stats.activeUsers.toLocaleString()}
+            change="+8%"
+            changeType="positive"
+            icon="👥"
+          />
+          <StatCard 
+            title="Submissions" 
+            value={loading ? "..." : stats.submissions.toLocaleString()}
+            change="+15%"
+            changeType="positive"
+            icon="📝"
+          />
+          <StatCard 
+            title="Conversion Rate" 
+            value={loading ? "..." : `${stats.conversionRate.toFixed(1)}%`}
+            change="+3%"
+            changeType="positive"
+            icon="📈"
+          />
+        </div>
+
+
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <Card 
             title="oGV Hub Dashboard" 
             subtitle="Modern dashboard for global volunteer management" 
             href="/dashboard/ogv-hub"
             featured={true}
           />
-          <Card title="Opportunities" subtitle="Create and track oGV opportunities" />
-          <Card title="Analytics" subtitle="See pipelines and conversion" />
-          <Card title="Contacts" subtitle="Manage EPs and partners" />
+          <Card title="Forms Manager" subtitle="Create and manage forms" href="/dashboard/forms" />
+          <Card title="Analytics" subtitle="See pipelines and conversion" href="/dashboard/ogv/analytics" />
+          <Card title="Data Management" subtitle="Clean and allocate data" href="/dashboard/ogv/data" />
+          <Card title="Users" subtitle="Manage users and permissions" href="/dashboard/users" />
+          <Card title="Settings" subtitle="Configure system settings" href="/dashboard/settings" />
         </div>
       </div>
     </div>
@@ -62,6 +134,34 @@ function Card({ title, subtitle, href, featured }: { title: string; subtitle: st
   }
 
   return cardContent;
+}
+
+function StatCard({ title, value, change, changeType, icon }: { 
+  title: string; 
+  value: string; 
+  change: string; 
+  changeType: 'positive' | 'negative'; 
+  icon: string;
+}) {
+  return (
+    <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur rounded-2xl p-6 ring-1 ring-black/10 dark:ring-white/10">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600 dark:text-gray-300">{title}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
+        </div>
+        <div className="text-3xl">{icon}</div>
+      </div>
+      <div className="mt-4 flex items-center">
+        <span className={`text-sm font-medium ${
+          changeType === 'positive' ? 'text-green-600' : 'text-red-600'
+        }`}>
+          {change}
+        </span>
+        <span className="text-sm text-gray-600 dark:text-gray-300 ml-1">from last month</span>
+      </div>
+    </div>
+  );
 }
 
 

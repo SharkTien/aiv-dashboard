@@ -1,72 +1,36 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getDbPool } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { NextRequest, NextResponse } from 'next/server';
+import { getDbPool } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
 
-export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(request: NextRequest) {
+  try {
+    const pool = getDbPool();
 
-  const { searchParams } = new URL(req.url);
-  const limit = Math.min(Number(searchParams.get("limit") || 20), 500);
-  const page = Math.max(Number(searchParams.get("page") || 1), 1);
-  const offset = (page - 1) * limit;
-  const q = (searchParams.get("q") || "").trim();
-  const type = searchParams.get("type");
+    // Fetch all forms
+    const [forms] = await pool.execute(`
+      SELECT 
+        id,
+        code,
+        name,
+        type,
+        created_at,
+        updated_at
+      FROM forms 
+      ORDER BY type, name
+    `);
 
-  const pool = getDbPool();
-  const params: any[] = [];
-  let where = "";
-  
-  if (q || type) {
-    where += " WHERE";
-    const conditions = [];
-    
-    if (q) {
-      conditions.push("(name LIKE ? OR code LIKE ?)");
-      params.push(`%${q}%`, `%${q}%`);
-    }
-    
-    if (type) {
-      conditions.push("type = ?");
-      params.push(type);
-    }
-    
-    where += " " + conditions.join(" AND ");
+    return NextResponse.json({
+      success: true,
+      items: forms
+    });
+
+  } catch (error) {
+    console.error('Error fetching forms:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch forms' },
+      { status: 500 }
+    );
   }
-
-  // Get total count
-  const [countRows] = await pool.query(
-    `SELECT COUNT(*) as total FROM forms ${where}`,
-    params
-  );
-  
-  const total = Array.isArray(countRows) && countRows.length > 0 ? (countRows[0] as any).total : 0;
-
-  // Get paginated data
-  const [rows] = await pool.query(
-    `SELECT id, code, name, type, created_at, updated_at
-     FROM forms ${where}
-     ORDER BY created_at DESC
-     LIMIT ? OFFSET ?`,
-    [...params, limit, offset]
-  );
-  
-  const data = Array.isArray(rows) ? rows : [];
-  const totalPages = Math.ceil(total / limit);
-  
-  const response = NextResponse.json({ 
-    items: data, 
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1
-    }
-  });
-  response.headers.set('Content-Type', 'application/json; charset=utf-8');
-  return response;
 }
 
 export async function POST(req: NextRequest) {

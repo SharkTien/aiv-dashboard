@@ -265,6 +265,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   const [selectedStartDate, setSelectedStartDate] = useState<Set<string>>(new Set());
   const [selectedReceiveInfo, setSelectedReceiveInfo] = useState<Set<string>>(new Set());
   const [selectedChannel, setSelectedChannel] = useState<Set<string>>(new Set());
+  const [selectedEntity, setSelectedEntity] = useState<Set<string>>(new Set());
 
   const FIELD_MAP = {
     year: ["year", "năm", "Year"],
@@ -374,12 +375,22 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
       });
       return Array.from(set);
     };
+
+    // Collect entity names
+    const entities = new Set<string>();
+    submissions.forEach(sub => {
+      if (sub.entityName) {
+        entities.add(sub.entityName);
+      }
+    });
+
     return {
       years: collect(FIELD_MAP.year).sort(),
       majors: collect(FIELD_MAP.major).sort(),
       startDates: collect(FIELD_MAP.startDate).sort(),
       receiveInfos: collect(FIELD_MAP.receiveInfo).sort(),
       channels: collect(FIELD_MAP.channel).sort(),
+      entities: Array.from(entities).sort(),
     };
   }, [submissions]);
 
@@ -431,9 +442,13 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
       if (!checkSet(selectedStartDate, FIELD_MAP.startDate)) return false;
       if (!checkSet(selectedReceiveInfo, FIELD_MAP.receiveInfo)) return false;
       if (!checkSet(selectedChannel, FIELD_MAP.channel)) return false;
+      
+      // Entity filter
+      if (selectedEntity.size > 0 && !selectedEntity.has(submission.entityName || '')) return false;
+      
       return true;
     });
-  }, [submissions, startDate, endDate, textQuery, selectedYear, selectedMajor, selectedStartDate, selectedReceiveInfo, selectedChannel]);
+  }, [submissions, startDate, endDate, textQuery, selectedYear, selectedMajor, selectedStartDate, selectedReceiveInfo, selectedChannel, selectedEntity]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredSubmissions.length / itemsPerPage);
@@ -631,7 +646,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
                 <Image
                   src="/giphy.gif"
                   alt="Loading animation"
-                  fill
+                  fill 
                   className="object-contain rounded-lg"
                   priority
                 />
@@ -921,12 +936,12 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
                       }}
                       className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                      <option value={500}>500</option>
+                      <option key="5" value={5}>5</option>
+                      <option key="10" value={10}>10</option>
+                      <option key="25" value={25}>25</option>
+                      <option key="50" value={50}>50</option>
+                      <option key="100" value={100}>100</option>
+                      <option key="500" value={500}>500</option>
                     </select>
                     <span className="text-sm text-gray-600 dark:text-gray-300">per page</span>
                   </div>
@@ -1006,6 +1021,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
           <FacetDropdown title="Start Date" options={facetOptions.startDates} selected={selectedStartDate} onChange={setSelectedStartDate} />
           <FacetDropdown title="Receive Info" options={facetOptions.receiveInfos} selected={selectedReceiveInfo} onChange={setSelectedReceiveInfo} />
           <FacetDropdown title="Channel" options={facetOptions.channels} selected={selectedChannel} onChange={setSelectedChannel} />
+          <FacetDropdown title="Entity" options={facetOptions.entities} selected={selectedEntity} onChange={setSelectedEntity} />
         </div>
               {/* Loading Overlay for Import */}
       {options?.allowImport !== false && (
