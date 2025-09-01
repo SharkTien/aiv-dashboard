@@ -107,6 +107,7 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
       
       if (result.success) {
         const entityStats = result.data.entityStats;
+        const totalNationalNotFound = result.data.totalNationalNotFound || 0;
         
         // Separate local and national entities
         const localStats = entityStats.filter((stat: EntityStats) => {
@@ -168,6 +169,9 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
         setLocalSummary(localData);
         setLocalTotals(totals);
         setNationalSummary(nationalData);
+        
+        // Store totalNationalNotFound for use in Total National row
+        (window as any).totalNationalNotFound = totalNationalNotFound;
       } else {
         console.error('Failed to load signup data:', result.error);
       }
@@ -236,9 +240,9 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
                   <span className="ml-1">{summarySort.direction === 'asc' ? '▲' : '▼'}</span>
                 )}
               </th>
-              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Links cho mọi market">SUs | utm source</th>
-              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="submissions allocated to this entity but utm_campaign from EMT entity or no utm_campaign">EMT + Organic</th>
-              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="submissions from your current phase utm campaign but entity_id is NOT FOUND (does not count utm_campaign from previous phases)">Other Source</th>
+              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại cho mọi market">SUs | utm source</th>
+              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại của EMT hoặc là SUs Organic">EMT + Organic</th>
+              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại mà entity NOT FOUND">not found from your utm source</th>
               <th className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" colSpan={comparePhaseFilter ? 7 : 3}>
                 %GvA{comparePhaseFilter ? ` compared to ${comparePhaseFilter}` : ''}
               </th>
@@ -337,13 +341,61 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
               <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">NATIONAL</td>
               <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{nationalSummary.reduce((sum, item) => sum + item.goal, 0)}</td>
               <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">{formatNumber(nationalSummary.reduce((sum, item) => sum + item.count, 0))}</td>
-              <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.msu, 0)}</td>
-              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)}</td>
-              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.emtPlusOrganic, 0)}</td>
-              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.otherSource, 0)}</td>
+                             <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.msu, 0)}</td>
+               <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)}</td>
+               <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.emtPlusOrganic, 0)}</td>
+              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{(window as any).totalNationalNotFound || 0}</td>
               <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{calculateProgress(nationalSummary.reduce((sum, item) => sum + item.count, 0), nationalSummary.reduce((sum, item) => sum + item.goal, 0)).toFixed(2)}%</td>
-              <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{calculatePercentage(nationalSummary.reduce((sum, item) => sum + item.msu, 0), nationalSummary.reduce((sum, item) => sum + item.count, 0)).toFixed(2)}%</td>
-              <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(nationalSummary.reduce((sum, item) => sum + item.msu, 0), nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)).toFixed(2)}%</td>
+                             <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{calculatePercentage(nationalSummary.reduce((sum, item) => sum + item.msu, 0), nationalSummary.reduce((sum, item) => sum + item.count, 0)).toFixed(2)}%</td>
+               <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(nationalSummary.reduce((sum, item) => sum + item.msu, 0), nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)).toFixed(2)}%</td>
+              {comparePhaseFilter && (
+                <>
+                  <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
+                  <td className="py-4 px-4 font-bold text-center bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">-</td>
+                </>
+              )}
+            </tr>
+            
+            {/* TOTAL of TOTAL */}
+            <tr className="bg-red-100 dark:bg-red-900/30 border-t-4 border-red-300 dark:border-red-700">
+              <td className="py-4 px-4 font-bold text-center bg-red-500 dark:bg-red-600 text-white">TOTAL</td>
+              <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">TOTAL of TOTAL</td>
+              <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                {(localTotals?.goal || 0) + nationalSummary.reduce((sum, item) => sum + item.goal, 0)}
+              </td>
+              <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">
+                {formatNumber((localTotals?.total || 0) + (localTotals?.otherSource || 0) + nationalSummary.reduce((sum, item) => sum + item.count, 0))}
+              </td>
+              <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">
+                {(localTotals?.msu || 0) + nationalSummary.reduce((sum, item) => sum + item.msu, 0)}
+              </td>
+              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                {(localTotals?.yourUtm || 0) + nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)}
+              </td>
+              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                {(localTotals?.emtPlusOrganic || 0) + nationalSummary.reduce((sum, item) => sum + item.emtPlusOrganic, 0)}
+              </td>
+              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                {(localTotals?.otherSource || 0) + ((window as any).totalNationalNotFound || 0)}
+              </td>
+              <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                {calculateProgress(
+                  (localTotals?.total || 0) + (localTotals?.otherSource || 0) + nationalSummary.reduce((sum, item) => sum + item.count, 0),
+                  (localTotals?.goal || 0) + nationalSummary.reduce((sum, item) => sum + item.goal, 0)
+                ).toFixed(2)}%
+              </td>
+              <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                {calculatePercentage(
+                  (localTotals?.msu || 0) + nationalSummary.reduce((sum, item) => sum + item.msu, 0),
+                  (localTotals?.total || 0) + (localTotals?.otherSource || 0) + nationalSummary.reduce((sum, item) => sum + item.count, 0)
+                ).toFixed(2)}%
+              </td>
+              <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                {calculatePercentage(
+                  (localTotals?.msu || 0) + nationalSummary.reduce((sum, item) => sum + item.msu, 0),
+                  (localTotals?.yourUtm || 0) + nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)
+                ).toFixed(2)}%
+              </td>
               {comparePhaseFilter && (
                 <>
                   <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>

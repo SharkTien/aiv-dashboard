@@ -107,7 +107,13 @@ export default function UTMManagePage() {
       }
       if (formsRes.ok) {
         const formsData = await formsRes.json();
-        setForms(Array.isArray(formsData.items) ? formsData.items : []);
+        const formsArray = Array.isArray(formsData.items) ? formsData.items : [];
+        setForms(formsArray);
+        
+        // Set default form filter to the newest form (first in the array since it's sorted by created_at DESC)
+        if (formsArray.length > 0 && formFilter === '') {
+          setFormFilter(formsArray[0].id);
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -220,7 +226,7 @@ export default function UTMManagePage() {
             (c.description || '').toLowerCase().includes(q)
           ) : true;
           const matchesEntity = entityFilter ? c.entity_id === Number(entityFilter) : true;
-          const matchesForm = formFilter ? c.form_id === Number(formFilter) : true;
+          const matchesForm = c.form_id === Number(formFilter);
           return matchesSearch && matchesEntity && matchesForm;
         });
       }
@@ -598,10 +604,9 @@ export default function UTMManagePage() {
                       </select>
                       <select
                         value={formFilter}
-                        onChange={(e) => { setFormFilter(e.target.value ? Number(e.target.value) : ''); setPage(1); }}
+                        onChange={(e) => { setFormFilter(Number(e.target.value)); setPage(1); }}
                         className="h-9 px-3 rounded-md ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
                       >
-                        <option value="">All Phases</option>
                         {forms.map((form) => (
                           <option key={form.id} value={form.id}>{form.name}</option>
                         ))}

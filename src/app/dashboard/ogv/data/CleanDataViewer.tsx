@@ -1,13 +1,16 @@
 "use client";
 import { useEffect, useState, useMemo, useRef } from "react";
-import Image from "next/image";
 import LoadingOverlay from "@/components/LoadingOverlay";
+import Image from "next/image";
 
 type CleanSubmission = {
   id: number;
   timestamp: string;
   entityId: number | null;
   entityName: string | null;
+  formCode: string;
+  utmCampaign: string | null;
+  utmCampaignName: string | null;
   responses: CleanFormResponse[];
 };
 
@@ -50,33 +53,27 @@ const MultiSelectFilter = ({
   const [searchQuery, setSearchQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const filteredOptions = options.filter(option =>
+    option.label.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
-        setSearchQuery(""); // Clear search when closing
+        setSearchQuery("");
       }
     };
 
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          setIsOpen(false);
-          setSearchQuery("");
-        }
-      });
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isOpen]);
-
-  const filteredOptions = options.filter(option =>
-    option.label.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const handleToggle = (value: string) => {
     if (selected.includes(value)) {
@@ -90,18 +87,11 @@ const MultiSelectFilter = ({
     onChange([]);
   };
 
-  const selectedLabels = selected.map(s => options.find(o => o.value === s)?.label).filter(Boolean);
-
   return (
-    <div className="relative multi-select-filter" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef}>
       <div className="flex items-center gap-2">
         <button
-          onClick={() => {
-            setIsOpen(!isOpen);
-            if (!isOpen) {
-              setSearchQuery(""); // Clear search when opening
-            }
-          }}
+          onClick={() => setIsOpen(!isOpen)}
           className="h-10 px-3 rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 flex items-center gap-2 min-w-[200px]"
         >
           <span className="truncate">
@@ -176,9 +166,11 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   const [selectedChannel, setSelectedChannel] = useState<string[]>([]);
   const [selectedEntity, setSelectedEntity] = useState<string[]>([]);
   const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<string[]>([]);
+  const [allUtmCampaigns, setAllUtmCampaigns] = useState<any[]>([]);
 
   useEffect(() => {
     loadCleanData();
+    loadAllUtmCampaigns();
   }, [formId]);
 
   // Reset to first page when filters change
@@ -200,12 +192,39 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
     };
   }, []);
 
+  async function loadAllUtmCampaigns() {
+    try {
+      const res = await fetch('/api/utm-campaigns');
+      if (res.ok) {
+        const data = await res.json();
+        setAllUtmCampaigns(Array.isArray(data.items) ? data.items : []);
+      } else {
+        console.error("Failed to load UTM campaigns");
+        setAllUtmCampaigns([]);
+      }
+    } catch (error) {
+      console.error("Error loading UTM campaigns:", error);
+      setAllUtmCampaigns([]);
+    }
+  }
+
   async function loadCleanData() {
     setLoading(true);
     try {
       const res = await fetch(`/api/forms/${formId}/submissions/clean?unlimited=true`);
       if (res.ok) {
         const data = await res.json();
+        console.log('CleanDataViewer - Loaded data:', {
+          count: data.items?.length || 0,
+          firstSubmission: data.items?.[0] ? {
+            id: data.items[0].id,
+            formCode: data.items[0].formCode,
+            entityId: data.items[0].entityId,
+            entityName: data.items[0].entityName,
+            utmCampaign: data.items[0].utmCampaign,
+            utmCampaignName: data.items[0].utmCampaignName
+          } : null
+        });
         setSubmissions(Array.isArray(data.items) ? data.items : []);
       } else {
         console.error("Failed to load clean data");
@@ -239,10 +258,16 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
     const entityCounts = new Map<string, number>();
     const utmCampaignCounts = new Map<string, number>();
 
+    // Count UTM Campaigns from submissions
     submissions.forEach(submission => {
       // Count entities
       const entityName = submission.entityName || "Unknown";
       entityCounts.set(entityName, (entityCounts.get(entityName) || 0) + 1);
+
+      // Count UTM Campaign from database
+      if (submission.utmCampaignName) {
+        utmCampaignCounts.set(submission.utmCampaignName, (utmCampaignCounts.get(submission.utmCampaignName) || 0) + 1);
+      }
 
       // Count other fields from responses
       submission.responses.forEach(response => {
@@ -264,9 +289,6 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
             break;
           case 'Channel':
             channelCounts.set(value, (channelCounts.get(value) || 0) + 1);
-            break;
-          case 'utm_campaign':
-            utmCampaignCounts.set(value, (utmCampaignCounts.get(value) || 0) + 1);
             break;
         }
       });
@@ -294,16 +316,19 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       .sort((a, b) => b.count - a.count);
 
     options.entities = Array.from(entityCounts.entries())
-      .filter(([value]) => value.toLowerCase() !== 'organic') // Filter out organic entity
+      .filter(([value]) => value.toLowerCase() !== 'organic')
       .map(([value, count]) => ({ value, label: value, count }))
       .sort((a, b) => b.count - a.count);
 
-    options.utmCampaigns = Array.from(utmCampaignCounts.entries())
-      .map(([value, count]) => ({ value, label: value, count }))
-      .sort((a, b) => b.count - a.count);
+    // Use all UTM campaigns from database, with counts from submissions
+    options.utmCampaigns = allUtmCampaigns.map(campaign => ({
+      value: campaign.name,
+      label: campaign.name,
+      count: utmCampaignCounts.get(campaign.name) || 0
+    })).sort((a, b) => b.count - a.count);
 
     return options;
-  }, [submissions]);
+  }, [submissions, allUtmCampaigns]);
 
   // Filter submissions based on selected filters
   const filteredSubmissions = useMemo(() => {
@@ -350,9 +375,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       );
       if (!hasChannelMatch) return false;
 
-      const hasUtmCampaignMatch = selectedUtmCampaign.length === 0 || submission.responses.some(r => 
-        r.field_name === 'utm_campaign' && selectedUtmCampaign.includes(r.value_label || r.value)
-      );
+      const hasUtmCampaignMatch = selectedUtmCampaign.length === 0 || (submission.utmCampaignName && selectedUtmCampaign.includes(submission.utmCampaignName));
       if (!hasUtmCampaignMatch) return false;
 
       return true;
@@ -372,7 +395,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   const exportToCSV = () => {
     if (filteredSubmissions.length === 0) return;
 
-    // Get all field names from responses - export all filtered data, not just current page
+    // Get all field names from responses
     const allFieldNames = new Set<string>();
     filteredSubmissions.forEach(submission => {
       submission.responses.forEach(response => {
@@ -420,29 +443,6 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
     link.click();
     document.body.removeChild(link);
   };
-
-  // Facet Dropdown Component
-  const FacetDropdown = ({ title, options, selected, onChange }: {
-    title: string;
-    options: FacetOption[];
-    selected: string;
-    onChange: (value: string) => void;
-  }) => (
-    <div className="relative">
-      <select
-        value={selected}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-10 px-3 rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50"
-      >
-        <option value="">{title}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label} ({option.count})
-          </option>
-        ))}
-      </select>
-    </div>
-  );
 
   if (loading) {
     return (
@@ -562,7 +562,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <div className="font-medium text-gray-900 dark:text-white">
-                        Submission #{submission.id}
+                        {submission.responses.find(r => r.field_name === 'form-code')?.value_label || submission.responses.find(r => r.field_name === 'form-code')?.value || ''}
                       </div>
                       {submission.entityName && (
                         <span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
@@ -571,11 +571,21 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                       )}
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-300">
-                      {submission.responses.map((response, index) => (
-                        <span key={index} className="mr-4">
-                          <strong>{response.field_label}:</strong> {response.value_label || response.value}
-                        </span>
-                      ))}
+                      {submission.responses.map((response, index) => {
+                        if (response.field_name === 'form-code') return null;
+                        if (response.field_name === 'other--uni') {
+                          return (
+                            <span key={index} className="mr-4">
+                              <strong>uni:</strong> {response.value_label || response.value}
+                            </span>
+                          );
+                        }
+                        return (
+                          <span key={index} className="mr-4">
+                            <strong>{response.field_label}:</strong> {response.value_label || response.value}
+                          </span>
+                        );
+                      })}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {new Date(submission.timestamp).toLocaleDateString()}

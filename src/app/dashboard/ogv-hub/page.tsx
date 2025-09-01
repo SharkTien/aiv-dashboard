@@ -38,6 +38,7 @@ type OGVStats = {
     code: string;
   };
   entityStats: EntityStats[];
+  totalDeduplicatedSubmissions: number;
 };
 
 export default function OGVHubDashboard() {
@@ -64,10 +65,21 @@ export default function OGVHubDashboard() {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          setForms(result.data);
-          // Select the newest form by default
-          if (result.data.length > 0) {
-            setSelectedFormId(result.data[0].id);
+          const sortedForms = result.data.sort((a: Form, b: Form) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          setForms(sortedForms);
+          
+          // Select the newest form by default (with explicit logging)
+          if (sortedForms.length > 0) {
+            const newestForm = sortedForms[0];
+            console.log('Debug - Selected newest form:', {
+              id: newestForm.id,
+              name: newestForm.name,
+              code: newestForm.code,
+              created_at: newestForm.created_at
+            });
+            setSelectedFormId(newestForm.id);
           }
         }
       }
@@ -149,9 +161,9 @@ export default function OGVHubDashboard() {
                 onChange={(e) => setSelectedFormId(Number(e.target.value))}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
               >
-                {forms.map((form) => (
+                {forms.map((form, index) => (
                   <option key={form.id} value={form.id}>
-                    {form.name} ({form.code})
+                    {form.name} ({form.code}){index === 0 ? ' - NEWEST' : ''}
                   </option>
                 ))}
               </select>
@@ -167,10 +179,16 @@ export default function OGVHubDashboard() {
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Submissions</p>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {loadingStats ? "Loading..." : stats ? formatNumber(stats.entityStats.reduce((sum, entity) => sum + entity.sus, 0)) : "0"}
+                  {loadingStats ? "Loading..." : stats ? formatNumber(stats.totalDeduplicatedSubmissions || 0) : "0"}
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  {selectedFormId ? (forms.find(f => f.id === selectedFormId)?.name || "Loading...") : "No form selected"}
+                  {selectedFormId ? (
+                    (() => {
+                      const selectedForm = forms.find(f => f.id === selectedFormId);
+                      const isNewest = forms.length > 0 && forms[0].id === selectedFormId;
+                      return `${selectedForm?.name || "Loading..."}${isNewest ? ' (NEWEST)' : ''}`;
+                    })()
+                  ) : "No form selected"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">

@@ -32,9 +32,12 @@ export default function UTMCampaignBuilderPage() {
         const entData = await entRes.json();
         console.log('UTM Campaign Builder - Entities data:', entData);
         console.log('UTM Campaign Builder - Entities items:', entData.items);
-        // Filter out national entities and organic (only show local entities)
-        const localEntities = Array.isArray(entData.items) ? entData.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
-        setEntities(localEntities);
+        // Filter out organic, but include local entities and specific entities (emt, est)
+        const filteredEntities = Array.isArray(entData.items) ? entData.items.filter((e: any) => {
+          const name = e.name.toLowerCase();
+          return name !== 'organic' && (e.type === 'local' || name === 'emt' || name === 'est');
+        }) : [];
+        setEntities(filteredEntities);
       }
       if (formsRes.ok) {
         const formsData = await formsRes.json();

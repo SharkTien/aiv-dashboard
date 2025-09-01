@@ -10,10 +10,18 @@ export async function GET() {
       SELECT id, name, code, created_at, updated_at
       FROM forms 
       WHERE type = 'oGV'
-      ORDER BY created_at DESC
+      ORDER BY created_at DESC, id DESC
     `);
 
     const forms = Array.isArray(formsResult) ? formsResult : [];
+    
+    // Debug: Log the forms being returned
+    console.log('Debug - oGV Forms returned (newest first):', forms.map(f => ({
+      id: f.id,
+      name: f.name,
+      code: f.code,
+      created_at: f.created_at
+    })));
 
     return NextResponse.json({
       success: true,
