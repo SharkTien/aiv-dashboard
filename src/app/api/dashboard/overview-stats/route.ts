@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbPool } from '@/lib/db';
-import { DEDUPLICATION_PARTITION } from '@/lib/deduplication';
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,7 +23,15 @@ export async function GET(request: NextRequest) {
       WITH RankedSubmissions AS (
         SELECT 
           fs.id,
-          ROW_NUMBER() OVER (${DEDUPLICATION_PARTITION}) as rn
+          ROW_NUMBER() OVER (
+            PARTITION BY 
+              CASE 
+                WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
+                WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
+                ELSE CONCAT('unique_', fs.id)
+              END
+            ORDER BY fs.timestamp DESC
+          ) as rn
         FROM form_submissions fs
         LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
           AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = fs.form_id AND field_name = 'phone')

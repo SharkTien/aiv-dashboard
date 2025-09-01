@@ -537,8 +537,8 @@ export async function GET(request: NextRequest) {
                 phone.value as phone,
                 email.value as email,
                 CASE 
-                  WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                  WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
+                  WHEN phone.value IS NOT NULL AND phone.value != '' AND LENGTH(TRIM(phone.value)) > 0 THEN LOWER(TRIM(phone.value))
+                  WHEN email.value IS NOT NULL AND email.value != '' AND LENGTH(TRIM(email.value)) > 0 THEN LOWER(TRIM(email.value))
                   ELSE CONCAT('unique_', fs.id)
                 END as dedup_key
               FROM form_submissions fs
@@ -564,8 +564,8 @@ export async function GET(request: NextRequest) {
                   ROW_NUMBER() OVER (
                     PARTITION BY 
                       CASE 
-                        WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                        WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
+                        WHEN phone.value IS NOT NULL AND phone.value != '' AND LENGTH(TRIM(phone.value)) > 0 THEN LOWER(TRIM(phone.value))
+                        WHEN email.value IS NOT NULL AND email.value != '' AND LENGTH(TRIM(email.value)) > 0 THEN LOWER(TRIM(email.value))
                         ELSE CONCAT('unique_', fs.id)
                       END
                     ORDER BY fs.timestamp DESC

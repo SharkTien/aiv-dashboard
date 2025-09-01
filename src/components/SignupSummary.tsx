@@ -319,13 +319,13 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
                   {r.goal}
                 </td>
                 <td className="py-4 px-4 text-center text-gray-900 dark:text-white">{formatNumber(r.count)}</td>
-                <td className="py-4 px-4 text-center text-gray-900 dark:text-white">{r.msu}</td>
-                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{r.yourUtm}</td>
-                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{r.emtPlusOrganic}</td>
+                <td className="py-4 px-4 text-center text-gray-900 dark:text-white">-</td>
+                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
+                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
                 <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{r.otherSource}</td>
                 <td className="py-4 px-4 text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{calculateProgress(r.count, r.goal).toFixed(2)}%</td>
-                <td className="py-4 px-4 text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{calculatePercentage(r.msu, r.count).toFixed(2)}%</td>
-                <td className="py-4 px-4 text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(r.msu, r.yourUtm).toFixed(2)}%</td>
+                <td className="py-4 px-4 text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">-</td>
+                <td className="py-4 px-4 text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">-</td>
                 {comparePhaseFilter && (
                   <>
                     <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
@@ -341,13 +341,13 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
               <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">NATIONAL</td>
               <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{nationalSummary.reduce((sum, item) => sum + item.goal, 0)}</td>
               <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">{formatNumber(nationalSummary.reduce((sum, item) => sum + item.count, 0))}</td>
-                             <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.msu, 0)}</td>
-               <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)}</td>
-               <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{nationalSummary.reduce((sum, item) => sum + item.emtPlusOrganic, 0)}</td>
+              <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">-</td>
+              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
+              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
               <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{(window as any).totalNationalNotFound || 0}</td>
               <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{calculateProgress(nationalSummary.reduce((sum, item) => sum + item.count, 0), nationalSummary.reduce((sum, item) => sum + item.goal, 0)).toFixed(2)}%</td>
-                             <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{calculatePercentage(nationalSummary.reduce((sum, item) => sum + item.msu, 0), nationalSummary.reduce((sum, item) => sum + item.count, 0)).toFixed(2)}%</td>
-               <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(nationalSummary.reduce((sum, item) => sum + item.msu, 0), nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)).toFixed(2)}%</td>
+              <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">-</td>
+              <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">-</td>
               {comparePhaseFilter && (
                 <>
                   <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbPool } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { DEDUPLICATION_PARTITION } from "@/lib/deduplication";
 
 export async function GET(
   req: NextRequest,
@@ -24,9 +23,9 @@ export async function GET(
   const page = Math.max(Number(searchParams.get("page") || 1), 1);
   const offset = (page - 1) * limit;
 
-      const pool = getDbPool();
+  const pool = getDbPool();
 
-    try {
+  try {
     // Get all submissions with deduplication by email/phone (keep newest)
     const [submissionsResult] = await pool.query(`
       WITH RankedSubmissions AS (
@@ -45,7 +44,15 @@ export async function GET(
             WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
             ELSE CONCAT('unique_', fs.id)
           END as dedup_key,
-          ROW_NUMBER() OVER (${DEDUPLICATION_PARTITION}) as rn
+          ROW_NUMBER() OVER (
+            PARTITION BY 
+              CASE 
+                WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
+                WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
+                ELSE CONCAT('unique_', fs.id)
+              END
+            ORDER BY fs.timestamp DESC
+          ) as rn
         FROM form_submissions fs
         LEFT JOIN entity e ON fs.entity_id = e.entity_id
         LEFT JOIN forms f ON fs.form_id = f.id
@@ -77,13 +84,21 @@ export async function GET(
     `, getUnlimited ? [formId, formId, formId, formId] : [formId, formId, formId, formId, limit, offset]);
 
     const submissions = Array.isArray(submissionsResult) ? submissionsResult : [];
-    
+
     // Get total count with deduplication
     const [countResult] = await pool.query(`
       WITH RankedSubmissions AS (
         SELECT 
           fs.id,
-          ROW_NUMBER() OVER (${DEDUPLICATION_PARTITION}) as rn
+          ROW_NUMBER() OVER (
+            PARTITION BY 
+              CASE 
+                WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
+                WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
+                ELSE CONCAT('unique_', fs.id)
+              END
+            ORDER BY fs.timestamp DESC
+          ) as rn
         FROM form_submissions fs
         LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
           AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
@@ -151,14 +166,14 @@ export async function GET(
 
       // Assign responses to submissions
       submissionsWithResponses = submissionsWithResponses.map((submission: any) => ({
-          id: submission.id,
-          timestamp: submission.timestamp,
+        id: submission.id,
+        timestamp: submission.timestamp,
         entityId: submission.entityId,
         entityName: submission.entityName,
         formCode: submission.formCode,
         utmCampaign: submission.utmCampaign,
         utmCampaignName: submission.utmCampaignName,
-          responses: responsesBySubmission.get(submission.id) || []
+        responses: responsesBySubmission.get(submission.id) || []
       }));
     }
 
