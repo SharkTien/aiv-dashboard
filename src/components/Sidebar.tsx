@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { HomeIcon, DatabaseIcon, ChartIcon, HandshakeIcon, UsersIcon, SettingsIcon, LogoutIcon, MenuIcon, XIcon, LinkIcon } from "@/components/icons";
 import { useSidebar } from "./SidebarContext";
 
@@ -33,6 +33,26 @@ function NavItem({ href, children, icon, isCollapsed }: NavItemProps) {
 
 export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean }) {
   const { isCollapsed, setIsCollapsed, toggleSidebar } = useSidebar();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        router.push("/auth/login");
+      } else {
+        console.error("Logout failed");
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   return (
     <>
@@ -159,12 +179,15 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
           </div>
 
                      {/* Logout */}
-           <form action="/api/auth/logout" method="post" className="mt-auto">
-             <button title={isCollapsed ? 'Sign Out' : undefined} aria-label={isCollapsed ? 'Sign Out' : undefined} className={`w-full text-left rounded-lg ${isCollapsed ? 'px-2 py-3 justify-center' : 'px-3 py-2'} hover:bg-black/5 dark:hover:bg-white/10 inline-flex items-center gap-2 text-gray-700 dark:text-gray-200 transition-colors`}>
-               <LogoutIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />
-               {!isCollapsed && <span>Sign Out</span>}
-             </button>
-           </form>
+           <button 
+             onClick={handleLogout}
+             title={isCollapsed ? 'Sign Out' : undefined} 
+             aria-label={isCollapsed ? 'Sign Out' : undefined} 
+             className={`w-full text-left rounded-lg ${isCollapsed ? 'px-2 py-3 justify-center' : 'px-3 py-2'} hover:bg-black/5 dark:hover:bg-white/10 inline-flex items-center gap-2 text-gray-700 dark:text-gray-200 transition-colors`}
+           >
+             <LogoutIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />
+             {!isCollapsed && <span>Sign Out</span>}
+           </button>
         </div>
       </aside>
 
