@@ -300,21 +300,7 @@ export async function POST(
       }
     }
     
-    // If no entity_id found from uni mapping, assign organic entity
-    if (entityId == null) {
-      console.log(`No entity_id found from uni mapping, looking up organic entity`);
-      const [organicRows] = await conn.query(
-        "SELECT entity_id FROM entity WHERE name = 'organic' LIMIT 1",
-        []
-      );
-      const organicList = Array.isArray(organicRows) ? (organicRows as any) : [];
-      if (organicList.length > 0 && organicList[0].entity_id != null) {
-        entityId = organicList[0].entity_id;
-        console.log(`Assigned organic entity_id: ${entityId}`);
-      } else {
-        console.log(`Organic entity not found in database`);
-      }
-    }
+    // Do NOT assign organic automatically; leave entity_id as NULL when no mapping is found
     
     // Update submission with entity_id
     if (entityId != null) {
