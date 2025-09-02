@@ -25,6 +25,8 @@ export default function Page() {
   const [loadingForms, setLoadingForms] = useState(false);
   const [q, setQ] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>('raw');
+  const [showExport, setShowExport] = useState(false);
+  const [sheetName, setSheetName] = useState('Submissions');
 
 
   useEffect(() => {
@@ -67,7 +69,15 @@ export default function Page() {
           <h1 className="text-xl font-semibold text-gray-900 dark:text-white">oGV Data</h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Latest oGV form submissions.</p>
         </div>
-
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowExport(true)}
+            disabled={!selectedFormId}
+            className="px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm"
+          >
+            Export to Google Sheets
+          </button>
+        </div>
       </div>
 
       <div className="rounded-2xl ring-1 ring-black/10 dark:ring-white/10 bg-white/80 dark:bg-gray-800/80 backdrop-blur p-6 space-y-4">
@@ -204,6 +214,45 @@ export default function Page() {
         )}
       </div>
 
+
+      {showExport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowExport(false)} />
+          <div className="relative z-10 w-full max-w-3xl rounded-xl bg-white text-slate-900 dark:bg-gray-800 dark:text-white shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Export to Google Sheets (live every 10s)</h3>
+              <button onClick={() => setShowExport(false)} className="px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-700">Close</button>
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm">Sheet name</label>
+              <input
+                type="text"
+                value={sheetName}
+                onChange={(e) => setSheetName(e.target.value)}
+                className="h-10 rounded-md ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800/50"
+              />
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300">Copy the script below into Google Sheets → Extensions → Apps Script. It pulls Clean data for the selected phase every 10 seconds.</p>
+            <textarea
+              readOnly
+              className="w-full h-72 rounded-md ring-1 ring-black/15 dark:ring-white/15 bg-gray-50 dark:bg-gray-900/50 font-mono text-xs p-3"
+            >{`const API_HOST='${typeof window!== 'undefined' ? window.location.origin : ''}';
+const FORM_ID=${selectedFormId ?? 0};
+const POLL_MS=10000;
+const USE_CLEAN=true;
+const PROP_SHEET='AIV_SYNC_SHEET_NAME';
+function onOpen(){SpreadsheetApp.getUi().createMenu('AIV Sync').addItem('Start live sync','showSidebar').addItem('Set sheet name…','setSheetName').addItem('Stop live sync','stopSync').addToUi()}
+function setSheetName(){const ui=SpreadsheetApp.getUi();const current=PropertiesService.getUserProperties().getProperty(PROP_SHEET)||'${sheetName}';const res=ui.prompt('Sheet name','Enter the destination sheet name:',ui.ButtonSet.OK_CANCEL);if(res.getSelectedButton()===ui.Button.OK){const name=(res.getResponseText()||'').trim()||current;PropertiesService.getUserProperties().setProperty(PROP_SHEET,name);ensureSheet(name)}}
+function showSidebar(){const name=PropertiesService.getUserProperties().getProperty(PROP_SHEET)||'${sheetName}';ensureSheet(name);const html=HtmlService.createHtmlOutput('<div style="font:14px Arial;padding:8px">Live sync to sheet: <b>'+name+'</b> every '+Math.floor(POLL_MS/1000)+'s.<br/><button id=\\'stop\\'>Stop</button><script>let t=setInterval(()=>google.script.run.syncOnce(),'+POLL_MS+');document.getElementById(\\'stop\\').onclick=()=>{clearInterval(t);google.script.run.stopSync();google.script.host.close();};<\\/script></div>').setTitle('AIV Sync');SpreadsheetApp.getUi().showSidebar(html)}
+function stopSync(){}
+function ensureSheet(name){const ss=SpreadsheetApp.getActive();let sh=ss.getSheetByName(name);if(!sh)sh=ss.insertSheet(name);return sh}
+function syncOnce(){const name=PropertiesService.getUserProperties().getProperty(PROP_SHEET)||'${sheetName}';const sheet=ensureSheet(name);const url=API_HOST+'/api/forms/${selectedFormId ?? 0}/submissions/clean';const resp=UrlFetchApp.fetch(url,{muteHttpExceptions:true});if(resp.getResponseCode()!==200)return;const data=JSON.parse(resp.getContentText());const items=Array.isArray(data.items||data.submissions||data)?(data.items||data.submissions||data):[];const header=['id','timestamp','entity','duplicated','name','email','phone','utm_campaign'];const rows=items.map(x=>[x.id||'',x.timestamp||'',x.entity_name||'',x.duplicated===false?0:(x.duplicated===true?1:x.duplicated||0),(x.responses&&(x.responses.name||x.responses['Your full name']||''))||'',(x.responses&&(x.responses.email||x.responses['Your Email']||''))||'',(x.responses&&(x.responses.phone||x.responses['Your Phone number']||''))||'',(x.responses&&(x.responses.utm_campaign||''))||'']);const existing=sheet.getRange(1,1,1,sheet.getLastColumn()||header.length).getValues()[0];if(existing.join('|')!==header.join('|')){sheet.clear();sheet.getRange(1,1,1,header.length).setValues([header])}if(rows.length){sheet.getRange(2,1,rows.length,header.length).setValues(rows);const lastRow=2+rows.length;if(sheet.getLastRow()>lastRow)sheet.getRange(lastRow,1,sheet.getLastRow()-lastRow+1,header.length).clearContent()}else if(sheet.getLastRow()>1){sheet.getRange(2,1,sheet.getLastRow()-1,header.length).clearContent()}}`}</textarea>
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => { const ta = document.querySelector('textarea'); if (ta) navigator.clipboard.writeText((ta as HTMLTextAreaElement).value); }} className="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm">Copy script</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

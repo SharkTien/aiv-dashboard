@@ -43,6 +43,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
   const [showAddField, setShowAddField] = useState(false);
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [fieldLoading, setFieldLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'fields' | 'duplicate'>('fields');
   const [dupFieldIds, setDupFieldIds] = useState<number[]>([]);
   const [newField, setNewField] = useState({
     field_name: "",
@@ -103,10 +104,10 @@ export default function FormBuilder({ formId }: { formId: number }) {
   useEffect(() => {
     async function loadDatasources() {
       try {
-        const res = await fetch("/api/entities");
+        const res = await fetch("/api/forms/datasources");
         if (res.ok) {
           const data = await res.json();
-          setDatasources(data.entities || []);
+          setDatasources(Array.isArray(data.items) ? data.items : []);
         }
       } catch (error) {
         console.error("Error loading datasources:", error);
@@ -119,10 +120,10 @@ export default function FormBuilder({ formId }: { formId: number }) {
     if (datasourceTable) {
       async function loadDatasourceOptions() {
         try {
-          const res = await fetch(`/api/entities/${datasourceTable}`);
+          const res = await fetch(`/api/forms/datasources/${datasourceTable}`);
           if (res.ok) {
             const data = await res.json();
-            setDatasourceOptions(data.entities || []);
+            setDatasourceOptions(Array.isArray(data.items) ? data.items : []);
           }
         } catch (error) {
           console.error("Error loading datasource options:", error);
@@ -402,114 +403,74 @@ export default function FormBuilder({ formId }: { formId: number }) {
         </div>
       </div>
 
-      {/* Fields List */}
+      {/* Tabs container */}
       <div className="bg-white/60 dark:bg-gray-700/60 rounded-lg p-4 border border-gray-200/50 dark:border-gray-600/50">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Form Fields</h3>
           <div className="flex items-center gap-2">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Drag fields to reorder • Order affects submission columns
-            </p>
-            <button
-              onClick={() => setShowAddField(true)}
-              className="px-3 py-1.5 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors"
-            >
-              Add Field
-            </button>
+            <button onClick={() => setActiveTab('fields')} className={`px-3 py-1.5 text-xs rounded-md ${activeTab==='fields' ? 'bg-sky-600 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200'}`}>Fields</button>
+            <button onClick={() => setActiveTab('duplicate')} className={`px-3 py-1.5 text-xs rounded-md ${activeTab==='duplicate' ? 'bg-sky-600 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200'}`}>Duplicate Settings</button>
           </div>
-        </div>
-
-        {/* Duplicate Settings */}
-        <div className="mb-4">
-          <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Duplicate detection fields</h4>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Select one or more fields to detect duplicates. Newest submission stays, older ones are marked duplicated.</p>
-          {fields.length === 0 ? (
-            <div className="text-xs text-gray-500 dark:text-gray-400">No fields available.</div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {fields.map(f => (
-                <label key={f.id} className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-md ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-gray-800/70">
-                  <input
-                    type="checkbox"
-                    checked={dupFieldIds.includes(f.id)}
-                    onChange={(e) => {
-                      const next = e.target.checked ? [...dupFieldIds, f.id] : dupFieldIds.filter(id => id !== f.id);
-                      saveDuplicateSettings(next);
-                    }}
-                  />
-                  <span>{f.field_label} <span className="text-gray-400">({f.field_name})</span></span>
-                </label>
-              ))}
+          {activeTab === 'fields' && (
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Drag fields to reorder • Order affects submission columns</p>
+              <button onClick={() => setShowAddField(true)} className="px-3 py-1.5 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors">Add Field</button>
             </div>
           )}
         </div>
 
-        {fields.length === 0 ? (
-          <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-            No fields added yet. Click "Add Field" to get started.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {fields.map((field, index) => {
-              const isRequiredField = false;
-              return (
-                <div
-                  key={field.id}
-                  draggable={!isRequiredField}
-                  onDragStart={!isRequiredField ? (e) => handleDragStart(e, field.id) : undefined}
-                  onDragOver={!isRequiredField ? (e) => handleDragOver(e, field.id) : undefined}
-                  onDragLeave={!isRequiredField ? handleDragLeave : undefined}
-                  onDrop={!isRequiredField ? (e) => handleDrop(e, field.id) : undefined}
-                  className={`flex items-center justify-between gap-3 p-3 rounded-md bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50 transition-all ${
-                    isRequiredField ? 'cursor-default' : 'cursor-move'
-                  } ${
-                    draggedField === field.id ? 'opacity-50 scale-95' : ''
-                  } ${
-                    dragOverField === field.id ? 'border-sky-400 bg-sky-50/50 dark:bg-sky-900/20' : ''
-                  }`}
-                >
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-md bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-                    <span className="text-sky-600 dark:text-sky-400 font-semibold text-xs">
-                      {index + 1}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 text-gray-400">
-                      <svg fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900 dark:text-white text-sm">
-                        {field.field_label}
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-300">
-                        {field.field_name} • {field.field_type}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <>
-                    <button
-                      onClick={() => startEditField(field)}
-                      className="px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteField(field.id)}
-                      className="px-2 py-1 text-xs rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </>
-                </div>
+        {activeTab === 'duplicate' && (
+          <div className="mb-2">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Duplicate detection fields</h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Select one or more fields to detect duplicates. Newest submission stays, older ones are marked duplicated.</p>
+            {fields.length === 0 ? (
+              <div className="text-xs text-gray-500 dark:text-gray-400">No fields available.</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {fields.map(f => (
+                  <label key={f.id} className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-md ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-gray-800/70">
+                    <input type="checkbox" checked={dupFieldIds.includes(f.id)} onChange={(e) => { const next = e.target.checked ? [...dupFieldIds, f.id] : dupFieldIds.filter(id => id !== f.id); saveDuplicateSettings(next); }} />
+                    <span>{f.field_label} <span className="text-gray-400">({f.field_name})</span></span>
+                  </label>
+                ))}
               </div>
-            );
-            })}
+            )}
           </div>
+        )}
+
+        {activeTab === 'fields' && (
+          fields.length === 0 ? (
+            <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">No fields added yet. Click "Add Field" to get started.</div>
+          ) : (
+            <div className="space-y-2">
+              {fields.map((field, index) => {
+                const isRequiredField = false;
+                return (
+                  <div key={field.id} draggable={!isRequiredField} onDragStart={!isRequiredField ? (e) => handleDragStart(e, field.id) : undefined} onDragOver={!isRequiredField ? (e) => handleDragOver(e, field.id) : undefined} onDragLeave={!isRequiredField ? handleDragLeave : undefined} onDrop={!isRequiredField ? (e) => handleDrop(e, field.id) : undefined} className={`flex items-center justify-between gap-3 p-3 rounded-md bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50 transition-all ${isRequiredField ? 'cursor-default' : 'cursor-move'} ${draggedField === field.id ? 'opacity-50 scale-95' : ''} ${dragOverField === field.id ? 'border-sky-400 bg-sky-50/50 dark:bg-sky-900/20' : ''}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 rounded-md bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                        <span className="text-sky-600 dark:text-sky-400 font-semibold text-xs">{index + 1}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 text-gray-400">
+                          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" /></svg>
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-white text-sm">{field.field_label}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-300">{field.field_name} • {field.field_type}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <>
+                        <button onClick={() => startEditField(field)} className="px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 transition-colors">Edit</button>
+                        <button onClick={() => handleDeleteField(field.id)} className="px-2 py-1 text-xs rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 transition-colors">Delete</button>
+                      </>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
       </div>
       
