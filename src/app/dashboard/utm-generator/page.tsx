@@ -77,12 +77,33 @@ export default function UTMGeneratorPage() {
   const [selectedEntity, setSelectedEntity] = useState<number | "">("");
   const [selectedSource, setSelectedSource] = useState<number | "">("");
   const [selectedMedium, setSelectedMedium] = useState<number | "">("");
+  const [selectedForm, setSelectedForm] = useState<number | "all">("all");
   const [utmName, setUtmName] = useState("");
   const [selectedMediumData, setSelectedMediumData] = useState<UTMMedium | null>(null);
+  const [availableForms, setAvailableForms] = useState<Array<{ id: number; name: string; code: string }>>([]);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log('Sources state changed:', sources.length);
+    // If sources become empty unexpectedly, try to reload
+    if (sources.length === 0 && !loading) {
+      console.log('Sources became empty, attempting to reload...');
+      setTimeout(() => loadSourcesAndMediums(), 1000);
+    }
+  }, [sources, loading]);
+
+  useEffect(() => {
+    console.log('Mediums state changed:', mediums.length);
+    // If mediums become empty unexpectedly, try to reload
+    if (mediums.length === 0 && !loading) {
+      console.log('Mediums became empty, attempting to reload...');
+      setTimeout(() => loadSourcesAndMediums(), 1000);
+    }
+  }, [mediums, loading]);
 
   useEffect(() => {
     if (selectedMedium) {
@@ -95,13 +116,22 @@ export default function UTMGeneratorPage() {
     }
   }, [selectedMedium, mediums]);
 
-  // Load active campaign for the selected entity
+  // Reset form selection when entity changes
+  useEffect(() => {
+    setSelectedForm("all");
+  }, [selectedEntity]);
+
+  // Load active campaign for the selected entity and form
   useEffect(() => {
     const loadActiveForEntity = async () => {
       if (!selectedEntity) { return; }
       try {
         setActiveLoading(true);
-        const res = await fetch(`/api/utm/campaigns/active?entity_id=${selectedEntity}`);
+        let url = `/api/utm/campaigns/active?entity_id=${selectedEntity}`;
+        if (selectedForm !== "all") {
+          url += `&form_id=${selectedForm}`;
+        }
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           const list = Array.isArray(data.active) ? data.active : [];
@@ -112,13 +142,24 @@ export default function UTMGeneratorPage() {
       } finally { setActiveLoading(false); }
     };
     loadActiveForEntity();
-  }, [selectedEntity]);
+  }, [selectedEntity, selectedForm]);
 
   useEffect(() => {
     if (activeTab === 'links') {
       void loadLinks(1);
     }
   }, [activeTab]);
+
+  // Reload sources and mediums when switching to create tab to ensure data is available
+  useEffect(() => {
+    if (activeTab === 'create' && (sources.length === 0 || mediums.length === 0)) {
+      console.log('Tab switched to create, checking sources/mediums...');
+      if (sources.length === 0) {
+        console.log('Sources empty, reloading...');
+        loadSourcesAndMediums();
+      }
+    }
+  }, [activeTab, sources.length, mediums.length]);
 
   // Close dropdown menus when clicking outside
   useEffect(() => {
@@ -148,9 +189,40 @@ export default function UTMGeneratorPage() {
 
   const activeCampaignString = useMemo(() => buildCampaignString(activeCampaign?.format_blocks || null, selectedEntity), [activeCampaign, entities, selectedEntity]);
 
+  const loadSourcesAndMediums = async () => {
+    try {
+      console.log('Loading sources and mediums separately...');
+      const [sourcesRes, mediumsRes] = await Promise.all([
+        fetch('/api/utm/sources'),
+        fetch('/api/utm/mediums')
+      ]);
+
+      if (sourcesRes.ok) {
+        const sourcesData = await sourcesRes.json();
+        const sourcesList = Array.isArray(sourcesData) ? sourcesData : [];
+        setSources(sourcesList);
+        console.log('Sources retry loaded:', sourcesList.length);
+      } else {
+        console.error('Failed to retry load sources:', sourcesRes.status, sourcesRes.statusText);
+      }
+
+      if (mediumsRes.ok) {
+        const mediumsData = await mediumsRes.json();
+        const mediumsList = Array.isArray(mediumsData) ? mediumsData : [];
+        setMediums(mediumsList);
+        console.log('Mediums retry loaded:', mediumsList.length);
+      } else {
+        console.error('Failed to retry load mediums:', mediumsRes.status, mediumsRes.statusText);
+      }
+    } catch (error) {
+      console.error('Error retrying sources and mediums:', error);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
+      console.log('Loading UTM data...');
       const [meRes, entitiesRes, sourcesRes, mediumsRes, activeRes] = await Promise.all([
         fetch('/api/auth/me'),
         fetch('/api/entities'),
@@ -165,6 +237,7 @@ export default function UTMGeneratorPage() {
         // Non-admin: default entity to user's entity_id and lock it
         if (user.role !== 'admin' && user.entity_id) {
           setSelectedEntity(Number(user.entity_id));
+          setSelectedForm("all"); // Reset form selection for non-admin users
         }
       }
 
@@ -173,23 +246,50 @@ export default function UTMGeneratorPage() {
         // Filter out national entities and organic (only show local entities)
         const localEntities = Array.isArray(entitiesData.items) ? entitiesData.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
         setEntities(localEntities);
+        console.log('Entities loaded:', localEntities.length);
       }
+
       if (sourcesRes.ok) {
         const sourcesData = await sourcesRes.json();
-        setSources(Array.isArray(sourcesData) ? sourcesData : []);
+        const sourcesList = Array.isArray(sourcesData) ? sourcesData : [];
+        setSources(sourcesList);
+        console.log('Sources loaded:', sourcesList.length);
+      } else {
+        console.error('Failed to load sources:', sourcesRes.status, sourcesRes.statusText);
       }
+
       if (mediumsRes.ok) {
         const mediumsData = await mediumsRes.json();
-        setMediums(Array.isArray(mediumsData) ? mediumsData : []);
+        const mediumsList = Array.isArray(mediumsData) ? mediumsData : [];
+        setMediums(mediumsList);
+        console.log('Mediums loaded:', mediumsList.length);
+      } else {
+        console.error('Failed to load mediums:', mediumsRes.status, mediumsRes.statusText);
       }
+
       if (activeRes.ok) {
         const { active } = await activeRes.json();
         setActiveCampaign(active || null);
+      }
+      // Determine type from query param; default oGV
+      const params = new URLSearchParams(window.location.search);
+      const typeParam = params.get('type');
+      const formType = typeParam === 'TMR' ? 'TMR' : 'oGV';
+      const formsRes = await fetch(`/api/forms?type=${encodeURIComponent(formType)}&limit=100`);
+      if (formsRes.ok) {
+        const formsData = await formsRes.json();
+        const formsList = Array.isArray(formsData.items) ? formsData.items : [];
+        setAvailableForms(formsList);
       }
 
       setActiveLoading(false);
     } catch (error) {
       console.error('Error loading data:', error);
+      // Retry loading sources and mediums if they fail
+      setTimeout(() => {
+        console.log('Retrying sources and mediums...');
+        loadSourcesAndMediums();
+      }, 2000);
     } finally {
       setLoading(false);
     }
@@ -246,6 +346,7 @@ export default function UTMGeneratorPage() {
           setLastCreated(data.link as UTMLink);
         }
         setSelectedEntity("");
+        setSelectedForm("all");
         setSelectedSource("");
         setSelectedMedium("");
         setUtmName("");
@@ -318,7 +419,7 @@ export default function UTMGeneratorPage() {
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Create New UTM Link</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Active campaign format: <span className="font-mono text-gray-800 dark:text-gray-200">{activeLoading ? 'loading…' : (activeCampaignString || '(no active format)')}</span></p>
         <form onSubmit={handleCreateUTM} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Entity Name *</label>
               <select value={selectedEntity.toString()} onChange={(e) => setSelectedEntity(e.target.value ? Number(e.target.value) : "")} disabled={role !== 'admin'} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all disabled:opacity-60" required>
@@ -327,18 +428,27 @@ export default function UTMGeneratorPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">UTM Source *</label>
-              <select value={selectedSource.toString()} onChange={(e) => setSelectedSource(e.target.value ? Number(e.target.value) : "")} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required>
-                <option value="">Select Source</option>
-                {sources.map((source) => (<option key={source.id} value={source.id}>{source.name} ({source.platform})</option>))}
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Phase/Form *</label>
+              <select value={selectedForm} onChange={(e) => setSelectedForm(e.target.value === "all" ? "all" : Number(e.target.value))} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required>
+                <option value="all">All Phases</option>
+                {availableForms.map((form) => (<option key={form.id} value={form.id}>{form.name.replace('oGV', 'Phase').replace('Submissions', '')}</option>))}
               </select>
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">UTM Source *</label>
+              <select value={selectedSource.toString()} onChange={(e) => setSelectedSource(e.target.value ? Number(e.target.value) : "")} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required disabled={sources.length === 0}>
+                <option value="">{sources.length === 0 ? 'Loading sources...' : 'Select Source'}</option>
+                {sources.map((source) => (<option key={source.id} value={source.id}>{source.name} ({source.platform})</option>))}
+              </select>
+              {sources.length === 0 && <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">Loading UTM sources...</p>}
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">UTM Medium *</label>
-              <select value={selectedMedium.toString()} onChange={(e) => setSelectedMedium(e.target.value ? Number(e.target.value) : "")} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required>
-                <option value="">Select Medium</option>
+              <select value={selectedMedium.toString()} onChange={(e) => setSelectedMedium(e.target.value ? Number(e.target.value) : "")} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required disabled={mediums.length === 0}>
+                <option value="">{mediums.length === 0 ? 'Loading mediums...' : 'Select Medium'}</option>
                 {mediums.map((medium) => (<option key={medium.id} value={medium.id}>{medium.name} {medium.name_required ? '(Name Required)' : ''}</option>))}
               </select>
+              {mediums.length === 0 && <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">Loading UTM mediums...</p>}
             </div>
           </div>
 

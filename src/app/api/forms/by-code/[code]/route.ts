@@ -36,7 +36,7 @@ export async function GET(
     
     // Get form fields
     const [fieldRows] = await pool.query(
-      `SELECT field_name, field_label, field_type, field_options, is_required, sort_order 
+      `SELECT field_name, field_label, field_type, field_options, sort_order 
        FROM form_fields 
        WHERE form_id = ? 
        ORDER BY sort_order ASC, id ASC`,

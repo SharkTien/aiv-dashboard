@@ -1,4 +1,12 @@
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+<script src="//cdn.jsdelivr.net/jquery.scrollto/2.1.2/jquery.scrollTo.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>window.WEBFLOW_API_HOST='https://aiv-dashboard-ten.vercel.app';</script>
 
+<script>
+
+// CHANGE THE FORM CODE OF YOUR PHASE FORM HERE
+const TARGET_FORM_CODE = 'ogv-w25-submissions-1756494351183';
 
 // Public form submit → Next.js API (no Supabase)
 
@@ -8,29 +16,18 @@ if (!form) {
   console.error('Form not found: wf-form--2');
 }
 
-// Optional: override API host on Webflow (e.g., set window.WEBFLOW_API_HOST = 'https://your-domain.com')
-// Also supports: data-api-host on <form> or a hidden input named "api-host"
-(function ensureApiHost() {
+// Resolve API host locally (no globals). Supports data-api-host or hidden input name="api-host", fallback to origin
+function resolveApiHost() {
   try {
     const fromAttr = form && (form.getAttribute('data-api-host') || (form.dataset ? form.dataset.apiHost : ''));
     const inputEl = form && form.querySelector('input[name="api-host"]');
     const fromInput = inputEl && inputEl.value ? inputEl.value : '';
-    const winHost = (typeof window !== 'undefined' && window.WEBFLOW_API_HOST) || '';
     const origin = (typeof window !== 'undefined' ? window.location.origin : '');
-    // Choose priority: window var > data attribute > hidden input > origin
-    var API_HOST = winHost || fromAttr || fromInput || origin;
-    // Expose for debugging
-    if (typeof window !== 'undefined') window.__FORM_API_HOST__ = API_HOST;
-    console.log('[FormSubmit] Resolved API_HOST =', API_HOST, ' page origin =', origin);
-    if (/webflow\.(io|com)/i.test(API_HOST) || /\.webflow\.io$/i.test(API_HOST)) {
-      console.warn('[FormSubmit] API_HOST looks like a Webflow domain:', API_HOST, '\nThis will 405 because that origin does not serve your Next.js API. Set window.WEBFLOW_API_HOST or data-api-host on <form> to your backend, e.g., https://your-backend.example.com');
-    }
-    // Replace global reference if previously defined
-    if (typeof window !== 'undefined') window.API_HOST = API_HOST;
-  } catch (e) {
-    console.warn('[FormSubmit] Could not resolve API host:', e);
+    return fromAttr || fromInput || origin;
+  } catch {
+    return (typeof window !== 'undefined' ? window.location.origin : '');
   }
-})();
+}
 
 let code = getRandomNumbers();
 
@@ -68,25 +65,9 @@ async function submitToBackend(formData) {
   }
 
   try {
-    // form-code is already present in payload via the hidden input
-    const code = String(payload['form-code'] || '');
-    if (!code) throw new Error('Missing form-code');
-
-    const API_HOST = (typeof window !== 'undefined' && (window.WEBFLOW_API_HOST || window.__FORM_API_HOST__ || window.API_HOST)) || (typeof window !== 'undefined' ? window.location.origin : '');
-    const base = `${API_HOST}/api/forms/by-code/${encodeURIComponent(code)}`;
+    const API_HOST = resolveApiHost();
+    const base = `${API_HOST}/api/forms/by-code/${TARGET_FORM_CODE}`;
     const url = `${base}/submit`;
-
-    console.log('[FormSubmit] POST URL:', url);
-    console.log('[FormSubmit] form-code:', code);
-    console.log('[FormSubmit] payload:', payload);
-
-    // Manual preflight debug
-    try {
-      const pre = await fetch(url, { method: 'OPTIONS' });
-      console.log('[FormSubmit] Manual OPTIONS →', pre.status, pre.statusText, 'Headers:', Array.from(pre.headers.entries()));
-    } catch (optErr) {
-      console.warn('[FormSubmit] Manual OPTIONS failed:', optErr);
-    }
 
     const res = await fetch(url, {
       method: 'POST',
@@ -94,28 +75,16 @@ async function submitToBackend(formData) {
       body: JSON.stringify(payload),
     });
 
-    console.log('[FormSubmit] response status:', res.status, res.statusText);
-
     if (!res.ok) {
-      console.log('[FormSubmit] Response headers:', Array.from(res.headers.entries()));
       const raw = await res.text().catch(() => '');
-      console.warn('[FormSubmit] response body (error):', raw);
       let parsed = null;
       try { parsed = raw ? JSON.parse(raw) : null; } catch {}
       const message = parsed?.error || raw || `Submit failed (${res.status})`;
-      // Extra hint if likely wrong host
-      if (/webflow\.(io|com)/i.test(String(API_HOST))) {
-        console.warn('[FormSubmit] Hint: API_HOST is a Webflow domain. Set window.WEBFLOW_API_HOST to your backend domain.');
-      }
       throw new Error(message);
     }
 
-    const okBody = await res.text().catch(() => '');
-    console.log('[FormSubmit] response body (success):', okBody);
-
     return true;
   } catch (e) {
-    console.error('Submit error:', e);
     return false;
   }
 }
@@ -154,8 +123,6 @@ async function handleSubmission(formData) {
   }
 }
 
-// Force a specific form code right before submit
-const TARGET_FORM_CODE = 'ogv-w24-submissions-1756364313312';
 
 if (form) {
   // Neutralize native form submit path and any other submit handlers
@@ -175,8 +142,8 @@ if (form) {
     codeEl.value = code;
     // Also set data attribute for debugging/consistency
     form.setAttribute('data-form-code', TARGET_FORM_CODE);
-
     const formData = new FormData(form);
     await handleSubmission(formData);
   }, true); // capture to run before other listeners
 }
+</script>

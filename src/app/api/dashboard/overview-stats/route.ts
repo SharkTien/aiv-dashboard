@@ -20,27 +20,9 @@ export async function GET(request: NextRequest) {
     
     // Get total submissions after deduplication
     const [submissionsResult] = await pool.query(`
-      WITH RankedSubmissions AS (
-        SELECT 
-          fs.id,
-          ROW_NUMBER() OVER (
-            PARTITION BY 
-              CASE 
-                WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                ELSE CONCAT('unique_', fs.id)
-              END
-            ORDER BY fs.timestamp DESC
-          ) as rn
-        FROM form_submissions fs
-        LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-          AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = fs.form_id AND field_name = 'phone')
-        LEFT JOIN form_responses email ON fs.id = email.submission_id 
-          AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = fs.form_id AND field_name = 'email')
-      )
       SELECT COUNT(*) as total
-      FROM RankedSubmissions 
-      WHERE rn = 1
+      FROM form_submissions fs
+      WHERE fs.duplicated = FALSE
     `);
     const submissions = Array.isArray(submissionsResult) && submissionsResult.length > 0 ? (submissionsResult[0] as any).total : 0;
     

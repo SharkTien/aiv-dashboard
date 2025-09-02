@@ -15,7 +15,6 @@ type FormField = {
   field_label: string;
   field_type: string;
   field_options: string | null;
-  is_required: boolean;
   sort_order: number;
 };
 
@@ -44,12 +43,12 @@ export default function FormBuilder({ formId }: { formId: number }) {
   const [showAddField, setShowAddField] = useState(false);
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [fieldLoading, setFieldLoading] = useState(false);
+  const [dupFieldIds, setDupFieldIds] = useState<number[]>([]);
   const [newField, setNewField] = useState({
     field_name: "",
     field_label: "",
     field_type: "text",
     field_options: "",
-    is_required: false,
   });
 
   const [datasources, setDatasources] = useState<Datasource[]>([]);
@@ -90,7 +89,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      await Promise.all([loadForm(), loadFields()]);
+      await Promise.all([loadForm(), loadFields(), loadDuplicateSettings()]);
       setLoading(false);
     }
     load();
@@ -145,7 +144,6 @@ export default function FormBuilder({ formId }: { formId: number }) {
         field_label: newField.field_label,
         field_type: newField.field_type,
         field_options: buildFieldOptionsPayload(),
-        is_required: newField.is_required,
       };
 
       const res = await fetch(`/api/forms/${formId}/fields`, {
@@ -181,7 +179,6 @@ export default function FormBuilder({ formId }: { formId: number }) {
         field_label: newField.field_label,
         field_type: newField.field_type,
         field_options: buildFieldOptionsPayload(),
-        is_required: newField.is_required,
       };
 
       const res = await fetch(`/api/forms/${formId}/fields`, {
@@ -238,6 +235,36 @@ export default function FormBuilder({ formId }: { formId: number }) {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/html", fieldId.toString());
   };
+
+  async function loadDuplicateSettings() {
+    try {
+      const res = await fetch(`/api/forms/${formId}/duplicate-settings`);
+      if (res.ok) {
+        const data = await res.json();
+        setDupFieldIds(Array.isArray(data.fieldIds) ? data.fieldIds : []);
+      }
+    } catch (e) {
+      console.error('Failed to load duplicate settings', e);
+    }
+  }
+
+  async function saveDuplicateSettings(nextIds: number[]) {
+    try {
+      const res = await fetch(`/api/forms/${formId}/duplicate-settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fieldIds: nextIds })
+      });
+      if (res.ok) {
+        setDupFieldIds(nextIds);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to save duplicate settings');
+      }
+    } catch (e) {
+      alert('Failed to save duplicate settings');
+    }
+  }
 
   const handleDragOver = (e: React.DragEvent, fieldId: number) => {
     e.preventDefault();
@@ -308,7 +335,6 @@ export default function FormBuilder({ formId }: { formId: number }) {
       field_label: field.field_label,
       field_type: field.field_type,
       field_options: field.field_options || "",
-      is_required: field.is_required,
     });
   };
 
@@ -320,7 +346,6 @@ export default function FormBuilder({ formId }: { formId: number }) {
       field_label: "",
       field_type: "text",
       field_options: "",
-      is_required: false,
     });
   };
 
@@ -394,26 +419,55 @@ export default function FormBuilder({ formId }: { formId: number }) {
           </div>
         </div>
 
+        {/* Duplicate Settings */}
+        <div className="mb-4">
+          <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Duplicate detection fields</h4>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Select one or more fields to detect duplicates. Newest submission stays, older ones are marked duplicated.</p>
+          {fields.length === 0 ? (
+            <div className="text-xs text-gray-500 dark:text-gray-400">No fields available.</div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {fields.map(f => (
+                <label key={f.id} className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-md ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-gray-800/70">
+                  <input
+                    type="checkbox"
+                    checked={dupFieldIds.includes(f.id)}
+                    onChange={(e) => {
+                      const next = e.target.checked ? [...dupFieldIds, f.id] : dupFieldIds.filter(id => id !== f.id);
+                      saveDuplicateSettings(next);
+                    }}
+                  />
+                  <span>{f.field_label} <span className="text-gray-400">({f.field_name})</span></span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
         {fields.length === 0 ? (
           <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
             No fields added yet. Click "Add Field" to get started.
           </div>
         ) : (
           <div className="space-y-2">
-            {fields.map((field, index) => (
-              <div
-                key={field.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, field.id)}
-                onDragOver={(e) => handleDragOver(e, field.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, field.id)}
-                className={`flex items-center justify-between gap-3 p-3 rounded-md bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50 cursor-move transition-all ${
-                  draggedField === field.id ? 'opacity-50 scale-95' : ''
-                } ${
-                  dragOverField === field.id ? 'border-sky-400 bg-sky-50/50 dark:bg-sky-900/20' : ''
-                }`}
-              >
+            {fields.map((field, index) => {
+              const isRequiredField = false;
+              return (
+                <div
+                  key={field.id}
+                  draggable={!isRequiredField}
+                  onDragStart={!isRequiredField ? (e) => handleDragStart(e, field.id) : undefined}
+                  onDragOver={!isRequiredField ? (e) => handleDragOver(e, field.id) : undefined}
+                  onDragLeave={!isRequiredField ? handleDragLeave : undefined}
+                  onDrop={!isRequiredField ? (e) => handleDrop(e, field.id) : undefined}
+                  className={`flex items-center justify-between gap-3 p-3 rounded-md bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50 transition-all ${
+                    isRequiredField ? 'cursor-default' : 'cursor-move'
+                  } ${
+                    draggedField === field.id ? 'opacity-50 scale-95' : ''
+                  } ${
+                    dragOverField === field.id ? 'border-sky-400 bg-sky-50/50 dark:bg-sky-900/20' : ''
+                  }`}
+                >
                 <div className="flex items-center gap-3">
                   <div className="w-6 h-6 rounded-md bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
                     <span className="text-sky-600 dark:text-sky-400 font-semibold text-xs">
@@ -432,27 +486,29 @@ export default function FormBuilder({ formId }: { formId: number }) {
                       </div>
                       <div className="text-xs text-gray-600 dark:text-gray-300">
                         {field.field_name} • {field.field_type}
-                        {field.is_required && " • Required"}
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => startEditField(field)}
-                    className="px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteField(field.id)}
-                    className="px-2 py-1 text-xs rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 transition-colors"
-                  >
-                    Delete
-                  </button>
+                  <>
+                    <button
+                      onClick={() => startEditField(field)}
+                      className="px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteField(field.id)}
+                      className="px-2 py-1 text-xs rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
@@ -563,18 +619,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
                     />
                   </div>
                 )}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="required"
-                    checked={newField.is_required}
-                    onChange={(e) => setNewField({ ...newField, is_required: e.target.checked })}
-                    className="rounded border-gray-300 text-sky-600 focus:ring-sky-500"
-                  />
-                  <label htmlFor="required" className="text-xs text-gray-700 dark:text-gray-200">
-                    Required field
-                  </label>
-                </div>
+                <div></div>
                 <div className="flex items-center gap-2 pt-3">
                   <button
                     type="submit"

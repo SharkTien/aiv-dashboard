@@ -24,7 +24,7 @@ export async function GET(
 
     // Get fields
     const [rows] = await pool.query(
-      `SELECT id, field_name, field_label, field_type, field_options, is_required, sort_order, created_at
+      `SELECT id, field_name, field_label, field_type, field_options, sort_order, created_at
        FROM form_fields 
        WHERE form_id = ? 
        ORDER BY sort_order ASC, id ASC`,
@@ -52,7 +52,7 @@ export async function POST(
   
   const { id: formId } = await ctx.params;
   const body = await req.json();
-  const { field_name, field_label, field_type, field_options, is_required, sort_order } = body || {};
+  const { field_name, field_label, field_type, field_options, sort_order } = body || {};
   
   if (!field_name || !field_label || !field_type) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -84,8 +84,8 @@ export async function POST(
     const nextSortOrder = ((maxOrderResult as any)[0]?.max_order || 0) + 1;
     
     const [result] = await pool.query(
-      "INSERT INTO form_fields (form_id, field_name, field_label, field_type, field_options, is_required, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [formId, field_name, field_label, field_type, field_options || null, is_required || false, nextSortOrder]
+      "INSERT INTO form_fields (form_id, field_name, field_label, field_type, field_options, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+      [formId, field_name, field_label, field_type, field_options || null, nextSortOrder]
     );
     
     const fieldId = (result as any).insertId;
@@ -99,7 +99,6 @@ export async function POST(
         field_label, 
         field_type, 
         field_options, 
-        is_required, 
         sort_order 
       }
     });
@@ -118,7 +117,7 @@ export async function PUT(
   
   const { id: formId } = await ctx.params;
   const body = await req.json();
-  const { field_id, field_name, field_label, field_type, field_options, is_required, sort_order } = body || {};
+  const { field_id, field_name, field_label, field_type, field_options, sort_order } = body || {};
   
   if (!field_id) {
     return NextResponse.json({ error: "Missing field id" }, { status: 400 });
@@ -153,10 +152,9 @@ export async function PUT(
            field_label = COALESCE(?, field_label), 
            field_type = COALESCE(?, field_type), 
            field_options = ?, 
-           is_required = COALESCE(?, is_required), 
            sort_order = COALESCE(?, sort_order) 
        WHERE id = ? AND form_id = ?`,
-      [field_name ?? null, field_label ?? null, field_type ?? null, field_options, is_required ?? null, sort_order ?? null, field_id, formId]
+      [field_name ?? null, field_label ?? null, field_type ?? null, field_options, sort_order ?? null, field_id, formId]
     );
     
     return NextResponse.json({ success: true });

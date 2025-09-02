@@ -32,7 +32,7 @@ export async function POST(
     // Parse form data
     const formData = await req.formData();
     const file = formData.get("file") as File;
-    
+
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
@@ -51,7 +51,7 @@ export async function POST(
     const headers = jsonData[0] as string[];
     const dataRows = jsonData.slice(1) as any[][];
 
-    // Simple pipeline: Check for timestamp column and map form fields
+    // Map columns to form fields and detect timestamp/form code columns
     const columnMapping: { [key: string]: string } = {};
     const validFields: string[] = [];
     let formCodeField: string | null = null;
@@ -61,10 +61,7 @@ export async function POST(
     // Step 1: Check if there's a timestamp column
     headers.forEach((header, index) => {
       const normalizedHeader = header?.toString().toLowerCase().trim();
-      
-      // Check if this is a timestamp column
-      if (normalizedHeader.includes('timestamp') || 
-          normalizedHeader.includes('submitted')) {
+      if (normalizedHeader && (normalizedHeader.includes('timestamp') || normalizedHeader.includes('submitted'))) {
         timestampField = header;
         timestampColumnIndex = index;
       }
@@ -73,13 +70,7 @@ export async function POST(
     // Step 2: Map form fields (excluding timestamp field)
     headers.forEach((header, index) => {
       const normalizedHeader = header?.toString().toLowerCase().trim();
-      
-      // Skip timestamp column as it's handled separately
-      if (index === timestampColumnIndex) {
-        return;
-      }
-      
-      // Try to match by field_name or field_label
+      if (index === timestampColumnIndex) return;
       for (const [fieldName, field] of fieldMap) {
         if (
           fieldName.toLowerCase() === normalizedHeader ||
@@ -87,8 +78,6 @@ export async function POST(
         ) {
           columnMapping[header] = fieldName;
           validFields.push(fieldName);
-          
-          // Check if this is a form-code field
           if (fieldName.toLowerCase().includes('form') && fieldName.toLowerCase().includes('code')) {
             formCodeField = fieldName;
           }
@@ -98,8 +87,8 @@ export async function POST(
     });
 
     if (validFields.length === 0) {
-      return NextResponse.json({ 
-        error: "No valid columns found. Available fields: " + Array.from(fieldMap.keys()).join(", ") 
+      return NextResponse.json({
+        error: "No valid columns found. Available fields: " + Array.from(fieldMap.keys()).join(", ")
       }, { status: 400 });
     }
 
@@ -112,9 +101,9 @@ export async function POST(
           const source = cfg?.source as string | undefined;
           if (source) {
             const [rows] = await pool.query(
-              source === "uni_mapping" ?
-              `SELECT uni_id, uni_name FROM uni_mapping` :
-              `SELECT id, name FROM ${source}`
+              source === "uni_mapping"
+                ? `SELECT uni_id, uni_name FROM uni_mapping`
+                : `SELECT id, name FROM ${source}`
             );
             const lookupMap = new Map<string, string>();
             if (Array.isArray(rows)) {
@@ -131,12 +120,6 @@ export async function POST(
         }
       }
     }
-
-    // Process and insert submissions in batches
-    let successCount = 0;
-    let errorCount = 0;
-    const errors: string[] = [];
-    const batchSize = 100; // Process 100 rows at a time
 
     // Get existing form codes if formCodeField exists
     const existingFormCodes = new Set<string>();
@@ -161,31 +144,34 @@ export async function POST(
       }
     }
 
-    // Process rows in batches
+    // Process and insert submissions in batches
+    let successCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
+    const batchSize = 100;
+
     for (let batchStart = 0; batchStart < dataRows.length; batchStart += batchSize) {
       const batchEnd = Math.min(batchStart + batchSize, dataRows.length);
       const batch = dataRows.slice(batchStart, batchEnd);
 
       try {
-        // Prepare batch data
-        const submissionsToInsert: Array<[number, string]> = []; // [formId, timestamp]
+        const submissionsToInsert: Array<[number, string]> = [];
         const responsesToInsert: Array<[any, number, string]> = [];
-        const skippedRows: number[] = [];
-        const rowResponseCounts: number[] = []; // Track how many responses each row has
+        const rowResponseCounts: number[] = [];
 
         for (let rowIndex = 0; rowIndex < batch.length; rowIndex++) {
           const row = batch[rowIndex];
           if (!row || row.length === 0) continue;
 
           const globalRowIndex = batchStart + rowIndex;
-          
+
           try {
             // Check for duplicate form code
             let isDuplicate = false;
             let formCodeValue = "";
-            
+
             if (formCodeField) {
-              const formCodeHeader = Object.keys(columnMapping).find(header => 
+              const formCodeHeader = Object.keys(columnMapping).find(header =>
                 columnMapping[header] === formCodeField
               );
               if (formCodeHeader) {
@@ -194,14 +180,12 @@ export async function POST(
                   formCodeValue = String(row[columnIndex] || "").trim();
                   if (formCodeValue && existingFormCodes.has(formCodeValue)) {
                     isDuplicate = true;
-                    skippedRows.push(globalRowIndex + 2); // +2 for header row and 1-based index
                   }
                 }
               }
             }
 
             if (isDuplicate) {
-              // Skip this row if it's a duplicate
               continue;
             }
 
@@ -211,12 +195,10 @@ export async function POST(
               const columnIndex = headers.indexOf(excelHeader);
               if (columnIndex >= 0 && columnIndex < row.length) {
                 const rawValue = row[columnIndex];
-                // Include empty strings but not null/undefined
                 if (rawValue !== null && rawValue !== undefined) {
                   const field = fieldMap.get(fieldName);
                   let saveValue = String(rawValue);
 
-                  // Handle database field type (lookup from pre-fetched data)
                   if (field?.field_type === "database") {
                     const lookupMap = databaseLookups.get(field.field_name);
                     if (lookupMap && rawValue && String(rawValue).trim() !== "") {
@@ -228,96 +210,75 @@ export async function POST(
                     }
                   }
 
-                  // Store response data for batch insert (include empty strings)
-                  // Skip timestamp field as it's handled separately for database insertion
                   if (field?.id && fieldName !== timestampField) {
-                    responsesToInsert.push([0, field.id, saveValue]); // submissionId will be filled later
+                    responsesToInsert.push([0, field.id, saveValue]);
                     rowResponseCount++;
                   }
                 }
               }
             }
 
-            // Add form code to existing set to prevent duplicates within the same import
             if (formCodeValue && formCodeField) {
               existingFormCodes.add(formCodeValue);
             }
 
-            // Simple timestamp processing: Use timestamp from Excel or current time
+            // Timestamp processing
             let submissionTimestamp = "";
-            
             if (timestampColumnIndex >= 0 && timestampColumnIndex < row.length) {
               const timestampValue = row[timestampColumnIndex];
-              
-              // Check if timestamp value is not empty
               if (timestampValue !== null && timestampValue !== undefined && String(timestampValue).trim() !== "") {
                 try {
                   const timestampStr = String(timestampValue).trim();
-                  let parsedDate = null;
-                  
-                  // Try to parse as Excel serial number first (most common case)
+                  let parsedDate: Date | null = null;
+
+                  // Excel serial number
                   if (/^\d+(\.\d+)?$/.test(timestampStr)) {
                     const serialNumber = parseFloat(timestampStr);
                     if (serialNumber >= 1 && serialNumber <= 100000) {
-                      // Excel dates are days since 1900-01-01
-                      // Note: Excel incorrectly treats 1900 as a leap year, so we need to adjust
                       const excelEpoch = new Date(1900, 0, 1);
                       const millisecondsPerDay = 24 * 60 * 60 * 1000;
                       let adjustedSerial = serialNumber;
                       if (serialNumber > 59) {
-                        adjustedSerial = serialNumber - 1; // Excel leap year bug
+                        adjustedSerial = serialNumber - 1;
                       }
                       parsedDate = new Date(excelEpoch.getTime() + (adjustedSerial - 1) * millisecondsPerDay);
                       // Convert to Vietnam time (+7)
-                      const vietnamTime = new Date(parsedDate.getTime() + (8 * 60 * 60 * 1000));
-                      parsedDate = vietnamTime;
+                      parsedDate = new Date(parsedDate.getTime() + (7 * 60 * 60 * 1000));
                     }
                   }
-                  
-                  // If not Excel serial, try standard date parsing
+
                   if (!parsedDate || isNaN(parsedDate.getTime())) {
-                    // Check if it's a date-only format (like "8/1/2025") and add time
-                    let dateStr = timestampStr; 
                     if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(timestampStr)) {
-                      // Format: M/D/YYYY or MM/DD/YYYY - treat as UTC date at 00:00:00
                       const [month, day, year] = timestampStr.split('/');
-                      const monthNum = parseInt(month) - 1; // JavaScript months are 0-based
+                      const monthNum = parseInt(month) - 1;
                       const dayNum = parseInt(day);
                       const yearNum = parseInt(year);
                       parsedDate = new Date(Date.UTC(yearNum, monthNum, dayNum, 0, 0, 0));
                     } else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(timestampStr)) {
-                      // Format: YYYY-M-D or YYYY-MM-DD - treat as UTC date at 00:00:00
                       const [year, month, day] = timestampStr.split('-');
-                      const monthNum = parseInt(month) - 1; // JavaScript months are 0-based
+                      const monthNum = parseInt(month) - 1;
                       const dayNum = parseInt(day);
                       const yearNum = parseInt(year);
                       parsedDate = new Date(Date.UTC(yearNum, monthNum, dayNum, 0, 0, 0));
                     } else {
-                      // Other formats, try standard parsing
                       parsedDate = new Date(timestampStr);
                     }
                   }
-                  
-                  // If valid date, use it
+
                   if (parsedDate && !isNaN(parsedDate.getTime())) {
                     submissionTimestamp = parsedDate.toISOString().slice(0, 19).replace('T', ' ');
-                  } else {
-                    // Invalid timestamp format, will use current time
                   }
                 } catch (error) {
-                  // Error parsing timestamp, will use current time
+                  // ignore, fallback to now
                 }
               }
             }
-            
-            // Use current time if no valid timestamp found
             if (!submissionTimestamp) {
               const now = new Date();
               const vietnamTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
               submissionTimestamp = vietnamTime.toISOString().slice(0, 19).replace('T', ' ');
             }
-            
-            // Mark that we need to create a submission for this row
+
             submissionsToInsert.push([Number(formId), submissionTimestamp]);
             rowResponseCounts.push(rowResponseCount);
             successCount++;
@@ -330,12 +291,10 @@ export async function POST(
 
         // Batch insert submissions
         if (submissionsToInsert.length > 0) {
-          
           const [submissionResult] = await pool.query(
             "INSERT INTO form_submissions (form_id, timestamp) VALUES ?",
             [submissionsToInsert]
           );
-          
           const submissionIds = [];
           const insertId = (submissionResult as any).insertId;
           for (let i = 0; i < submissionsToInsert.length; i++) {
@@ -347,30 +306,24 @@ export async function POST(
           for (let i = 0; i < submissionsToInsert.length; i++) {
             const submissionId = submissionIds[i];
             const rowResponseCount = rowResponseCounts[i];
-            
-            // Validate that we have enough responses
             if (responseIndex + rowResponseCount > responsesToInsert.length) {
               console.error(`Row ${i + 1}: Expected ${rowResponseCount} responses but only ${responsesToInsert.length - responseIndex} available`);
               continue;
             }
-            
             const rowResponses = responsesToInsert.slice(responseIndex, responseIndex + rowResponseCount);
             for (const response of rowResponses) {
-              (response as any)[0] = submissionId; // Set the submission ID
+              (response as any)[0] = submissionId;
             }
             responseIndex += rowResponseCount;
           }
 
-          // Batch insert responses
           if (responsesToInsert.length > 0) {
-            console.log(`Inserting ${responsesToInsert.length} responses for ${submissionsToInsert.length} submissions`);
             await pool.query(
               "INSERT INTO form_responses (submission_id, field_id, value) VALUES ?",
               [responsesToInsert]
             );
           }
         }
-
       } catch (error) {
         errorCount += batch.length;
         errors.push(`Batch ${Math.floor(batchStart / batchSize) + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -381,10 +334,8 @@ export async function POST(
     // Update entity_id for submissions that have 'uni' field
     let entityUpdateCount = 0;
     try {
-      // Find the 'uni' field
       const uniField = fields.find(f => f.field_name === 'uni');
       if (uniField) {
-        // Get all submissions that were just created and have a 'uni' response
         const [submissionRows] = await pool.query(
           `SELECT fs.id, fr.value as uni_value
            FROM form_submissions fs
@@ -392,26 +343,17 @@ export async function POST(
            WHERE fs.form_id = ? AND fr.field_id = ? AND fr.value IS NOT NULL AND fr.value != ''`,
           [formId, uniField.id]
         );
-
         if (Array.isArray(submissionRows) && submissionRows.length > 0) {
           for (const submission of submissionRows as any[]) {
             try {
               const uniValue = submission.uni_value;
-              
-              // Skip if uni_value is "other--uni-2" or empty
-              if (!uniValue || uniValue === "other--uni-2") {
-                continue;
-              }
-              
-              // Look up entity_id from uni_mapping
+              if (!uniValue || uniValue === "other--uni-2") continue;
               const [uniMappingRows] = await pool.query(
                 "SELECT entity_id FROM uni_mapping WHERE uni_id = ?",
                 [uniValue]
               );
-
               if (Array.isArray(uniMappingRows) && uniMappingRows.length > 0) {
                 const entityId = (uniMappingRows as any)[0].entity_id;
-                // Update the submission's entity_id
                 await pool.query(
                   "UPDATE form_submissions SET entity_id = ? WHERE id = ?",
                   [entityId, submission.id]
@@ -428,6 +370,85 @@ export async function POST(
       console.error("Error updating entity_id for submissions:", error);
     }
 
+    // Check for duplicate phone/email and update duplicated field
+    let duplicateCheckCount = 0;
+    try {
+      // Load per-form duplicate field settings
+      let duplicateFieldIds: number[] = [];
+      try {
+        const [dupRows] = await pool.query(
+          `SELECT field_id FROM form_duplicate_settings WHERE form_id = ?`,
+          [formId]
+        );
+        duplicateFieldIds = Array.isArray(dupRows) ? (dupRows as any[]).map(r => r.field_id) : [];
+      } catch (e) {
+        console.warn('Duplicate settings table not found or error querying. Falling back to phone/email if exist.');
+      }
+
+      // Resolve fields to check
+      let fieldsToCheck = fields.filter(f => duplicateFieldIds.includes(f.id));
+      if (fieldsToCheck.length === 0) {
+        const phoneField = fields.find(f => f.field_name === 'phone');
+        const emailField = fields.find(f => f.field_name === 'email');
+        fieldsToCheck = [phoneField, emailField].filter(Boolean) as any[];
+      }
+
+      if (fieldsToCheck.length > 0) {
+        let query = `
+          SELECT fs.id, fs.timestamp, fs.duplicated
+        FROM form_submissions fs
+        `;
+        const params: any[] = [];
+        const aliasList: string[] = [];
+        fieldsToCheck.forEach((field, idx) => {
+          const alias = `f${idx}`;
+          aliasList.push(alias);
+          query += ` LEFT JOIN form_responses ${alias} ON fs.id = ${alias}.submission_id AND ${alias}.field_id = ?`;
+          params.push(field.id);
+        });
+        query += ` WHERE fs.form_id = ? ORDER BY fs.id ASC`;
+        params.push(formId);
+
+        const [allSubmissionRows] = await pool.query(query, params);
+
+        if (Array.isArray(allSubmissionRows) && allSubmissionRows.length > 0) {
+          const groups: { [key: string]: any[] } = {};
+          for (const submission of allSubmissionRows as any[]) {
+            const parts: string[] = [];
+            fieldsToCheck.forEach((_, idx) => {
+              const alias = `f${idx}`;
+              const val = submission?.[`${alias}.value`] ?? submission?.[alias]?.value ?? submission?.[alias + '_value'] ?? '';
+              parts.push(String(val || '').trim());
+            });
+            const key = parts.join('|');
+            if (!key || parts.every(p => p === '')) continue;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(submission);
+          }
+
+          const duplicateIds = new Set<number>();
+          for (const submissions of Object.values(groups)) {
+            if (submissions.length > 1) {
+              const sorted = (submissions as any[]).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+              for (let i = 1; i < sorted.length; i++) {
+                duplicateIds.add(sorted[i].id);
+              }
+            }
+          }
+          if (duplicateIds.size > 0) {
+            const duplicateIdsArray = Array.from(duplicateIds);
+            await pool.query(
+              "UPDATE form_submissions SET duplicated = 1 WHERE id IN (?)",
+              [duplicateIdsArray]
+            );
+            duplicateCheckCount = duplicateIdsArray.length;
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking for duplicate phone/email submissions:", error);
+    }
+
     return NextResponse.json({
       success: true,
       message: `Import completed. ${successCount} submissions imported successfully, ${errorCount} failed.`,
@@ -440,13 +461,14 @@ export async function POST(
         timestampField,
         duplicateCount: dataRows.length - successCount - errorCount,
         entityUpdateCount,
-        errors: errors.slice(0, 10) // Limit error messages
+        duplicateCheckCount,
+        errors: errors.slice(0, 10)
       }
     });
 
   } catch (error) {
     console.error("Error importing submissions:", error);
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: "Failed to import submissions",
       details: error instanceof Error ? error.message : "Unknown error"
     }, { status: 500 });

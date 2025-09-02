@@ -29,7 +29,7 @@ export async function POST(
 
     // Get the original form fields
     const [fieldRows] = await pool.query(
-      "SELECT field_name, field_label, field_type, field_options, is_required, sort_order FROM form_fields WHERE form_id = ? ORDER BY sort_order ASC",
+      "SELECT field_name, field_label, field_type, field_options, sort_order FROM form_fields WHERE form_id = ? ORDER BY sort_order ASC",
       [formId]
     );
     
@@ -49,14 +49,13 @@ export async function POST(
     // Copy all fields to the new form
     for (const field of fields) {
       await pool.query(
-        "INSERT INTO form_fields (form_id, field_name, field_label, field_type, field_options, is_required, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO form_fields (form_id, field_name, field_label, field_type, field_options, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
         [
           newFormId,
           field.field_name,
           field.field_label,
           field.field_type,
           field.field_options,
-          field.is_required,
           field.sort_order
         ]
       );

@@ -18,6 +18,7 @@ type Submission = {
   timestamp?: string;    // new
   entityId?: number | null;
   entityName?: string | null;
+  duplicated?: boolean;  // whether this submission is marked as duplicate
   responses: FormResponse[];
 };
 

@@ -109,20 +109,9 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
         const entityStats = result.data.entityStats;
         const totalNationalNotFound = result.data.totalNationalNotFound || 0;
         
-        // Separate local and national entities
-        const localStats = entityStats.filter((stat: EntityStats) => {
-          // Check if entity is local (not EMT, Organic, or EST)
-          return stat.entity_name.toLowerCase() !== 'emt' && 
-                 stat.entity_name.toLowerCase() !== 'organic' && 
-                 stat.entity_name.toLowerCase() !== 'est';
-        });
-        
-        const nationalStats = entityStats.filter((stat: EntityStats) => {
-          // Check if entity is national (EMT, Organic, or EST)
-          return stat.entity_name.toLowerCase() === 'emt' || 
-                 stat.entity_name.toLowerCase() === 'organic' || 
-                 stat.entity_name.toLowerCase() === 'est';
-        });
+        // Separate local and national entities using entity_type provided by API
+        const localStats = entityStats.filter((stat: any) => stat.entity_type === 'local');
+        const nationalStats = entityStats.filter((stat: any) => stat.entity_type === 'national');
         
         // Convert local entityStats to SummaryRow format
         const localData: SummaryRow[] = localStats.map((stat: EntityStats) => ({
@@ -364,7 +353,7 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
                 {(localTotals?.goal || 0) + nationalSummary.reduce((sum, item) => sum + item.goal, 0)}
               </td>
               <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">
-                {formatNumber((localTotals?.total || 0) + (localTotals?.otherSource || 0) + nationalSummary.reduce((sum, item) => sum + item.count, 0))}
+                {formatNumber((localTotals?.total || 0) + (localTotals?.otherSource || 0) + (window as any).totalNationalNotFound)}
               </td>
               <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">
                 {(localTotals?.msu || 0) + nationalSummary.reduce((sum, item) => sum + item.msu, 0)}
@@ -385,17 +374,11 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
                 ).toFixed(2)}%
               </td>
               <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
-                {calculatePercentage(
-                  (localTotals?.msu || 0) + nationalSummary.reduce((sum, item) => sum + item.msu, 0),
-                  (localTotals?.total || 0) + (localTotals?.otherSource || 0) + nationalSummary.reduce((sum, item) => sum + item.count, 0)
-                ).toFixed(2)}%
+                {calculatePercentage(localTotals?.msu || 0, localTotals?.total || 0).toFixed(2)}%
               </td>
-              <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-                {calculatePercentage(
-                  (localTotals?.msu || 0) + nationalSummary.reduce((sum, item) => sum + item.msu, 0),
-                  (localTotals?.yourUtm || 0) + nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)
-                ).toFixed(2)}%
-              </td>
+                <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                  {calculatePercentage(localTotals?.msu || 0, localTotals?.yourUtm || 0).toFixed(2)}%
+                </td>
               {comparePhaseFilter && (
                 <>
                   <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>

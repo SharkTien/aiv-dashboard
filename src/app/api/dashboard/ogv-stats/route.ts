@@ -58,6 +58,11 @@ export async function GET(request: NextRequest) {
       "SELECT entity_id FROM entity WHERE name = 'EMT' LIMIT 1"
     );
     const emtEntityId = Array.isArray(emtResult) && emtResult.length > 0 ? (emtResult[0] as any).entity_id : null;
+    // Get EST entity ID
+    const [estResult] = await pool.query(
+      "SELECT entity_id FROM entity WHERE name = 'EST' LIMIT 1"
+    );
+    const estEntityId = Array.isArray(estResult) && estResult.length > 0 ? (estResult[0] as any).entity_id : null;
 
     // Get active UTM campaigns from utm_campaigns table for this form
     const [activeCampaignsResult] = await pool.query(`
@@ -70,9 +75,10 @@ export async function GET(request: NextRequest) {
     const activeCampaigns = Array.isArray(activeCampaignsResult) ? activeCampaignsResult : [];
     
     // Create map of active campaigns by entity
+    // IMPORTANT: use UTM campaign CODE for matching with form_responses. Not the name.
     const activeCampaignsByEntity = new Map();
     activeCampaigns.forEach((campaign: any) => {
-      activeCampaignsByEntity.set(campaign.entity_id, campaign.name);
+      activeCampaignsByEntity.set(campaign.entity_id, campaign.code);
     });
     
     // Debug: Check active campaigns for all national entities
@@ -91,6 +97,7 @@ export async function GET(request: NextRequest) {
       WHERE fs.form_id = ? 
         AND ff.field_name = 'utm_campaign' 
         AND fr.value IS NOT NULL
+        AND fs.duplicated = FALSE
       ORDER BY fr.value
     `, [formId]);
 
@@ -114,6 +121,7 @@ export async function GET(request: NextRequest) {
           WHERE fs.form_id = ? 
             AND ff.field_name = 'utm_campaign' 
             AND fr.value = ?
+            AND fs.duplicated = FALSE
         `, [formId, emtActiveCampaign]);
         
         const campaignCount = Array.isArray(campaignCheckResult) && campaignCheckResult.length > 0 ? (campaignCheckResult[0] as any).count : 0;
@@ -128,6 +136,7 @@ export async function GET(request: NextRequest) {
           WHERE fs.form_id = ? 
             AND ff.field_name = 'utm_campaign' 
             AND fr.value IS NOT NULL
+            AND fs.duplicated = FALSE
           GROUP BY fr.value
           ORDER BY count DESC
         `, [formId]);
@@ -155,6 +164,7 @@ export async function GET(request: NextRequest) {
           WHERE fs.form_id = ? 
             AND ff.field_name = 'utm_campaign' 
             AND fr.value = ?
+            AND fs.duplicated = FALSE
           ORDER BY fs.timestamp DESC
           LIMIT 10
         `, [formId, formId, formId, emtActiveCampaign]);
@@ -182,6 +192,7 @@ export async function GET(request: NextRequest) {
           WHERE fs.form_id = ? 
             AND ff.field_name = 'utm_campaign' 
             AND fr.value IS NOT NULL
+            AND fs.duplicated = FALSE
           ORDER BY fs.timestamp DESC
           LIMIT 20
         `, [formId, formId, formId]);
@@ -210,7 +221,7 @@ export async function GET(request: NextRequest) {
         fs.timestamp
       FROM form_submissions fs
       LEFT JOIN entity e ON fs.entity_id = e.entity_id
-      WHERE fs.form_id = ?
+      WHERE fs.form_id = ? AND fs.duplicated = FALSE
       ORDER BY fs.timestamp DESC
       LIMIT 20
     `, [formId]);
@@ -225,7 +236,7 @@ export async function GET(request: NextRequest) {
         COUNT(*) as count
       FROM form_submissions fs
       LEFT JOIN entity e ON fs.entity_id = e.entity_id
-      WHERE fs.form_id = ?
+      WHERE fs.form_id = ? AND fs.duplicated = FALSE
       GROUP BY fs.entity_id, e.name
       ORDER BY count DESC
     `, [formId]);
@@ -245,6 +256,7 @@ export async function GET(request: NextRequest) {
       WHERE fs.form_id = ? 
         AND (fs.entity_id IS NULL OR fs.entity_id = 0)
         AND ff.field_name = 'utm_campaign'
+        AND fs.duplicated = FALSE
       ORDER BY fs.timestamp DESC
       LIMIT 10
     `, [formId]);
@@ -261,179 +273,85 @@ export async function GET(request: NextRequest) {
         const goal = goalsByEntity.get(entityId) || 0;
         const activeCampaign = activeCampaignsByEntity.get(entityId);
 
-        // Get SUs (total submissions allocated to this entity) - with deduplication
+        // Get SUs (total submissions allocated to this entity) - non-duplicated only
         const [susResult] = await pool.query(`
-          WITH RankedSubmissions AS (
-            SELECT 
-              fs.id,
-              fs.entity_id,
-              ROW_NUMBER() OVER (
-                PARTITION BY 
-                  CASE 
-                    WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                    WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                    ELSE CONCAT('unique_', fs.id)
-                  END
-                ORDER BY fs.timestamp DESC
-              ) as rn
-            FROM form_submissions fs
-            LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-              AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-            LEFT JOIN form_responses email ON fs.id = email.submission_id 
-              AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-            WHERE fs.form_id = ? AND fs.entity_id = ?
-          )
           SELECT COUNT(*) as count
-          FROM RankedSubmissions 
-          WHERE rn = 1
-        `, [formId, formId, formId, entityId]);
+          FROM form_submissions fs
+          WHERE fs.form_id = ? AND fs.entity_id = ? AND fs.duplicated = FALSE
+        `, [formId, entityId]);
         const sus = Array.isArray(susResult) && susResult.length > 0 ? (susResult[0] as any).count : 0;
 
-        // Get MSUs (submissions with active UTM campaign for this entity) - with deduplication
+        // Get MSUs (submissions with active UTM campaign for this entity) - non-duplicated only
         let msus = 0;
         if (activeCampaign) {
           const [msusResult] = await pool.query(`
-            WITH RankedSubmissions AS (
-              SELECT 
-                fs.id,
-                fs.entity_id,
-                ROW_NUMBER() OVER (
-                  PARTITION BY 
-                    CASE 
-                      WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                      WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                      ELSE CONCAT('unique_', fs.id)
-                    END
-                  ORDER BY fs.timestamp DESC
-                ) as rn
-              FROM form_submissions fs
-              JOIN form_responses fr ON fs.id = fr.submission_id
-              JOIN form_fields ff ON fr.field_id = ff.id
-              JOIN utm_campaigns uc ON fr.value = uc.code
-              LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-              LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-              WHERE fs.form_id = ? 
-                AND fs.entity_id = ? 
-                AND ff.field_name = 'utm_campaign' 
-                AND fr.value = ?
-            )
             SELECT COUNT(*) as count
-            FROM RankedSubmissions 
-            WHERE rn = 1
-          `, [formId, formId, formId, entityId, activeCampaign]);
+            FROM form_submissions fs
+            JOIN form_responses fr ON fs.id = fr.submission_id
+            JOIN form_fields ff ON fr.field_id = ff.id
+            JOIN utm_campaigns uc ON fr.value = uc.code
+            WHERE fs.form_id = ? 
+              AND fs.entity_id = ? 
+              AND ff.field_name = 'utm_campaign' 
+              AND fr.value = ?
+              AND fs.duplicated = FALSE
+          `, [formId, entityId, activeCampaign]);
           msus = Array.isArray(msusResult) && msusResult.length > 0 ? (msusResult[0] as any).count : 0;
         }
 
-        // Get SUs | utm source (submissions with active UTM campaign, any entity) - with deduplication
+        // Get SUs | utm source (submissions with active UTM campaign, any entity) - non-duplicated only
         let susUtmSource = 0;
         if (activeCampaign) {
           const [susUtmResult] = await pool.query(`
-            WITH RankedSubmissions AS (
-              SELECT 
-                fs.id,
-                ROW_NUMBER() OVER (
-                  PARTITION BY 
-                    CASE 
-                      WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                      WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                      ELSE CONCAT('unique_', fs.id)
-                    END
-                  ORDER BY fs.timestamp DESC
-                ) as rn
-              FROM form_submissions fs
-              JOIN form_responses fr ON fs.id = fr.submission_id
-              JOIN form_fields ff ON fr.field_id = ff.id
-              LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-              LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-              WHERE fs.form_id = ? 
-                AND ff.field_name = 'utm_campaign' 
-                AND fr.value = ?
-            )
             SELECT COUNT(*) as count
-            FROM RankedSubmissions 
-            WHERE rn = 1
-          `, [formId, formId, formId, activeCampaign]);
+            FROM form_submissions fs
+            JOIN form_responses fr ON fs.id = fr.submission_id
+            JOIN form_fields ff ON fr.field_id = ff.id
+            JOIN utm_campaigns uc ON fr.value = uc.code
+            WHERE fs.form_id = ? 
+              AND ff.field_name = 'utm_campaign' 
+              AND fr.value = ?
+              AND fs.duplicated = FALSE
+          `, [formId, activeCampaign]);
           susUtmSource = Array.isArray(susUtmResult) && susUtmResult.length > 0 ? (susUtmResult[0] as any).count : 0;
         }
 
-        // Get EMT+Organic (submissions allocated to this entity but utm_campaign from EMT entity or no utm_campaign) - with deduplication
+        // Get EMT+Organic (submissions allocated to this entity but utm_campaign from EMT entity or no utm_campaign) - using duplicated column
         let emtPlusOrganic = 0;
         if (emtEntityId) {
           const emtActiveCampaign = activeCampaignsByEntity.get(emtEntityId);
           
           if (emtActiveCampaign) {
-            // Submissions allocated to this entity but with EMT utm_campaign - with deduplication
+            // Submissions allocated to this entity but with EMT utm_campaign - using duplicated column
             const [emtCampaignResult] = await pool.query(`
-              WITH RankedSubmissions AS (
-                SELECT 
-                  fs.id,
-                  fs.entity_id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY 
-                      CASE 
-                        WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                        WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                        ELSE CONCAT('unique_', fs.id)
-                      END
-                    ORDER BY fs.timestamp DESC
-                  ) as rn
-                FROM form_submissions fs
-                JOIN form_responses fr ON fs.id = fr.submission_id
-                JOIN form_fields ff ON fr.field_id = ff.id
-                LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                  AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-                LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                  AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-                WHERE fs.form_id = ? 
-                  AND fs.entity_id = ?
-                  AND ff.field_name = 'utm_campaign' 
-                  AND fr.value = ?
-              )
               SELECT COUNT(*) as count
-              FROM RankedSubmissions 
-              WHERE rn = 1
-            `, [formId, formId, formId, entityId, emtActiveCampaign]);
+              FROM form_submissions fs
+              JOIN form_responses fr ON fs.id = fr.submission_id
+              JOIN form_fields ff ON fr.field_id = ff.id
+              WHERE fs.form_id = ? 
+                AND fs.entity_id = ?
+                AND ff.field_name = 'utm_campaign' 
+                AND fr.value = ?
+                AND fs.duplicated = FALSE
+            `, [formId, entityId, emtActiveCampaign]);
             const emtCampaignCount = Array.isArray(emtCampaignResult) && emtCampaignResult.length > 0 ? (emtCampaignResult[0] as any).count : 0;
 
-            // Submissions allocated to this entity but without ANY UTM parameters (organic) - with deduplication
+            // Submissions allocated to this entity but without ANY UTM parameters (organic) - using duplicated column
             const [organicResult] = await pool.query(`
-              WITH RankedSubmissions AS (
-                SELECT 
-                  fs.id,
-                  fs.entity_id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY 
-                      CASE 
-                        WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                        WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                        ELSE CONCAT('unique_', fs.id)
-                      END
-                    ORDER BY fs.timestamp DESC
-                  ) as rn
-                FROM form_submissions fs
-                LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                  AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-                LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                  AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-                WHERE fs.form_id = ? 
-                  AND fs.entity_id = ?
-                  AND NOT EXISTS (
-                    SELECT 1 FROM form_responses fr2
-                    JOIN form_fields ff2 ON fr2.field_id = ff2.id
-                    WHERE fr2.submission_id = fs.id 
-                      AND ff2.field_name IN ('utm_source', 'utm_medium', 'utm_campaign', 'utm_id', 'utm_content', 'utm_name', 'utm_term')
-                      AND fr2.value IS NOT NULL 
-                      AND TRIM(fr2.value) != ''
-                  )
-              )
               SELECT COUNT(*) as count
-              FROM RankedSubmissions 
-              WHERE rn = 1
-            `, [formId, formId, formId, entityId]);
+              FROM form_submissions fs
+              WHERE fs.form_id = ? 
+                AND fs.entity_id = ?
+                AND fs.duplicated = FALSE
+                AND NOT EXISTS (
+                  SELECT 1 FROM form_responses fr2
+                  JOIN form_fields ff2 ON fr2.field_id = ff2.id
+                  WHERE fr2.submission_id = fs.id 
+                    AND ff2.field_name IN ('utm_source', 'utm_medium', 'utm_campaign', 'utm_id', 'utm_content', 'utm_name', 'utm_term')
+                    AND fr2.value IS NOT NULL 
+                    AND TRIM(fr2.value) != ''
+                )
+            `, [formId, entityId]);
             const organicCount = Array.isArray(organicResult) && organicResult.length > 0 ? (organicResult[0] as any).count : 0;
 
             emtPlusOrganic = emtCampaignCount + organicCount;
@@ -445,35 +363,16 @@ export async function GET(request: NextRequest) {
         if (activeCampaign) {
           // Submissions with this entity's active UTM campaign but entity_id is NULL (NOT FOUND) - with deduplication
           const [otherSourceResult] = await pool.query(`
-            WITH RankedSubmissions AS (
-              SELECT 
-                fs.id,
-                fs.entity_id,
-                ROW_NUMBER() OVER (
-                  PARTITION BY 
-                    CASE 
-                      WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                      WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                      ELSE CONCAT('unique_', fs.id)
-                    END
-                  ORDER BY fs.timestamp DESC
-                ) as rn
-              FROM form_submissions fs
-              JOIN form_responses fr ON fs.id = fr.submission_id
-              JOIN form_fields ff ON fr.field_id = ff.id
-              LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-              LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-              WHERE fs.form_id = ? 
-                AND ff.field_name = 'utm_campaign' 
-                AND fr.value = ?
-                AND fs.entity_id IS NULL
-            )
             SELECT COUNT(*) as count
-            FROM RankedSubmissions 
-            WHERE rn = 1
-          `, [formId, formId, formId, activeCampaign]);
+            FROM form_submissions fs
+            JOIN form_responses fr ON fs.id = fr.submission_id
+            JOIN form_fields ff ON fr.field_id = ff.id
+            WHERE fs.form_id = ? 
+              AND ff.field_name = 'utm_campaign' 
+              AND fr.value = ?
+              AND fs.entity_id IS NULL
+              AND fs.duplicated = FALSE
+          `, [formId, activeCampaign]);
           otherSource = Array.isArray(otherSourceResult) && otherSourceResult.length > 0 ? (otherSourceResult[0] as any).count : 0;
         } else {
           // If no active campaign, no "other source" submissions
@@ -521,115 +420,116 @@ export async function GET(request: NextRequest) {
 
         if (entityName.toLowerCase() === 'emt') {
           // Get EMT submissions (submissions with EMT active campaign) - with deduplication
-          // EMT SUs = submissions that have utm_campaign = EMT's active campaign (regardless of submission's entity_id)
+          // EMT SUs = submissions that have utm_campaign = EMT's active campaign AND entity_id is NULL/0
           const emtActiveCampaign = activeCampaignsByEntity.get(emtEntityId);
           console.log('Debug - EMT Entity Calculation - Active Campaign:', emtActiveCampaign);
           
           if (emtActiveCampaign) {
-            // Debug: Show all submissions that will be counted for EMT
-            const [emtDebugResult] = await pool.query(`
-              SELECT 
-                fs.id as submission_id,
-                fs.timestamp,
-                fs.entity_id,
-                e.name as entity_name,
-                fr.value as utm_campaign,
-                phone.value as phone,
-                email.value as email,
-                CASE 
-                  WHEN phone.value IS NOT NULL AND phone.value != '' AND LENGTH(TRIM(phone.value)) > 0 THEN LOWER(TRIM(phone.value))
-                  WHEN email.value IS NOT NULL AND email.value != '' AND LENGTH(TRIM(email.value)) > 0 THEN LOWER(TRIM(email.value))
-                  ELSE CONCAT('unique_', fs.id)
-                END as dedup_key
+            // SUs | market = all submissions with EMT campaign (any entity), deduped
+            const [emtMarketResult] = await pool.query(`
+              SELECT COUNT(*) as count
               FROM form_submissions fs
               JOIN form_responses fr ON fs.id = fr.submission_id
               JOIN form_fields ff ON fr.field_id = ff.id
-              LEFT JOIN entity e ON fs.entity_id = e.entity_id
-              LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-              LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
               WHERE fs.form_id = ? 
                 AND ff.field_name = 'utm_campaign' 
                 AND fr.value = ?
-              ORDER BY fs.timestamp DESC
-            `, [formId, formId, formId, emtActiveCampaign]);
-            
-            console.log('Debug - EMT Submissions to be counted (before deduplication):', emtDebugResult);
-            
+                AND fs.duplicated = FALSE
+            `, [formId, emtActiveCampaign]);
+            susUtmSource = Array.isArray(emtMarketResult) && emtMarketResult.length > 0 ? (emtMarketResult[0] as any).count : 0;
+
+            // Count EMT submissions with entity not found
             const [emtResult] = await pool.query(`
-              WITH RankedSubmissions AS (
-                SELECT 
-                  fs.id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY 
-                      CASE 
-                        WHEN phone.value IS NOT NULL AND phone.value != '' AND LENGTH(TRIM(phone.value)) > 0 THEN LOWER(TRIM(phone.value))
-                        WHEN email.value IS NOT NULL AND email.value != '' AND LENGTH(TRIM(email.value)) > 0 THEN LOWER(TRIM(email.value))
-                        ELSE CONCAT('unique_', fs.id)
-                      END
-                    ORDER BY fs.timestamp DESC
-                  ) as rn
-                FROM form_submissions fs
-                JOIN form_responses fr ON fs.id = fr.submission_id
-                JOIN form_fields ff ON fr.field_id = ff.id
-                JOIN utm_campaigns uc ON fr.value = uc.code
-                LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                  AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-                LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                  AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-                WHERE fs.form_id = ? 
-                  AND ff.field_name = 'utm_campaign' 
-                  AND fr.value = ?
-                  -- Note: We don't filter by fs.entity_id here - we count ALL submissions with EMT's active campaign
-              )
               SELECT COUNT(*) as count
-              FROM RankedSubmissions 
-              WHERE rn = 1
-            `, [formId, formId, formId, emtActiveCampaign]);
-            sus = Array.isArray(emtResult) && emtResult.length > 0 ? (emtResult[0] as any).count : 0;
-            msus = sus; // For EMT, MSUs = SUs (all EMT submissions have UTM campaign)
+              FROM form_submissions fs
+              JOIN form_responses fr ON fs.id = fr.submission_id
+              JOIN form_fields ff ON fr.field_id = ff.id
+              JOIN utm_campaigns uc ON fr.value = uc.code
+              WHERE fs.form_id = ? 
+                AND ff.field_name = 'utm_campaign' 
+                AND fr.value = ?
+                AND (fs.entity_id IS NULL OR fs.entity_id = 0)
+                AND fs.duplicated = FALSE
+            `, [formId, emtActiveCampaign]);
+            const emtNotFound = Array.isArray(emtResult) && emtResult.length > 0 ? (emtResult[0] as any).count : 0;
+            // SUs for EMT = all submissions with EMT campaign (any entity)
+            sus = susUtmSource;
+            msus = susUtmSource;
+            otherSource = emtNotFound;
             
             console.log('Debug - EMT Final Count (after deduplication):', sus);
           } else {
             console.log('Debug - EMT Active Campaign not found!');
           }
-        } else if (entityName.toLowerCase() === 'organic') {
-          // Get organic submissions (submissions without utm_campaign OR utm_campaign not in utm_campaigns table) - with deduplication
-          // Organic SUs = submissions that have NO utm_campaign OR utm_campaign not in database (regardless of submission's entity_id)
-          const [organicResult] = await pool.query(`
-            WITH RankedSubmissions AS (
-              SELECT 
-                fs.id,
-                ROW_NUMBER() OVER (
-                  PARTITION BY 
-                    CASE 
-                      WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                      WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                      ELSE CONCAT('unique_', fs.id)
-                    END
-                  ORDER BY fs.timestamp DESC
-                ) as rn
+        } else if (entityName.toLowerCase() === 'est') {
+          // EST SUs = submissions with EST active campaign AND entity_id is NULL/0
+          const estActiveCampaign = activeCampaignsByEntity.get(estEntityId);
+          console.log('Debug - EST Entity Calculation - Active Campaign:', estActiveCampaign);
+
+          if (estActiveCampaign) {
+            // SUs | market = all submissions with EST campaign (any entity), deduped
+            const [estMarketResult] = await pool.query(`
+              SELECT COUNT(*) as count
               FROM form_submissions fs
-              LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-              LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-              LEFT JOIN form_responses utm ON fs.id = utm.submission_id 
-                AND utm.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_campaign')
-              LEFT JOIN utm_campaigns uc ON utm.value = uc.code
+              JOIN form_responses fr ON fs.id = fr.submission_id
+              JOIN form_fields ff ON fr.field_id = ff.id
               WHERE fs.form_id = ? 
-                AND (utm.value IS NULL OR utm.value = '' OR uc.code IS NULL)
-              -- Note: We don't filter by fs.entity_id here - we count ALL submissions without valid utm_campaign
-            )
+                AND ff.field_name = 'utm_campaign' 
+                AND fr.value = ?
+                AND fs.duplicated = FALSE
+            `, [formId, estActiveCampaign]);
+            susUtmSource = Array.isArray(estMarketResult) && estMarketResult.length > 0 ? (estMarketResult[0] as any).count : 0;
+
+            const [estCountResult] = await pool.query(`
+              SELECT COUNT(*) as count
+              FROM form_submissions fs
+              JOIN form_responses fr ON fs.id = fr.submission_id
+              JOIN form_fields ff ON fr.field_id = ff.id
+              JOIN utm_campaigns uc ON fr.value = uc.code
+              WHERE fs.form_id = ? 
+                AND ff.field_name = 'utm_campaign' 
+                AND fr.value = ?
+                AND (fs.entity_id IS NULL OR fs.entity_id = 0)
+                AND fs.duplicated = FALSE
+            `, [formId, estActiveCampaign]);
+            sus = Array.isArray(estCountResult) && estCountResult.length > 0 ? (estCountResult[0] as any).count : 0;
+            msus = sus;
+            otherSource = sus;
+            console.log('Debug - EST Final Count (entity not found):', sus);
+          } else {
+            console.log('Debug - EST Active Campaign not found!');
+          }
+        } else if (entityName.toLowerCase() === 'organic') {
+          // Other Source (subset): submissions with entity not found AND utm_campaign not from the selected form
+          const [organicNotFoundResult] = await pool.query(`
             SELECT COUNT(*) as count
-            FROM RankedSubmissions 
-            WHERE rn = 1
-          `, [formId, formId, formId, formId]);
-          sus = Array.isArray(organicResult) && organicResult.length > 0 ? (organicResult[0] as any).count : 0;
-          msus = 0; // Organic submissions don't have valid UTM campaigns
-          
-          console.log('Debug - Organic Final Count (after deduplication):', sus);
+            FROM form_submissions fs
+            LEFT JOIN form_responses utm ON fs.id = utm.submission_id 
+              AND utm.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_campaign')
+            LEFT JOIN utm_campaigns uc ON utm.value = uc.code
+            WHERE fs.form_id = ? 
+              AND (fs.entity_id IS NULL OR fs.entity_id = 0)
+              AND (uc.form_id IS NULL OR uc.form_id <> ?)
+              AND fs.duplicated = FALSE
+          `, [formId, formId, formId]);
+          const organicNotFound = Array.isArray(organicNotFoundResult) && organicNotFoundResult.length > 0 ? (organicNotFoundResult[0] as any).count : 0;
+          otherSource = organicNotFound;
+          msus = 0;
+
+          // SUs and SUs | market for Organic = all submissions whose utm_campaign is not from this form (any entity), deduped
+          const [organicMarketResult] = await pool.query(`
+            SELECT COUNT(*) as count
+            FROM form_submissions fs
+            LEFT JOIN form_responses utm ON fs.id = utm.submission_id 
+              AND utm.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_campaign')
+            LEFT JOIN utm_campaigns uc ON utm.value = uc.code
+            WHERE fs.form_id = ? 
+              AND (uc.form_id IS NULL OR uc.form_id <> ?)
+              AND fs.duplicated = FALSE
+          `, [formId, formId, formId]);
+          susUtmSource = Array.isArray(organicMarketResult) && organicMarketResult.length > 0 ? (organicMarketResult[0] as any).count : 0;
+          sus = susUtmSource;
+          console.log('Debug - Organic (entity not found, campaign not from this form) Final Count:', sus);
         } else {
           // All other national entities (except EMT and Organic) are calculated like EMT
           // Get submissions with UTM campaign matching this entity's active campaign - with deduplication
@@ -639,6 +539,19 @@ export async function GET(request: NextRequest) {
           console.log(`Debug - ${entityName} Active Campaign:`, entityActiveCampaign);
           
           if (entityActiveCampaign) {
+            // SUs | market = all submissions with this national entity's campaign (any entity), deduped
+            const [entityMarketResult] = await pool.query(`
+              SELECT COUNT(*) as count
+              FROM form_submissions fs
+              JOIN form_responses fr ON fs.id = fr.submission_id
+              JOIN form_fields ff ON fr.field_id = ff.id
+              WHERE fs.form_id = ? 
+                AND ff.field_name = 'utm_campaign' 
+                AND fr.value = ?
+                AND fs.duplicated = FALSE
+            `, [formId, entityActiveCampaign]);
+            susUtmSource = Array.isArray(entityMarketResult) && entityMarketResult.length > 0 ? (entityMarketResult[0] as any).count : 0;
+
             // Debug: Check if there are any submissions with this entity's active campaign
             const [debugEntitySubmissions] = await pool.query(`
               SELECT 
@@ -668,77 +581,25 @@ export async function GET(request: NextRequest) {
             console.log(`Debug - ${entityName} Total submissions with active campaign:`, Array.isArray(debugEntitySubmissions) ? debugEntitySubmissions.length : 0);
             
             const [entityResult] = await pool.query(`
-              WITH RankedSubmissions AS (
-                SELECT 
-                  fs.id,
-                  fs.entity_id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY 
-                      CASE 
-                        WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                        WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                        ELSE CONCAT('unique_', fs.id)
-                      END
-                    ORDER BY fs.timestamp DESC
-                  ) as rn
-                FROM form_submissions fs
-                JOIN form_responses fr ON fs.id = fr.submission_id
-                JOIN form_fields ff ON fr.field_id = ff.id
-                JOIN utm_campaigns uc ON fr.value = uc.code
-                LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                  AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-                LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                  AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-                WHERE fs.form_id = ? 
-                  AND ff.field_name = 'utm_campaign' 
-                  AND fr.value = ?
-                  -- Note: We don't filter by fs.entity_id here - we count ALL submissions with this entity's active campaign
-              )
               SELECT COUNT(*) as count
-              FROM RankedSubmissions 
-              WHERE rn = 1
-            `, [formId, formId, formId, entityActiveCampaign]);
+              FROM form_submissions fs
+              JOIN form_responses fr ON fs.id = fr.submission_id
+              JOIN form_fields ff ON fr.field_id = ff.id
+              JOIN utm_campaigns uc ON fr.value = uc.code
+              WHERE fs.form_id = ? 
+                AND ff.field_name = 'utm_campaign' 
+                AND fr.value = ?
+                AND (fs.entity_id IS NULL OR fs.entity_id = 0)
+                AND fs.duplicated = FALSE
+            `, [formId, entityActiveCampaign]);
             
             sus = Array.isArray(entityResult) && entityResult.length > 0 ? (entityResult[0] as any).count : 0;
             msus = sus; // For these entities, MSUs = SUs (all submissions have UTM campaign)
+            otherSource = sus;
             
             console.log(`Debug - ${entityName} Final Count (after deduplication):`, sus);
 
-            // Get Other Source for national entities (submissions with this entity's UTM campaign but entity_id is NOT FOUND) - with deduplication
-            const [otherSourceResult] = await pool.query(`
-              WITH RankedSubmissions AS (
-                SELECT 
-                  fs.id,
-                  fs.entity_id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY 
-                      CASE 
-                        WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                        WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                        ELSE CONCAT('unique_', fs.id)
-                      END
-                    ORDER BY fs.timestamp DESC
-                  ) as rn
-                FROM form_submissions fs
-                JOIN form_responses fr ON fs.id = fr.submission_id
-                JOIN form_fields ff ON fr.field_id = ff.id
-                JOIN utm_campaigns uc ON fr.value = uc.code
-                LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                  AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-                LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                  AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-                WHERE fs.form_id = ? 
-                  AND ff.field_name = 'utm_campaign' 
-                  AND fr.value = ?
-                  AND (fs.entity_id IS NULL OR fs.entity_id = 0)
-              )
-              SELECT COUNT(*) as count
-              FROM RankedSubmissions 
-              WHERE rn = 1
-            `, [formId, formId, formId, entityActiveCampaign]);
-            otherSource = Array.isArray(otherSourceResult) && otherSourceResult.length > 0 ? (otherSourceResult[0] as any).count : 0;
-            
-            console.log(`Debug - ${entityName} Other Source (NOT FOUND) count:`, otherSource);
+            otherSource = 0;
           } else {
             console.log(`Debug - ${entityName} No active campaign found!`);
             sus = 0;
@@ -769,70 +630,41 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Calculate Total National "Not Found from your UTM source"
-    // This should count submissions with UTM campaigns from national entities but entity_id is NULL/NOT FOUND
-    const [totalNationalNotFoundResult] = await pool.query(`
-      WITH RankedSubmissions AS (
-        SELECT 
-          fs.id,
-          fs.entity_id,
-          ROW_NUMBER() OVER (
-            PARTITION BY 
-              CASE 
-                WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                ELSE CONCAT('unique_', fs.id)
-              END
-            ORDER BY fs.timestamp DESC
-          ) as rn
-        FROM form_submissions fs
-        JOIN form_responses fr ON fs.id = fr.submission_id
-        JOIN form_fields ff ON fr.field_id = ff.id
-        JOIN utm_campaigns uc ON fr.value = uc.code
-        JOIN entity e ON uc.entity_id = e.entity_id
-        LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-          AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-        LEFT JOIN form_responses email ON fs.id = email.submission_id 
-          AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-        WHERE fs.form_id = ? 
-          AND ff.field_name = 'utm_campaign' 
-          AND e.type = 'national'
-          AND (fs.entity_id IS NULL OR fs.entity_id = 0)
-      )
+    // Calculate Total Local "Not Found from your UTM source"
+    // This counts submissions with UTM campaigns from local entities but entity_id is NULL/NOT FOUND
+    const [totalLocalNotFoundResult] = await pool.query(`
       SELECT COUNT(*) as count
-      FROM RankedSubmissions 
-      WHERE rn = 1
-    `, [formId, formId, formId]);
+      FROM form_submissions fs
+      JOIN form_responses fr ON fs.id = fr.submission_id
+      JOIN form_fields ff ON fr.field_id = ff.id
+      JOIN utm_campaigns uc ON fr.value = uc.code
+      JOIN entity e ON uc.entity_id = e.entity_id
+      WHERE fs.form_id = ? 
+        AND ff.field_name = 'utm_campaign' 
+        AND e.type = 'local'
+        AND (fs.entity_id IS NULL OR fs.entity_id = 0)
+        AND fs.duplicated = FALSE
+    `, [formId]);
     
-    const totalNationalNotFound = Array.isArray(totalNationalNotFoundResult) && totalNationalNotFoundResult.length > 0 ? (totalNationalNotFoundResult[0] as any).count : 0;
+    const totalLocalNotFound = Array.isArray(totalLocalNotFoundResult) && totalLocalNotFoundResult.length > 0 ? (totalLocalNotFoundResult[0] as any).count : 0;
     
-    console.log('Debug - Total National NOT FOUND count:', totalNationalNotFound);
+    console.log('Debug - Total Local NOT FOUND count:', totalLocalNotFound);
+
+    // Calculate Total National "Not Found from your UTM source" as the sum of national rows' other_source
+    const totalNationalNotFound = nationalEntityStats.reduce((sum: number, stat: any) => sum + (stat.other_source || 0), 0);
+    console.log('Debug - Total National NOT FOUND count (from rows):', totalNationalNotFound);
+
+    // Calculate "Total of Total" = Total Local NOT FOUND + Total National NOT FOUND
+    const totalOfTotal = totalLocalNotFound + totalNationalNotFound;
+    
+    console.log('Debug - Total of Total (Local + National NOT FOUND):', totalOfTotal);
 
     // Calculate total submissions after deduplication for the entire form
     const [totalDeduplicatedSubmissionsResult] = await pool.query(`
-      WITH RankedSubmissions AS (
-        SELECT 
-          fs.id,
-          ROW_NUMBER() OVER (
-            PARTITION BY 
-              CASE 
-                WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                ELSE CONCAT('unique_', fs.id)
-              END
-            ORDER BY fs.timestamp DESC
-          ) as rn
-        FROM form_submissions fs
-        LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-          AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-        LEFT JOIN form_responses email ON fs.id = email.submission_id 
-          AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-        WHERE fs.form_id = ?
-      )
       SELECT COUNT(*) as total
-      FROM RankedSubmissions 
-      WHERE rn = 1
-    `, [formId, formId, formId]);
+      FROM form_submissions fs
+      WHERE fs.form_id = ? AND fs.duplicated = FALSE
+    `, [formId]);
     
     const totalDeduplicatedSubmissions = Array.isArray(totalDeduplicatedSubmissionsResult) && totalDeduplicatedSubmissionsResult.length > 0 ? (totalDeduplicatedSubmissionsResult[0] as any).total : 0;
     
@@ -846,7 +678,9 @@ export async function GET(request: NextRequest) {
       data: {
         form,
         entityStats: entityStats,
+        totalLocalNotFound,
         totalNationalNotFound,
+        totalOfTotal,
         totalDeduplicatedSubmissions,
         compare: compare || null
       }

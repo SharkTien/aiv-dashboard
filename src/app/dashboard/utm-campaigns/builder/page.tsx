@@ -153,7 +153,7 @@ export default function UTMCampaignBuilderPage() {
             >
               <option value="">Select Phase *</option>
               {forms.map(form => (
-                <option key={form.id} value={form.id}>{form.name} ({form.code})</option>
+                <option key={form.id} value={form.id}>{form.name.replace('oGV', 'Phase').replace('Submissions', '')}</option>
               ))}
             </select>
             <button onClick={createFromFormat} disabled={saving || !selectedForm} className="h-11 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white">Create</button>
@@ -219,9 +219,8 @@ export default function UTMCampaignBuilderPage() {
               onChange={(e) => setFormFilter(e.target.value ? Number(e.target.value) : "")}
               className="h-9 px-3 rounded-md ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
             >
-              <option value="">All Phases</option>
               {forms.map(form => (
-                <option key={form.id} value={form.id}>{form.name}</option>
+                <option key={form.id} value={form.id}>{form.name.replace('oGV', 'Phase').replace('Submissions', '')}</option>
               ))}
             </select>
           </div>

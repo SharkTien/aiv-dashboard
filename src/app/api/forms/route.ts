@@ -4,11 +4,40 @@ import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(Number(searchParams.get("page") || 1), 1);
+    const limit = Math.min(Number(searchParams.get("limit") || 20), 100);
+    const offset = (page - 1) * limit;
+    const search = searchParams.get("q") || "";
+    const type = searchParams.get("type") || "";
+    
     const pool = getDbPool();
 
-    // Fetch all forms
-    const [forms] = await pool.execute(`
-      SELECT 
+    // Build WHERE clause
+    let whereClause = "";
+    const params: any[] = [];
+    
+    if (search.trim()) {
+      whereClause += " WHERE (name LIKE ? OR code LIKE ?)";
+      params.push(`%${search.trim()}%`, `%${search.trim()}%`);
+    }
+    
+    if (type && type !== 'all') {
+      whereClause += whereClause ? " AND" : " WHERE";
+      whereClause += " type = ?";
+      params.push(type);
+    }
+
+    // Get total count
+    const [countResult] = await pool.execute(
+      `SELECT COUNT(*) as total FROM forms ${whereClause}`,
+      params
+    );
+    const total = Array.isArray(countResult) && countResult.length > 0 ? (countResult[0] as any).total : 0;
+
+    // Fetch paginated forms
+    const [forms] = await pool.execute(
+      `SELECT 
         id,
         code,
         name,
@@ -16,12 +45,25 @@ export async function GET(request: NextRequest) {
         created_at,
         updated_at
       FROM forms 
+      ${whereClause}
       ORDER BY type, name
-    `);
+      LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({
       success: true,
-      items: forms
+      items: forms,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
     });
 
   } catch (error) {
@@ -51,9 +93,14 @@ export async function POST(req: NextRequest) {
   const pool = getDbPool();
   
   try {
+    // Start transaction
+    await pool.query('START TRANSACTION');
+    
     // Generate unique code based on name and timestamp
     const timestamp = Date.now();
     const code = `${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${timestamp}`;
+    
+    console.log('Creating form with code:', code, 'name:', name, 'type:', type);
     
     const [result] = await pool.query(
       "INSERT INTO forms (code, name, type) VALUES (?, ?, ?)",
@@ -61,13 +108,31 @@ export async function POST(req: NextRequest) {
     );
     
     const formId = (result as any).insertId;
+    console.log('Form created with ID:', formId);
+    
+    // Commit transaction
+    await pool.query('COMMIT');
+    console.log('Form created successfully');
     
     return NextResponse.json({ 
       success: true, 
       form: { id: formId, code, name, type }
     });
   } catch (error) {
+    // Rollback transaction on error
+    try {
+      await pool.query('ROLLBACK');
+      console.log('Transaction rolled back due to error');
+    } catch (rollbackError) {
+      console.error("Error rolling back transaction:", rollbackError);
+    }
+    
     console.error("Error creating form:", error);
+    console.error("Error details:", {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    
     return NextResponse.json({ error: "Failed to create form" }, { status: 500 });
   }
 }

@@ -117,7 +117,7 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
                 <NavItem href="/dashboard/ogv-hub" icon={<HomeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                   Dashboard
                 </NavItem>
-                <NavItem href="/dashboard/utm-generator" icon={<LinkIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                <NavItem href="/dashboard/utm-generator?type=oGV" icon={<LinkIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                   UTM Generator
                 </NavItem>
                 <NavItem href="/dashboard/ogv/data" icon={<DatabaseIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
@@ -134,7 +134,30 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
 
             {/* Separator */}
             <div className="border-t border-gray-200 dark:border-gray-700"></div>
- 
+
+            {/* TMR Hub Section */}
+            <div>
+              {!isCollapsed && (
+                <div className="mb-2 text-xs uppercase text-gray-500 dark:text-gray-400 font-semibold">
+                  TMR Hub
+                </div>
+              )}
+              <div className="space-y-1">
+                <NavItem href="/dashboard/tmr-hub" icon={<HomeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                  Dashboard
+                </NavItem>
+                <NavItem href="/dashboard/utm-generator?type=TMR" icon={<LinkIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                  UTM Generator
+                </NavItem>
+                <NavItem href="/dashboard/tmr/data" icon={<DatabaseIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                  Data
+                </NavItem>
+              </div>
+            </div>
+
+            {/* Separator */}
+            <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
             {/* Administration Section */}
             {isAdmin && (
               <div>

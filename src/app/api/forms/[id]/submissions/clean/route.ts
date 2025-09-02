@@ -26,90 +26,41 @@ export async function GET(
   const pool = getDbPool();
 
   try {
-    // Get all submissions with deduplication by email/phone (keep newest)
+    // Get all submissions with duplicated = false
     const [submissionsResult] = await pool.query(`
-      WITH RankedSubmissions AS (
-        SELECT 
-          fs.id,
-          fs.timestamp,
-          fs.entity_id,
-          e.name as entity_name,
-          f.code as form_code,
-          phone.value as phone_value,
-          email.value as email_value,
-          utm.value as utm_campaign_value,
-          uc.name as utm_campaign_name,
-          CASE 
-            WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-            WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-            ELSE CONCAT('unique_', fs.id)
-          END as dedup_key,
-          ROW_NUMBER() OVER (
-            PARTITION BY 
-              CASE 
-                WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                ELSE CONCAT('unique_', fs.id)
-              END
-            ORDER BY fs.timestamp DESC
-          ) as rn
-        FROM form_submissions fs
-        LEFT JOIN entity e ON fs.entity_id = e.entity_id
-        LEFT JOIN forms f ON fs.form_id = f.id
-        LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-          AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-        LEFT JOIN form_responses email ON fs.id = email.submission_id 
-          AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-        LEFT JOIN form_responses utm ON fs.id = utm.submission_id 
-          AND utm.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_campaign')
-        LEFT JOIN utm_campaigns uc ON utm.value = uc.code
-        WHERE fs.form_id = ?
-      )
       SELECT 
-        id,
-        timestamp,
-        entity_id,
-        entity_name,
-        form_code,
-        phone_value,
-        email_value,
-        utm_campaign_value,
-        utm_campaign_name,
-        dedup_key,
-        rn
-      FROM RankedSubmissions 
-      WHERE rn = 1
-      ORDER BY timestamp DESC
+        fs.id,
+        fs.timestamp,
+        fs.entity_id,
+        e.name as entity_name,
+        f.code as form_code,
+        phone.value as phone_value,
+        email.value as email_value,
+        utm.value as utm_campaign_value,
+        uc.name as utm_campaign_name
+      FROM form_submissions fs
+      LEFT JOIN entity e ON fs.entity_id = e.entity_id
+      LEFT JOIN forms f ON fs.form_id = f.id
+      LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
+        AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
+      LEFT JOIN form_responses email ON fs.id = email.submission_id 
+        AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
+      LEFT JOIN form_responses utm ON fs.id = utm.submission_id 
+        AND utm.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_campaign')
+      LEFT JOIN utm_campaigns uc ON utm.value = uc.code
+      WHERE fs.form_id = ? AND fs.duplicated = FALSE
+      ORDER BY fs.timestamp DESC
       ${getUnlimited ? '' : 'LIMIT ? OFFSET ?'}
     `, getUnlimited ? [formId, formId, formId, formId] : [formId, formId, formId, formId, limit, offset]);
 
     const submissions = Array.isArray(submissionsResult) ? submissionsResult : [];
 
-    // Get total count with deduplication
+    // Get total count of non-duplicated submissions
     const [countResult] = await pool.query(`
-      WITH RankedSubmissions AS (
-        SELECT 
-          fs.id,
-          ROW_NUMBER() OVER (
-            PARTITION BY 
-              CASE 
-                WHEN COALESCE(phone.value, '') != '' AND TRIM(COALESCE(phone.value, '')) != '' THEN TRIM(COALESCE(phone.value, ''))
-                WHEN COALESCE(email.value, '') != '' AND TRIM(COALESCE(email.value, '')) != '' THEN TRIM(COALESCE(email.value, ''))
-                ELSE CONCAT('unique_', fs.id)
-              END
-            ORDER BY fs.timestamp DESC
-          ) as rn
-        FROM form_submissions fs
-        LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-          AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-        LEFT JOIN form_responses email ON fs.id = email.submission_id 
-          AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-        WHERE fs.form_id = ?
-      )
       SELECT COUNT(*) as total
-      FROM RankedSubmissions 
-      WHERE rn = 1
-    `, [formId, formId, formId]);
+      FROM form_submissions fs
+      WHERE fs.form_id = ? AND fs.duplicated = FALSE
+    `, [formId]);
 
     const total = Array.isArray(countResult) && countResult.length > 0 ? (countResult[0] as any).total : 0;
 

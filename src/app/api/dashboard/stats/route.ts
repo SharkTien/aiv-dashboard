@@ -11,12 +11,12 @@ export async function GET(req: NextRequest) {
   const pool = getDbPool();
 
   try {
-    // Get total submissions for oGV forms only
+    // Get total submissions for oGV forms only (only non-duplicated)
     const [submissionsResult] = await pool.query(`
       SELECT COUNT(*) as total 
       FROM form_submissions fs 
       JOIN forms f ON fs.form_id = f.id 
-      WHERE f.type = 'oGV'
+      WHERE f.type = 'oGV' AND fs.duplicated = FALSE
     `);
     const totalSubmissions = Array.isArray(submissionsResult) && submissionsResult.length > 0 
       ? (submissionsResult[0] as any).total : 0;
@@ -31,24 +31,24 @@ export async function GET(req: NextRequest) {
     const totalUsers = Array.isArray(usersResult) && usersResult.length > 0 
       ? (usersResult[0] as any).total : 0;
 
-    // Get submissions this month for oGV forms only
+    // Get submissions this month for oGV forms only (only non-duplicated)
     const [monthlyResult] = await pool.query(`
       SELECT COUNT(*) as total 
       FROM form_submissions fs 
       JOIN forms f ON fs.form_id = f.id 
-      WHERE f.type = 'oGV' 
+      WHERE f.type = 'oGV' AND fs.duplicated = FALSE
       AND MONTH(fs.timestamp) = MONTH(CURRENT_DATE()) 
       AND YEAR(fs.timestamp) = YEAR(CURRENT_DATE())
     `);
     const submissionsThisMonth = Array.isArray(monthlyResult) && monthlyResult.length > 0 
       ? (monthlyResult[0] as any).total : 0;
 
-    // Get submissions last month for growth calculation (oGV forms only)
+    // Get submissions last month for growth calculation (oGV forms only) (only non-duplicated)
     const [lastMonthResult] = await pool.query(`
       SELECT COUNT(*) as total 
       FROM form_submissions fs 
       JOIN forms f ON fs.form_id = f.id 
-      WHERE f.type = 'oGV' 
+      WHERE f.type = 'oGV' AND fs.duplicated = FALSE
       AND MONTH(fs.timestamp) = MONTH(DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)) 
       AND YEAR(fs.timestamp) = YEAR(DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH))
     `);
@@ -64,12 +64,12 @@ export async function GET(req: NextRequest) {
     const formsGrowth = 8.2;
     const usersGrowth = 15.7;
 
-    // Count active oGV projects (forms with submissions in last 30 days)
+    // Count active oGV projects (forms with submissions in last 30 days) (only non-duplicated)
     const [activeProjectsResult] = await pool.query(`
       SELECT COUNT(DISTINCT f.id) as total 
       FROM forms f 
       JOIN form_submissions fs ON f.id = fs.form_id 
-      WHERE f.type = 'oGV' 
+      WHERE f.type = 'oGV' AND fs.duplicated = FALSE
       AND fs.timestamp >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
     `);
     const activeProjects = Array.isArray(activeProjectsResult) && activeProjectsResult.length > 0 

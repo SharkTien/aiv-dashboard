@@ -19,9 +19,9 @@ export async function GET(
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
-    // Get submissions with responses and entity information
+    // Get submissions with responses and entity information (all submissions including duplicates)
     const [submissionRows] = await pool.query(
-      `SELECT fs.id, fs.timestamp, fs.entity_id, e.name as entity_name
+      `SELECT fs.id, fs.timestamp, fs.entity_id, e.name as entity_name, fs.duplicated
        FROM form_submissions fs
        LEFT JOIN entity e ON fs.entity_id = e.entity_id
        WHERE fs.form_id = ?
@@ -57,6 +57,7 @@ export async function GET(
             timestamp: submission.timestamp,
             entityId: submission.entity_id,
             entityName: submission.entity_name || null,
+            duplicated: submission.duplicated === 1,
             responses: Array.isArray(responseRows) ? (responseRows as any) : []
           };
         } catch (error) {
@@ -66,6 +67,7 @@ export async function GET(
             timestamp: submission.timestamp,
             entityId: submission.entity_id,
             entityName: submission.entity_name || null,
+            duplicated: submission.duplicated === 1,
             responses: []
           };
         }

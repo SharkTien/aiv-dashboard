@@ -77,9 +77,9 @@ export async function POST(
     console.log("Form fields:", fields.map(f => ({ name: f.field_name, type: f.field_type, options: f.field_options })));
     console.log("Available field names:", Array.from(nameToField.keys()));
 
-    // 1) Create submission row. If your schema has created_at default, omit explicit column
+    // 1) Create submission row with duplicated flag
     const [submissionResult] = await conn.query(
-      "INSERT INTO form_submissions (form_id) VALUES (?)",
+      "INSERT INTO form_submissions (form_id, duplicated) VALUES (?, FALSE)",
       [formId]
     );
     const submissionId = (submissionResult as any).insertId as number;
@@ -194,8 +194,6 @@ export async function POST(
         }
       }
 
-
-
       // Debug logging for uni field
       if (key === "uni") {
         console.log(`Saving uni field value: "${saveValue}" for field_id: ${field.id}`);
@@ -207,7 +205,82 @@ export async function POST(
       );
     }
 
-    // 3-5) Map uni_id -> entity_id and update submission
+    // 3) Check for duplicates after saving responses
+    let phone: string | null = null;
+    let email: string | null = null;
+    
+    // Get phone and email values from form_responses
+    const [phoneResult] = await conn.query(`
+      SELECT fr.value 
+      FROM form_responses fr
+      JOIN form_fields ff ON fr.field_id = ff.id
+      WHERE fr.submission_id = ? AND ff.field_name = 'phone'
+      LIMIT 1
+    `, [submissionId]);
+    
+    const [emailResult] = await conn.query(`
+      SELECT fr.value 
+      FROM form_responses fr
+      JOIN form_fields ff ON fr.field_id = ff.id
+      WHERE fr.submission_id = ? AND ff.field_name = 'email'
+      LIMIT 1
+    `, [submissionId]);
+    
+    if (Array.isArray(phoneResult) && phoneResult.length > 0) {
+      phone = (phoneResult[0] as any).value;
+    }
+    if (Array.isArray(emailResult) && emailResult.length > 0) {
+      email = (emailResult[0] as any).value;
+    }
+    
+    // Check for duplicates
+    if (phone || email) {
+      const duplicateConditions = [];
+      const duplicateParams = [];
+      
+      if (phone) {
+        duplicateConditions.push(`
+          EXISTS (
+            SELECT 1 FROM form_responses fr2
+            JOIN form_fields ff2 ON fr2.field_id = ff2.id
+            WHERE fr2.submission_id = fs2.id 
+              AND ff2.field_name = 'phone' 
+              AND fr2.value = ?
+          )
+        `);
+        duplicateParams.push(phone);
+      }
+      if (email) {
+        duplicateConditions.push(`
+          EXISTS (
+            SELECT 1 FROM form_responses fr2
+            JOIN form_fields ff2 ON fr2.field_id = ff2.id
+            WHERE fr2.submission_id = fs2.id 
+              AND ff2.field_name = 'email' 
+              AND fr2.value = ?
+          )
+        `);
+        duplicateParams.push(email);
+      }
+      
+      const [duplicateRows] = await conn.query(
+        `SELECT fs2.id FROM form_submissions fs2
+         WHERE fs2.form_id = ? AND fs2.duplicated = FALSE AND fs2.id != ? AND (${duplicateConditions.join(' OR ')})`,
+        [formId, submissionId, ...duplicateParams]
+      );
+      
+      if (Array.isArray(duplicateRows) && (duplicateRows as any).length > 0) {
+        console.log(`Found duplicate submission with phone: ${phone}, email: ${email}`);
+        
+        // Update current submission to be marked as duplicate
+        await conn.query(
+          "UPDATE form_submissions SET duplicated = TRUE WHERE id = ?",
+          [submissionId]
+        );
+      }
+    }
+
+    // 4) Map uni_id -> entity_id and update submission
     console.log(`Final uniIdFromPayload: ${uniIdFromPayload}`);
     let entityId = null;
     
