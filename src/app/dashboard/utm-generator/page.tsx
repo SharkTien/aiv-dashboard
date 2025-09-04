@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import LoadingOverlay from "@/components/LoadingOverlay";
 
 type Entity = {
@@ -60,6 +61,7 @@ type Pagination = {
 };
 
 export default function UTMGeneratorPage() {
+  const searchParams = useSearchParams();
   const [entities, setEntities] = useState<Entity[]>([]);
   const [activeCampaign, setActiveCampaign] = useState<ActiveCampaign | null>(null);
   const [sources, setSources] = useState<UTMSource[]>([]);
@@ -84,7 +86,7 @@ export default function UTMGeneratorPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [searchParams]);
 
   // Debug: Log state changes
   useEffect(() => {
@@ -272,14 +274,18 @@ export default function UTMGeneratorPage() {
         setActiveCampaign(active || null);
       }
       // Determine type from query param; default oGV
-      const params = new URLSearchParams(window.location.search);
-      const typeParam = params.get('type');
+      const typeParam = searchParams.get('type');
       const formType = typeParam === 'TMR' ? 'TMR' : 'oGV';
+      console.log('Form type from URL:', formType, 'typeParam:', typeParam);
+      
       const formsRes = await fetch(`/api/forms?type=${encodeURIComponent(formType)}&limit=100`);
       if (formsRes.ok) {
         const formsData = await formsRes.json();
         const formsList = Array.isArray(formsData.items) ? formsData.items : [];
         setAvailableForms(formsList);
+        console.log('Forms loaded for type', formType, ':', formsList.length);
+      } else {
+        console.error('Failed to load forms:', formsRes.status, formsRes.statusText);
       }
 
       setActiveLoading(false);
