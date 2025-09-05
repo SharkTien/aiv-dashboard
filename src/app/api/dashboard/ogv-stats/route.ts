@@ -465,55 +465,61 @@ export async function GET(request: NextRequest) {
         );
 
         if (Array.isArray(compareFormResult) && compareFormResult.length > 0) {
-          const compareForm = compareFormResult[0];
+          const compareForm = compareFormResult[0] as any;
           
           // Get comparison entity stats (MSUs from compare form)
-          // First get active campaigns for the compare form
-          const [compareActiveCampaignsResult] = await pool.query(`
-            SELECT uc.entity_id, uc.code
-            FROM utm_campaigns uc
-            WHERE uc.form_id = ?
-            ORDER BY uc.entity_id
+          // Get all local entities that have submissions in the compare form
+          const [compareEntitiesResult] = await pool.query(`
+            SELECT DISTINCT fs.entity_id, e.name as entity_name
+            FROM form_submissions fs
+            JOIN entity e ON fs.entity_id = e.entity_id
+            WHERE fs.form_id = ? 
+              AND fs.entity_id IS NOT NULL 
+              AND fs.entity_id != 0
+              AND e.type = 'local'
+              AND fs.duplicated = FALSE
+            ORDER BY fs.entity_id
           `, [compare]);
 
-          const compareActiveCampaigns = Array.isArray(compareActiveCampaignsResult) ? compareActiveCampaignsResult : [];
-          const compareActiveCampaignsByEntity = new Map();
-          compareActiveCampaigns.forEach((campaign: any) => {
-            compareActiveCampaignsByEntity.set(campaign.entity_id, campaign.code);
-          });
+          const compareEntities = Array.isArray(compareEntitiesResult) ? compareEntitiesResult : [];
 
           // Get MSUs for each local entity in compare form
           const compareLocalStats = [];
-          for (const [entityId, activeCampaign] of compareActiveCampaignsByEntity) {
+          for (const entity of compareEntities) {
+            const entityId = entity.entity_id;
+            const entityName = entity.entity_name;
+            
+            // Get MSUs for this entity in compare form
+            // MSUs = submissions with utm_campaign that belongs to this entity AND comes from the compare form
             const [msusResult] = await pool.query(`
               SELECT COUNT(*) as count
               FROM form_submissions fs
               JOIN form_responses fr ON fs.id = fr.submission_id
               JOIN form_fields ff ON fr.field_id = ff.id
               JOIN utm_campaigns uc ON fr.value = uc.code
-              JOIN entity e ON fs.entity_id = e.entity_id
               WHERE fs.form_id = ? 
                 AND fs.entity_id = ? 
                 AND ff.field_name = 'utm_campaign' 
-                AND fr.value = ?
-                AND e.type = 'local'
+                AND uc.entity_id = ?
+                AND uc.form_id = ?
                 AND fs.duplicated = FALSE
-            `, [compare, entityId, activeCampaign]);
+            `, [compare, entityId, entityId, compare]);
             
             const msus = Array.isArray(msusResult) && msusResult.length > 0 ? (msusResult[0] as any).count : 0;
             compareLocalStats.push({ entity_id: entityId, msus: msus });
           }
 
-          const compareLocalStatsMap = new Map();
+          // Convert to plain object instead of Map for better serialization
+          const compareLocalStatsObject: { [key: number]: number } = {};
           if (Array.isArray(compareLocalStats)) {
             compareLocalStats.forEach((stat: any) => {
-              compareLocalStatsMap.set(stat.entity_id, stat.msus);
+              compareLocalStatsObject[stat.entity_id] = stat.msus;
             });
           }
 
           compareData = {
             form: compareForm,
-            localMsus: compareLocalStatsMap
+            localMsus: compareLocalStatsObject
           };
         }
       } catch (error) {

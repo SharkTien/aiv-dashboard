@@ -71,7 +71,9 @@ export default function SignupSummary({ className = '', formId, formType }: Sign
   };
 
   const getCompareMsus = (entityId: number) => {
-    if (!compareData || !compareData.localMsus) return 0;
+    if (!compareData || !compareData.localMsus) {
+      return 0;
+    }
     // Handle both Map and object formats (Map gets serialized to object over HTTP)
     if (compareData.localMsus instanceof Map) {
       return compareData.localMsus.get(entityId) || 0;
@@ -128,15 +130,33 @@ export default function SignupSummary({ className = '', formId, formType }: Sign
     if (!formType) return;
     
     try {
-      const endpoint = formType === 'oGV' ? '/api/dashboard/ogv-forms' : '/api/dashboard/tmr-forms';
-      const response = await fetch(endpoint);
-      const result = await response.json();
+      // Load both oGV and TMR forms to get all available forms
+      const [ogvResponse, tmrResponse] = await Promise.all([
+        fetch('/api/dashboard/ogv-forms'),
+        fetch('/api/dashboard/tmr-forms')
+      ]);
       
-      if (result.success) {
-        // Filter out the current form from available forms
-        const filteredForms = result.data.filter((form: any) => form.id !== formId);
-        setAvailableForms(filteredForms);
+      const [ogvResult, tmrResult] = await Promise.all([
+        ogvResponse.json(),
+        tmrResponse.json()
+      ]);
+      
+      let allForms: Array<{id: number, name: string, code: string, type: string}> = [];
+      
+      if (ogvResult.success) {
+        allForms = [...allForms, ...ogvResult.data.map((form: any) => ({...form, type: 'oGV'}))];
       }
+      
+      if (tmrResult.success) {
+        allForms = [...allForms, ...tmrResult.data.map((form: any) => ({...form, type: 'TMR'}))];
+      }
+      
+      // Filter out the current form and only show forms of the same type
+      const filteredForms = allForms.filter((form: any) => 
+        form.id !== formId && form.type === formType
+      );
+      
+      setAvailableForms(filteredForms);
     } catch (error) {
       console.error('Error loading available forms:', error);
     }
@@ -332,7 +352,11 @@ export default function SignupSummary({ className = '', formId, formType }: Sign
                     <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
                       {getCompareMsus(row.entity_id)}
                     </td>
-                    <td className="py-4 px-4 text-center font-semibold bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                    <td className={`py-4 px-4 text-center font-semibold ${
+                      calculateGrowth(row.msu, getCompareMsus(row.entity_id)) >= 0 
+                        ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                    }`}>
                       {calculateGrowth(row.msu, getCompareMsus(row.entity_id)).toFixed(1)}%
                     </td>
                   </>
@@ -359,7 +383,11 @@ export default function SignupSummary({ className = '', formId, formType }: Sign
                     <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
                       {getTotalCompareMsus()}
                     </td>
-                    <td className="py-4 px-4 font-bold text-center bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                    <td className={`py-4 px-4 font-bold text-center ${
+                      calculateGrowth(localTotals.msu, getTotalCompareMsus()) >= 0 
+                        ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                    }`}>
                       {calculateGrowth(localTotals.msu, getTotalCompareMsus()).toFixed(1)}%
                     </td>
                   </>

@@ -117,6 +117,9 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
                 <NavItem href="/dashboard/ogv-hub" icon={<HomeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                   Dashboard
                 </NavItem>
+                <NavItem href="/dashboard/ogv/analytics" icon={<ChartIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                  Analytics
+                </NavItem>
                 <NavItem href="/dashboard/utm-generator?type=oGV" icon={<LinkIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                   UTM Generator
                 </NavItem>
