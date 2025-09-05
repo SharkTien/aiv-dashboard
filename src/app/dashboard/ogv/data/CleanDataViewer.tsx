@@ -54,7 +54,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       const originalOverflow = document.body.style.overflow;
       document.body.dataset.prevOverflow = originalOverflow;
       document.body.style.overflow = 'hidden';
-      return () => {
+    return () => {
         document.body.style.overflow = document.body.dataset.prevOverflow || '';
         delete (document.body as any).dataset.prevOverflow;
       };
@@ -267,15 +267,15 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       {/* Controls */}
       <div className="flex flex-col md:flex-row md:items-center gap-4">
         <div className="flex-1">
-          <input
+            <input
             type="text"
             placeholder="Search submissions..."
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500"
-          />
-        </div>
-        <div className="flex items-center gap-2">
+            />
+          </div>
+          <div className="flex items-center gap-2">
           <label className="text-sm text-gray-600 dark:text-gray-400">Per page:</label>
           <select
             value={itemsPerPage}
@@ -287,22 +287,22 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
             <option value={50}>50</option>
             <option value={100}>100</option>
           </select>
-          <button
+            <button
             type="button"
             onClick={exportToCSV}
             className="ml-2 px-3 py-2 text-sm rounded-lg bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50 text-green-600 dark:text-green-400 border border-green-200/50 dark:border-green-700/50"
-          >
-            Export CSV
-          </button>
+            >
+                Export CSV
+            </button>
+          </div>
         </div>
-      </div>
-
+        
       {/* Summary */}
       <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl p-4 border border-gray-200/50 dark:border-gray-600/50">
         <p className="text-sm text-gray-600 dark:text-gray-400">
           Showing {startIndex + 1}-{Math.min(endIndex, filteredSubmissions.length)} of {filteredSubmissions.length} clean submissions
         </p>
-      </div>
+          </div>
 
       {/* Table */}
       <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl border border-gray-200/50 dark:border-gray-600/50 overflow-auto">
@@ -369,8 +369,8 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                     );
                   })}
                 </tr>
-              );
-            })}
+                        );
+                      })}
           </tbody>
         </table>
       </div>
@@ -393,7 +393,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{previewTitle}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">Right-click any cell to preview full value</p>
-          </div>
+                    </div>
           <button
             type="button"
             onClick={() => { setPreviewOpen(false); setPreviewKey(null); }}
@@ -401,24 +401,24 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
           >
             Close
           </button>
-        </div>
+                    </div>
         <div className="p-4">
           <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words max-h-[calc(100vh-120px)] overflow-auto">
             {previewValue || <span className="text-gray-400">(empty)</span>}
-          </div>
-        </div>
-      </div>
+                  </div>
+                </div>
+            </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
+            {/* Pagination */}
+            {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-600 dark:text-gray-400">Page {currentPage} of {totalPages}</div>
-          <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
             <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
             <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
-          </div>
-        </div>
-      )}
+                </div>
+              </div>
+            )}
     </div>
   );
 }

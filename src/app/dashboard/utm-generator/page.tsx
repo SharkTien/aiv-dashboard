@@ -288,6 +288,10 @@ export default function UTMGeneratorPage() {
   const loadLinks = async (page: number) => {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
+      const typeParam = searchParams.get('type');
+      if (typeParam && (typeParam === 'TMR' || typeParam === 'oGV' || typeParam === 'EWA')) {
+        params.set('type', typeParam);
+      }
       const res = await fetch(`/api/utm/links?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();

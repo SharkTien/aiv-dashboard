@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(Number(searchParams.get("limit") || 20), 500);
   const page = Math.max(Number(searchParams.get("page") || 1), 1);
   const offset = (page - 1) * limit;
+  const typeFilter = searchParams.get("type"); // 'TMR' | 'oGV' | 'EWA' | null
 
   const pool = getDbPool();
   
@@ -34,16 +35,27 @@ export async function GET(req: NextRequest) {
       FROM utm_links ul
       JOIN entity e ON ul.entity_id = e.entity_id
       JOIN utm_campaigns uc ON ul.campaign_id = uc.id
+      JOIN forms f ON uc.form_id = f.id
       JOIN utm_sources us ON ul.source_id = us.id
       JOIN utm_mediums um ON ul.medium_id = um.id
     `;
 
     const params: any[] = [];
+    const whereClauses: string[] = [];
     
     // If user is not admin, only show their entity's UTM links
     if (user.role !== 'admin') {
-      query += " WHERE ul.entity_id = ?";
+      whereClauses.push("ul.entity_id = ?");
       params.push(user.entity_id);
+    }
+
+    if (typeFilter && ["oGV","TMR","EWA"].includes(typeFilter)) {
+      whereClauses.push("f.type = ?");
+      params.push(typeFilter);
+    }
+
+    if (whereClauses.length > 0) {
+      query += " WHERE " + whereClauses.join(" AND ");
     }
     
     query += " ORDER BY ul.created_at DESC LIMIT ? OFFSET ?";
@@ -55,13 +67,25 @@ export async function GET(req: NextRequest) {
     // Get total count for pagination
     let countQuery = `
       SELECT COUNT(*) as total FROM utm_links ul
+      JOIN utm_campaigns uc ON ul.campaign_id = uc.id
+      JOIN forms f ON uc.form_id = f.id
     `;
-    
+    const countParams: any[] = [];
+    const countWhere: string[] = [];
+
     if (user.role !== 'admin') {
-      countQuery += " WHERE ul.entity_id = ?";
+      countWhere.push("ul.entity_id = ?");
+      countParams.push(user.entity_id);
     }
-    
-    const [countRows] = await pool.query(countQuery, user.role !== 'admin' ? [user.entity_id] : []);
+    if (typeFilter && ["oGV","TMR","EWA"].includes(typeFilter)) {
+      countWhere.push("f.type = ?");
+      countParams.push(typeFilter);
+    }
+    if (countWhere.length > 0) {
+      countQuery += " WHERE " + countWhere.join(" AND ");
+    }
+
+    const [countRows] = await pool.query(countQuery, countParams);
     const total = Array.isArray(countRows) && countRows.length > 0 ? (countRows[0] as any).total : 0;
     
     const totalPages = Math.ceil(total / limit);

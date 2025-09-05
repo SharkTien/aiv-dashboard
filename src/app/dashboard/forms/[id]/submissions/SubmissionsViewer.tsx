@@ -45,6 +45,8 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   const [deleting, setDeleting] = useState(false);
   const [moving, setMoving] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showBulkEditUtm, setShowBulkEditUtm] = useState(false);
+  const [bulkUtm, setBulkUtm] = useState<{ utm_campaign?: string; utm_medium?: string; utm_source?: string; utm_content?: string; utm_id?: string }>({});
   const [availableForms, setAvailableForms] = useState<Array<{ id: number; name: string; code: string }>>([]);
   const [selectedTargetForm, setSelectedTargetForm] = useState<number | null>(null);
   
@@ -833,6 +835,59 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
           </div>
         </div>
       )}
+
+      {/* Bulk Edit UTM Modal */}
+      {options?.allowBulkActions !== false && showBulkEditUtm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowBulkEditUtm(false)}>
+          <div className="max-w-2xl w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Bulk Edit UTM fields</h3>
+              <button onClick={() => setShowBulkEditUtm(false)} className="px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">Close</button>
+            </div>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(["utm_campaign","utm_medium","utm_source","utm_content","utm_id"] as const).map((k) => (
+                <div key={k}>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{k}</label>
+                  <input
+                    value={(bulkUtm as any)[k] || ''}
+                    onChange={(e) => setBulkUtm({ ...bulkUtm, [k]: e.target.value })}
+                    placeholder={`Set ${k} (leave empty to skip)`}
+                    className="w-full h-10 rounded-lg ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/40"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
+              <button onClick={() => setShowBulkEditUtm(false)} className="px-3 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">Cancel</button>
+              <button
+                onClick={async () => {
+                  const updates = Object.fromEntries(Object.entries(bulkUtm).filter(([_,v]) => typeof v === 'string' && v.trim().length > 0).map(([k,v]) => [k, (v as string).trim()]));
+                  if (Object.keys(updates).length === 0) { setShowBulkEditUtm(false); return; }
+                  try {
+                    const res = await fetch(`/api/forms/${formId}/submissions/bulk-edit-utm`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ submissionIds: Array.from(selectedSubmissions), updates })
+                    });
+                    if (res.ok) {
+                      alert('Updated successfully');
+                      setShowBulkEditUtm(false);
+                      setBulkUtm({});
+                      // Refresh data
+                      await loadData();
+                    } else {
+                      const err = await res.json().catch(() => ({}));
+                      alert(err.error || 'Failed to update');
+                    }
+                  } catch (e) { alert('Failed to update'); }
+                }}
+                className="px-3 py-2 text-sm rounded-lg bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                Apply to {selectedSubmissions.size} selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Form Info */}
       <div className="bg-white/60 !overflow-visible dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50 overflow-x-hidden">
         <div className="flex items-center justify-between">
@@ -895,6 +950,15 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                       </svg>
                     {moving ? 'Moving...' : `Move ${selectedSubmissions.size}`}
+                  </div>
+                </button>
+                <button
+                  onClick={() => setShowBulkEditUtm(true)}
+                  className="px-3 py-2 text-sm rounded-lg bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-medium transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
+                    Edit UTM ({selectedSubmissions.size})
                   </div>
                 </button>
                 <button
