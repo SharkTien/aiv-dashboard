@@ -66,7 +66,16 @@ export async function GET(
 
     // Get responses for each submission
     const submissionIds = submissions.map((s: any) => s.id);
-    let submissionsWithResponses = submissions.map((s: any) => ({
+    let submissionsWithResponses: Array<{
+      id: any;
+      timestamp: any;
+      entityId: any;
+      entityName: any;
+      formCode: any;
+      utmCampaign: any;
+      utmCampaignName: any;
+      responses: Record<string, string>;
+    }> = submissions.map((s: any) => ({
       id: s.id,
       timestamp: s.timestamp,
       entityId: s.entity_id,
@@ -74,7 +83,7 @@ export async function GET(
       formCode: s.form_code,
       utmCampaign: s.utm_campaign_value,
       utmCampaignName: s.utm_campaign_name,
-      responses: []
+      responses: {}
     }));
 
     if (submissionIds.length > 0) {
@@ -110,7 +119,6 @@ export async function GET(
           responsesBySubmission.set(subId, {});
         }
         const bucket = responsesBySubmission.get(subId)!;
-        // Prefer value_label when provided, otherwise raw value
         bucket[response.field_name] = response.value_label ?? response.value ?? "";
       });
 
