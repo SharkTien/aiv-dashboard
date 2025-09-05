@@ -4,6 +4,9 @@ import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const goalType = searchParams.get('goal_type') || 'sus';
+    
     const pool = getDbPool();
 
     // Fetch goals with entity and form information
@@ -12,6 +15,7 @@ export async function GET(request: NextRequest) {
         g.id,
         g.entity_id,
         g.form_id,
+        g.goal_type,
         g.goal_value,
         g.created_at,
         g.updated_at,
@@ -23,8 +27,9 @@ export async function GET(request: NextRequest) {
       FROM goals g
       JOIN entity e ON g.entity_id = e.entity_id
       JOIN forms f ON g.form_id = f.id
+      WHERE g.goal_type = ?
       ORDER BY e.type, e.name, f.name
-    `);
+    `, [goalType]);
 
     return NextResponse.json({
       success: true,
@@ -45,29 +50,29 @@ export async function POST(req: NextRequest) {
   if (user?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   
   const body = await req.json();
-  const { entity_id, form_id, goal_value } = body || {};
+  const { entity_id, form_id, goal_type, goal_value } = body || {};
   
-  if (!entity_id || !form_id || goal_value === undefined) {
+  if (!entity_id || !form_id || !goal_type || goal_value === undefined) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
   try {
     const pool = getDbPool();
     
-    // Check if goal already exists for this entity and form
+    // Check if goal already exists for this entity, form and goal_type
     const [existing] = await pool.execute(
-      "SELECT id FROM goals WHERE entity_id = ? AND form_id = ?",
-      [entity_id, form_id]
+      "SELECT id FROM goals WHERE entity_id = ? AND form_id = ? AND goal_type = ?",
+      [entity_id, form_id, goal_type]
     );
 
     if (Array.isArray(existing) && existing.length > 0) {
-      return NextResponse.json({ error: "Goal already exists for this entity and form" }, { status: 400 });
+      return NextResponse.json({ error: "Goal already exists for this entity, form and goal type" }, { status: 400 });
     }
 
     // Insert new goal
     await pool.execute(
-      "INSERT INTO goals (entity_id, form_id, goal_value) VALUES (?, ?, ?)",
-      [entity_id, form_id, goal_value]
+      "INSERT INTO goals (entity_id, form_id, goal_type, goal_value) VALUES (?, ?, ?, ?)",
+      [entity_id, form_id, goal_type, goal_value]
     );
 
     return NextResponse.json({ success: true });
@@ -85,7 +90,7 @@ export async function PUT(req: NextRequest) {
   if (user?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   
   const body = await req.json();
-  const { id, entity_id, form_id, goal_value } = body || {};
+  const { id, entity_id, form_id, goal_type, goal_value } = body || {};
   
   if (!id) {
     return NextResponse.json({ error: "Missing goal ID" }, { status: 400 });
@@ -96,8 +101,8 @@ export async function PUT(req: NextRequest) {
     
     // Update goal
     await pool.execute(
-      "UPDATE goals SET entity_id = COALESCE(?, entity_id), form_id = COALESCE(?, form_id), goal_value = COALESCE(?, goal_value) WHERE id = ?",
-      [entity_id ?? null, form_id ?? null, goal_value ?? null, id]
+      "UPDATE goals SET entity_id = COALESCE(?, entity_id), form_id = COALESCE(?, form_id), goal_type = COALESCE(?, goal_type), goal_value = COALESCE(?, goal_value) WHERE id = ?",
+      [entity_id ?? null, form_id ?? null, goal_type ?? null, goal_value ?? null, id]
     );
 
     return NextResponse.json({ success: true });

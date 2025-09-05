@@ -2,30 +2,67 @@
 
 import Image from "next/image";
 import { useState, useEffect } from 'react';
+import { getCurrentUser } from '@/lib/auth';
 
-interface StatsData {
-  totalForms: number;
-  activeUsers: number;
-  submissions: number;
-  conversionRate: number;
+interface HomeStatsData {
+  ogv: {
+    totalForms: number;
+    totalSubmissions: number;
+    highestPhase: {
+      id: number;
+      name: string;
+      code: string;
+      submission_count: number;
+    } | null;
+  };
+  tmr: {
+    totalForms: number;
+    totalSubmissions: number;
+    highestPhase: {
+      id: number;
+      name: string;
+      code: string;
+      submission_count: number;
+    } | null;
+  };
 }
 
 export default function DashboardHome() {
-  const [stats, setStats] = useState<StatsData>({
-    totalForms: 0,
-    activeUsers: 0,
-    submissions: 0,
-    conversionRate: 0
+  const [stats, setStats] = useState<HomeStatsData>({
+    ogv: {
+      totalForms: 0,
+      totalSubmissions: 0,
+      highestPhase: null
+    },
+    tmr: {
+      totalForms: 0,
+      totalSubmissions: 0,
+      highestPhase: null
+    }
   });
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
+    loadUser();
     loadStats();
   }, []);
 
+  const loadUser = async () => {
+    try {
+      const response = await fetch('/api/auth/me');
+      const result = await response.json();
+      if (result.success) {
+        setUser(result.data);
+      }
+    } catch (error) {
+      console.error('Error loading user:', error);
+    }
+  };
+
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/dashboard/overview-stats');
+      const response = await fetch('/api/dashboard/home-stats');
       const result = await response.json();
       
       if (result.success) {
@@ -46,7 +83,7 @@ export default function DashboardHome() {
       </div>
       <div className="relative p-10">
         <div className="inline-flex items-center gap-3 rounded-xl bg-white/70 dark:bg-gray-800/70 backdrop-blur px-4 py-3 ring-1 ring-black/10 dark:ring-white/10">
-          <Image src="/giphy.gif" alt="loading" width={40} height={40} />
+          <Image src="/giphy.gif" alt="loading" width={96} height={96} />
           <div>
             <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Welcome, AIESECer</h1>
             <p className="text-sm text-gray-600 dark:text-gray-300">Empowering leadership through impactful experiences</p>
@@ -54,34 +91,22 @@ export default function DashboardHome() {
         </div>
 
         {/* Stats Cards */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-          <StatCard 
-            title="Total Forms" 
-            value={loading ? "..." : stats.totalForms.toLocaleString()}
-            change="+12%"
-            changeType="positive"
-            icon="📊"
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <FormTypeCard 
+            title="oGV Forms" 
+            totalForms={loading ? "..." : stats.ogv.totalForms.toLocaleString()}
+            totalSubmissions={loading ? "..." : stats.ogv.totalSubmissions.toLocaleString()}
+            highestPhase={stats.ogv.highestPhase}
+            logo="/gv.png"
+            href="/dashboard/ogv-hub"
           />
-          <StatCard 
-            title="Active Users" 
-            value={loading ? "..." : stats.activeUsers.toLocaleString()}
-            change="+8%"
-            changeType="positive"
-            icon="👥"
-          />
-          <StatCard 
-            title="Submissions" 
-            value={loading ? "..." : stats.submissions.toLocaleString()}
-            change="+15%"
-            changeType="positive"
-            icon="📝"
-          />
-          <StatCard 
-            title="Conversion Rate" 
-            value={loading ? "..." : `${stats.conversionRate.toFixed(1)}%`}
-            change="+3%"
-            changeType="positive"
-            icon="📈"
+          <FormTypeCard 
+            title="TMR Forms" 
+            totalForms={loading ? "..." : stats.tmr.totalForms.toLocaleString()}
+            totalSubmissions={loading ? "..." : stats.tmr.totalSubmissions.toLocaleString()}
+            highestPhase={stats.tmr.highestPhase}
+            logo="/tmr.webp"
+            href="/dashboard/tmr-hub"
           />
         </div>
 
@@ -95,11 +120,16 @@ export default function DashboardHome() {
             href="/dashboard/ogv-hub"
             featured={true}
           />
-          <Card title="Forms Manager" subtitle="Create and manage forms" href="/dashboard/forms" />
-          <Card title="Analytics" subtitle="See pipelines and conversion" href="/dashboard/ogv/analytics" />
-          <Card title="Data Management" subtitle="Clean and allocate data" href="/dashboard/ogv/data" />
-          <Card title="Users" subtitle="Manage users and permissions" href="/dashboard/users" />
-          <Card title="Settings" subtitle="Configure system settings" href="/dashboard/settings" />
+          <Card title="TMR Hub Dashboard" subtitle="Manage TMR programs and data" href="/dashboard/tmr-hub" />
+          
+          {/* Admin-only cards */}
+          {user?.role === 'admin' && (
+            <>
+              <Card title="Forms Manager" subtitle="Create and manage forms" href="/dashboard/forms" />
+              <Card title="Users" subtitle="Manage users and permissions" href="/dashboard/users" />
+              <Card title="Settings" subtitle="Configure system settings" href="/dashboard/settings" />
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -136,31 +166,67 @@ function Card({ title, subtitle, href, featured }: { title: string; subtitle: st
   return cardContent;
 }
 
-function StatCard({ title, value, change, changeType, icon }: { 
+function FormTypeCard({ 
+  title, 
+  totalForms, 
+  totalSubmissions, 
+  highestPhase, 
+  logo, 
+  href 
+}: { 
   title: string; 
-  value: string; 
-  change: string; 
-  changeType: 'positive' | 'negative'; 
-  icon: string;
+  totalForms: string; 
+  totalSubmissions: string; 
+  highestPhase: {
+    id: number;
+    name: string;
+    code: string;
+    submission_count: number;
+  } | null;
+  logo: string;
+  href: string;
 }) {
-  return (
-    <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur rounded-2xl p-6 ring-1 ring-black/10 dark:ring-white/10">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-600 dark:text-gray-300">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
+  const cardContent = (
+    <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur rounded-2xl p-6 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white/80 dark:hover:bg-gray-800/80 transition-all duration-300">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Image src={logo} alt={title} width={96} height={96} className="rounded-lg" />
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+          </div>
         </div>
-        <div className="text-3xl">{icon}</div>
       </div>
-      <div className="mt-4 flex items-center">
-        <span className={`text-sm font-medium ${
-          changeType === 'positive' ? 'text-green-600' : 'text-red-600'
-        }`}>
-          {change}
-        </span>
-        <span className="text-sm text-gray-600 dark:text-gray-300 ml-1">from last month</span>
+      
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-gray-600 dark:text-gray-300">Total Forms</span>
+          <span className="text-lg font-bold text-gray-900 dark:text-white">{totalForms}</span>
+        </div>
+        
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-gray-600 dark:text-gray-300">Clean Submissions</span>
+          <span className="text-lg font-bold text-gray-900 dark:text-white">{totalSubmissions}</span>
+        </div>
+        
+        {highestPhase && (
+          <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Highest Phase</div>
+            <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={highestPhase.name}>
+              {highestPhase.name}
+            </div>
+            <div className="text-xs text-gray-600 dark:text-gray-300">
+              {highestPhase.submission_count.toLocaleString()} submissions
+            </div>
+          </div>
+        )}
       </div>
     </div>
+  );
+
+  return (
+    <Link href={href} className="block hover:scale-105 transition-transform duration-300">
+      {cardContent}
+    </Link>
   );
 }
 

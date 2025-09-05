@@ -7,6 +7,8 @@ import GoalsManager from "./GoalsManager";
 
 export default function AdminUsersTabs() {
   const [tab, setTab] = useState<"entities" | "createUser" | "goals">("entities");
+  const [goalTab, setGoalTab] = useState<"sus" | "msus">("sus");
+  
   return (
     <div className="mt-4">
       <div className="inline-flex rounded-xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden">
@@ -24,7 +26,36 @@ export default function AdminUsersTabs() {
             <UsersList />
           </>
         ) : (
-          <GoalsManager />
+          <div className="space-y-4">
+            {/* Goal Type Tabs */}
+            <div className="border-b border-gray-200 dark:border-gray-700">
+              <nav className="-mb-px flex space-x-8">
+                <button
+                  onClick={() => setGoalTab('sus')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    goalTab === 'sus'
+                      ? 'border-sky-500 text-sky-600 dark:text-sky-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Goal SUs
+                </button>
+                <button
+                  onClick={() => setGoalTab('msus')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    goalTab === 'msus'
+                      ? 'border-sky-500 text-sky-600 dark:text-sky-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Goal MSUs
+                </button>
+              </nav>
+            </div>
+            
+            {/* Goal Content */}
+            <GoalsManager goalType={goalTab} />
+          </div>
         )}
       </div>
     </div>

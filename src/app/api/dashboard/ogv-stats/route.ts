@@ -454,6 +454,73 @@ export async function GET(request: NextRequest) {
     // Combine all entity stats
     const entityStats = [...localEntityStats, ...nationalEntityStats];
 
+    // Fetch comparison data if compare parameter is provided
+    let compareData = null;
+    if (compare) {
+      try {
+        // Get comparison form details
+        const [compareFormResult] = await pool.query(
+          "SELECT id, name, code FROM forms WHERE id = ?",
+          [compare]
+        );
+
+        if (Array.isArray(compareFormResult) && compareFormResult.length > 0) {
+          const compareForm = compareFormResult[0];
+          
+          // Get comparison entity stats (MSUs from compare form)
+          // First get active campaigns for the compare form
+          const [compareActiveCampaignsResult] = await pool.query(`
+            SELECT uc.entity_id, uc.code
+            FROM utm_campaigns uc
+            WHERE uc.form_id = ?
+            ORDER BY uc.entity_id
+          `, [compare]);
+
+          const compareActiveCampaigns = Array.isArray(compareActiveCampaignsResult) ? compareActiveCampaignsResult : [];
+          const compareActiveCampaignsByEntity = new Map();
+          compareActiveCampaigns.forEach((campaign: any) => {
+            compareActiveCampaignsByEntity.set(campaign.entity_id, campaign.code);
+          });
+
+          // Get MSUs for each local entity in compare form
+          const compareLocalStats = [];
+          for (const [entityId, activeCampaign] of compareActiveCampaignsByEntity) {
+            const [msusResult] = await pool.query(`
+              SELECT COUNT(*) as count
+              FROM form_submissions fs
+              JOIN form_responses fr ON fs.id = fr.submission_id
+              JOIN form_fields ff ON fr.field_id = ff.id
+              JOIN utm_campaigns uc ON fr.value = uc.code
+              JOIN entity e ON fs.entity_id = e.entity_id
+              WHERE fs.form_id = ? 
+                AND fs.entity_id = ? 
+                AND ff.field_name = 'utm_campaign' 
+                AND fr.value = ?
+                AND e.type = 'local'
+                AND fs.duplicated = FALSE
+            `, [compare, entityId, activeCampaign]);
+            
+            const msus = Array.isArray(msusResult) && msusResult.length > 0 ? (msusResult[0] as any).count : 0;
+            compareLocalStats.push({ entity_id: entityId, msus: msus });
+          }
+
+          const compareLocalStatsMap = new Map();
+          if (Array.isArray(compareLocalStats)) {
+            compareLocalStats.forEach((stat: any) => {
+              compareLocalStatsMap.set(stat.entity_id, stat.msus);
+            });
+          }
+
+          compareData = {
+            form: compareForm,
+            localMsus: compareLocalStatsMap
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching comparison data:', error);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -463,7 +530,8 @@ export async function GET(request: NextRequest) {
         totalNationalNotFound,
         totalOfTotal,
         totalDeduplicatedSubmissions,
-        compare: compare || null
+        compare: compare || null,
+        compareData
       }
     });
 

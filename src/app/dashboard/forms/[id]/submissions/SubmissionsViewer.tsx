@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import ExcelTemplate from "./ExcelTemplate";
 import LoadingOverlay from "@/components/LoadingOverlay";
+import SearchableDropdown from "@/components/SearchableDropdown";
 
 type Form = {
   id: number;
@@ -48,6 +49,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   const [showBulkEditUtm, setShowBulkEditUtm] = useState(false);
   const [bulkUtm, setBulkUtm] = useState<{ utm_campaign?: string; utm_medium?: string; utm_source?: string; utm_content?: string; utm_id?: string }>({});
   const [availableForms, setAvailableForms] = useState<Array<{ id: number; name: string; code: string }>>([]);
+  const [utmCampaigns, setUtmCampaigns] = useState<Array<{ value: string; label: string; count?: number }>>([]);
   const [selectedTargetForm, setSelectedTargetForm] = useState<number | null>(null);
   
   // Date filter state
@@ -186,6 +188,20 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
     }
   }
 
+  async function loadUtmCampaigns() {
+    try {
+      const response = await fetch(`/api/forms/${formId}/utm-campaigns`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setUtmCampaigns(data.data.options);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading UTM campaigns:", error);
+    }
+  }
+
   async function handleMoveSubmissions() {
     if (!selectedTargetForm || selectedSubmissions.size === 0) {
       return;
@@ -230,6 +246,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   useEffect(() => {
     loadData();
     loadFormFields();
+    loadUtmCampaigns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId]);
 
@@ -845,7 +862,19 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
               <button onClick={() => setShowBulkEditUtm(false)} className="px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">Close</button>
             </div>
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {(["utm_campaign","utm_medium","utm_source","utm_content","utm_id"] as const).map((k) => (
+              {/* UTM Campaign with SearchableDropdown */}
+              <div>
+                <SearchableDropdown
+                  title="utm_campaign"
+                  options={utmCampaigns}
+                  value={bulkUtm.utm_campaign || ''}
+                  onChange={(value) => setBulkUtm({ ...bulkUtm, utm_campaign: value })}
+                  placeholder="Type to search campaigns..."
+                />
+              </div>
+              
+              {/* Other UTM fields with regular inputs */}
+              {(["utm_medium","utm_source","utm_content","utm_id"] as const).map((k) => (
                 <div key={k}>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{k}</label>
                   <input

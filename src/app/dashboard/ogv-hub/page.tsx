@@ -143,7 +143,7 @@ export default function OGVHubDashboard() {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <SettingsIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Phase: </span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Selected Phase</span>
               </div>
               <select
                 value={selectedFormId || ''}
@@ -152,7 +152,7 @@ export default function OGVHubDashboard() {
               >
                 {forms.map((form) => (
                   <option key={form.id} value={form.id}>
-                    {form.name} ({form.code})
+                    {form.name.replace("oGV ", "").replace("Submissions", "")}
                   </option>
                 ))}
               </select>
@@ -181,27 +181,14 @@ export default function OGVHubDashboard() {
           </div>
 
           {/* Average Progress */}
-          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/50 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Average Progress</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {loadingStats ? "Loading..." : stats ? formatPercentage(stats.entityStats.reduce((sum, entity) => sum + entity.progress, 0) / Math.max(stats.entityStats.length, 1)) : "0.0%"}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Across all entities
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
-                <TrendingUpIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
-          </div>
+          {/* <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/50 hover:shadow-lg transition-all duration-300">
+            
+          </div> */}
         </div>
 
         {/* Signup Summary */}
         <div className="mb-8">
-          <SignupSummary formId={selectedFormId} />
+          <SignupSummary formId={selectedFormId} formType="oGV" />
         </div>
 
         {/* No Form Selected */}

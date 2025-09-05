@@ -7,6 +7,7 @@ type Goal = {
   id: number;
   entity_id: number;
   form_id: number;
+  goal_type: string;
   goal_value: number;
   entity_name: string;
   entity_type: string;
@@ -25,7 +26,11 @@ type EntityGoal = {
   existing_goal_id?: number;
 };
 
-export default function GoalsManager() {
+type GoalsManagerProps = {
+  goalType?: 'sus' | 'msus';
+};
+
+export default function GoalsManager({ goalType = 'sus' }: GoalsManagerProps) {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [forms, setForms] = useState<Form[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -37,7 +42,7 @@ export default function GoalsManager() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [goalType]);
 
   // Update entity goals when form is selected
   useEffect(() => {
@@ -45,7 +50,7 @@ export default function GoalsManager() {
       // Show all entities (including national and organic) for goal setting
       const allEntities = entities;
       const goalsForForm = allEntities.map(entity => {
-        const existingGoal = goals.find(g => g.entity_id === entity.entity_id && g.form_id === selectedForm.id);
+        const existingGoal = goals.find(g => g.entity_id === entity.entity_id && g.form_id === selectedForm.id && g.goal_type === goalType);
         return {
           entity_id: entity.entity_id,
           entity_name: entity.name,
@@ -56,7 +61,7 @@ export default function GoalsManager() {
       });
       setEntityGoals(goalsForForm);
     }
-  }, [selectedForm, entities, goals]);
+  }, [selectedForm, entities, goals, goalType]);
 
   const loadData = async () => {
     setLoading(true);
@@ -78,7 +83,7 @@ export default function GoalsManager() {
       }
 
       // Load goals
-      const goalsRes = await fetch("/api/goals");
+      const goalsRes = await fetch(`/api/goals?goal_type=${goalType}`);
       const goalsData = await goalsRes.json();
       if (goalsData.success) {
         setGoals(goalsData.items || []);
@@ -140,6 +145,7 @@ export default function GoalsManager() {
               id: entityGoal.existing_goal_id,
               entity_id: entityGoal.entity_id,
               form_id: selectedForm.id,
+              goal_type: goalType,
               goal_value: goalValue
             }),
           });
@@ -156,6 +162,7 @@ export default function GoalsManager() {
             body: JSON.stringify({
               entity_id: entityGoal.entity_id,
               form_id: selectedForm.id,
+              goal_type: goalType,
               goal_value: goalValue
             }),
           });
@@ -205,9 +212,6 @@ export default function GoalsManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Goals Management</h2>
-      </div>
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -248,7 +252,7 @@ export default function GoalsManager() {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Set Goals for {selectedForm.name} ({selectedForm.code})
+              Set {goalType.toUpperCase()} Goals for {selectedForm.name} ({selectedForm.code})
             </h3>
             <button
               onClick={handleSaveAllGoals}
@@ -319,7 +323,7 @@ export default function GoalsManager() {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Current Goals for {selectedForm.name} ({selectedForm.code})
+              Current {goalType.toUpperCase()} Goals for {selectedForm.name} ({selectedForm.code})
             </h3>
           </div>
           <div className="overflow-x-auto">
@@ -334,7 +338,7 @@ export default function GoalsManager() {
               </thead>
               <tbody>
                 {goals
-                  .filter(goal => goal.form_id === selectedForm.id)
+                  .filter(goal => goal.form_id === selectedForm.id && goal.goal_type === goalType)
                   .map((goal) => (
                     <tr key={goal.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
                       <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
@@ -363,7 +367,7 @@ export default function GoalsManager() {
                       </td>
                     </tr>
                   ))}
-                {goals.filter(goal => goal.form_id === selectedForm.id).length === 0 && (
+                {goals.filter(goal => goal.form_id === selectedForm.id && goal.goal_type === goalType).length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
                       No goals set for this form yet.

@@ -229,44 +229,145 @@ export async function POST(
               if (timestampValue !== null && timestampValue !== undefined && String(timestampValue).trim() !== "") {
                 try {
                   const timestampStr = String(timestampValue).trim();
+                  console.log(`[DEBUG] Processing timestamp: "${timestampStr}" (type: ${typeof timestampValue})`);
                   let parsedDate: Date | null = null;
 
-                  // Excel serial number
-                  if (/^\d+(\.\d+)?$/.test(timestampStr)) {
-                    const serialNumber = parseFloat(timestampStr);
-                    if (serialNumber >= 1 && serialNumber <= 100000) {
-                      const excelEpoch = new Date(1900, 0, 1);
-                      const millisecondsPerDay = 24 * 60 * 60 * 1000;
-                      let adjustedSerial = serialNumber;
-                      if (serialNumber > 59) {
-                        adjustedSerial = serialNumber - 1;
+                  // Special handling for Excel date objects
+                  if (timestampValue instanceof Date) {
+                    console.log(`[DEBUG] Detected Date object: ${timestampValue.toISOString()}`);
+                    parsedDate = timestampValue;
+                  }
+                  
+                  // Try XLSX date parsing first (most accurate for Excel files)
+                  if (!parsedDate && typeof timestampValue === 'number') {
+                    try {
+                      // XLSX date parsing - more accurate than manual calculation
+                      const xlsxDate = XLSX.SSF.parse_date_code(timestampValue);
+                      if (xlsxDate) {
+                        parsedDate = new Date(xlsxDate.y, xlsxDate.m - 1, xlsxDate.d, xlsxDate.H || 0, xlsxDate.M || 0, xlsxDate.S || 0);
+                        console.log(`[DEBUG] XLSX date parsed to: ${parsedDate.toISOString()}`);
                       }
-                      parsedDate = new Date(excelEpoch.getTime() + (adjustedSerial - 1) * millisecondsPerDay);
-                      // Convert to Vietnam time (+7)
-                      parsedDate = new Date(parsedDate.getTime() + (7 * 60 * 60 * 1000));
+                    } catch (e) {
+                      console.log(`[DEBUG] XLSX date parsing failed: ${e}`);
+                    }
+                  }
+
+                  // Check if it's a pure Excel serial number (just digits and decimal)
+                  if (!parsedDate && /^\d+(\.\d+)?$/.test(timestampStr)) {
+                    const serialNumber = parseFloat(timestampStr);
+                    console.log(`[DEBUG] Detected Excel serial number: ${serialNumber}`);
+                    // Excel serial numbers are typically large numbers (40000+ for recent dates)
+                    if (serialNumber >= 1 && serialNumber <= 100000) {
+                      // More accurate Excel date calculation
+                      const excelEpoch = new Date(1900, 0, 1);
+                      const days = Math.floor(serialNumber);
+                      const time = (serialNumber - days) * 24; // Convert fractional part to hours
+                      const hours = Math.floor(time);
+                      const minutes = Math.floor((time - hours) * 60);
+                      const seconds = Math.floor(((time - hours) * 60 - minutes) * 60);
+                      
+                      // Excel date calculation (accounting for leap year bug)
+                      let adjustedDays = days;
+                      if (days > 59) {
+                        adjustedDays = days - 1; // Excel incorrectly treats 1900 as leap year
+                      }
+                      
+                      // Use UTC to avoid timezone issues
+                      parsedDate = new Date(Date.UTC(1900, 0, adjustedDays, hours, minutes, seconds));
+                      console.log(`[DEBUG] Excel serial parsed to: ${parsedDate.toISOString()}`);
+                      // Keep original timezone - no conversion
                     }
                   }
 
                   if (!parsedDate || isNaN(parsedDate.getTime())) {
-                    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(timestampStr)) {
+                    console.log(`[DEBUG] Trying to parse as date string: "${timestampStr}"`);
+                    // Handle DD/MM/YYYY HH:mm format (e.g., "1/8/2025 0:00" = 1st August 2025)
+                    if (/^\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}(:\d{2})?(\s+[AP]M)?$/i.test(timestampStr)) {
+                      console.log(`[DEBUG] Matched DD/MM/YYYY HH:mm format`);
+                      const [datePart, timePart] = timestampStr.split(' ');
+                      const [day, month, year] = datePart.split('/'); // Note: day first, then month
+                      const [time, ampm] = timePart.split(' ');
+                      
+                      let [hours, minutes, seconds = '0'] = time.split(':');
+                      let hourNum = parseInt(hours);
+                      const minuteNum = parseInt(minutes);
+                      const secondNum = parseInt(seconds);
+                      
+                      // Handle AM/PM
+                      if (ampm) {
+                        if (ampm.toUpperCase() === 'PM' && hourNum !== 12) {
+                          hourNum += 12;
+                        } else if (ampm.toUpperCase() === 'AM' && hourNum === 12) {
+                          hourNum = 0;
+                        }
+                      }
+                      
+                      const monthNum = parseInt(month) - 1; // Month is 0-indexed
+                      const dayNum = parseInt(day);
+                      const yearNum = parseInt(year);
+                      
+                      // Parse as local time to match server timezone
+                      parsedDate = new Date(yearNum, monthNum, dayNum, hourNum, minuteNum, secondNum);
+                      console.log(`[DEBUG] DD/MM/YYYY HH:mm parsed to: ${parsedDate.toISOString()}`);
+                    }
+                    // Handle MM/DD/YYYY format (date only)
+                    else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(timestampStr)) {
+                      console.log(`[DEBUG] Matched MM/DD/YYYY format`);
                       const [month, day, year] = timestampStr.split('/');
                       const monthNum = parseInt(month) - 1;
                       const dayNum = parseInt(day);
                       const yearNum = parseInt(year);
-                      parsedDate = new Date(Date.UTC(yearNum, monthNum, dayNum, 0, 0, 0));
-                    } else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(timestampStr)) {
+                      // Use local time instead of UTC to preserve original timezone
+                      parsedDate = new Date(yearNum, monthNum, dayNum, 0, 0, 0);
+                    } 
+                    // Handle YYYY-MM-DD format
+                    else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(timestampStr)) {
                       const [year, month, day] = timestampStr.split('-');
                       const monthNum = parseInt(month) - 1;
                       const dayNum = parseInt(day);
                       const yearNum = parseInt(year);
-                      parsedDate = new Date(Date.UTC(yearNum, monthNum, dayNum, 0, 0, 0));
-                    } else {
+                      // Use local time instead of UTC to preserve original timezone
+                      parsedDate = new Date(yearNum, monthNum, dayNum, 0, 0, 0);
+                    } 
+                    // Handle YYYY-MM-DD HH:mm:ss format
+                    else if (/^\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(:\d{2})?$/.test(timestampStr)) {
+                      const [datePart, timePart] = timestampStr.split(' ');
+                      const [year, month, day] = datePart.split('-');
+                      const [hours, minutes, seconds = '0'] = timePart.split(':');
+                      
+                      const monthNum = parseInt(month) - 1;
+                      const dayNum = parseInt(day);
+                      const yearNum = parseInt(year);
+                      const hourNum = parseInt(hours);
+                      const minuteNum = parseInt(minutes);
+                      const secondNum = parseInt(seconds);
+                      
+                      parsedDate = new Date(yearNum, monthNum, dayNum, hourNum, minuteNum, secondNum);
+                    }
+                    // Fallback to native Date parsing
+                    else {
+                      console.log(`[DEBUG] Using native Date parsing for: "${timestampStr}"`);
                       parsedDate = new Date(timestampStr);
+                      console.log(`[DEBUG] Native Date parsed to: ${parsedDate.toISOString()}`);
                     }
                   }
 
                   if (parsedDate && !isNaN(parsedDate.getTime())) {
-                    submissionTimestamp = parsedDate.toISOString().slice(0, 19).replace('T', ' ');
+                    // Use local time instead of UTC to match server timezone
+                    const year = parsedDate.getFullYear();
+                    const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+                    const day = String(parsedDate.getDate()).padStart(2, '0');
+                    const hours = String(parsedDate.getHours()).padStart(2, '0');
+                    const minutes = String(parsedDate.getMinutes()).padStart(2, '0');
+                    const seconds = String(parsedDate.getSeconds()).padStart(2, '0');
+                    
+                    submissionTimestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+                    console.log(`[DEBUG] Final timestamp (local): ${submissionTimestamp}`);
+                    console.log(`[DEBUG] Original date object: ${parsedDate.toString()}`);
+                    console.log(`[DEBUG] UTC string: ${parsedDate.toUTCString()}`);
+                    console.log(`[DEBUG] Local string: ${parsedDate.toString()}`);
+                  } else {
+                    console.log(`[DEBUG] Failed to parse timestamp: "${timestampStr}"`);
                   }
                 } catch (error) {
                   // ignore, fallback to now
@@ -275,10 +376,11 @@ export async function POST(
             }
             if (!submissionTimestamp) {
               const now = new Date();
-              const vietnamTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-              submissionTimestamp = vietnamTime.toISOString().slice(0, 19).replace('T', ' ');
+              // Use current time without timezone conversion
+              submissionTimestamp = now.toISOString().slice(0, 19).replace('T', ' ');
             }
 
+            console.log(`[DEBUG] Inserting submission with timestamp: ${submissionTimestamp}`);
             submissionsToInsert.push([Number(formId), submissionTimestamp]);
             rowResponseCounts.push(rowResponseCount);
             successCount++;

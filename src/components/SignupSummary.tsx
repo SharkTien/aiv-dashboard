@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 
 interface SummaryRow {
   entity: string;
+  entity_id: number;
   goal: number;
   total: number;
   msu: number;
@@ -41,15 +42,18 @@ interface NationalSummary {
 interface SignupSummaryProps {
   className?: string;
   formId?: number | null;
+  formType?: 'oGV' | 'TMR' | null;
 }
 
-export default function SignupSummary({ className = '', formId }: SignupSummaryProps) {
+export default function SignupSummary({ className = '', formId, formType }: SignupSummaryProps) {
   const [localSummary, setLocalSummary] = useState<SummaryRow[]>([]);
   const [localTotals, setLocalTotals] = useState<SummaryRow | null>(null);
   const [nationalSummary, setNationalSummary] = useState<NationalSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [comparePhaseFilter, setComparePhaseFilter] = useState<string>('');
   const [summarySort, setSummarySort] = useState<{ column: 'msu' | 'total' | null; direction: 'asc' | 'desc' }>({ column: null, direction: 'desc' });
+  const [availableForms, setAvailableForms] = useState<Array<{id: number, name: string, code: string}>>([]);
+  const [compareData, setCompareData] = useState<any>(null);
 
   // Helper functions for calculations
   const calculateProgress = (total: number, goal: number) => {
@@ -64,6 +68,32 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
 
   const formatNumber = (num: number) => {
     return num.toLocaleString();
+  };
+
+  const getCompareMsus = (entityId: number) => {
+    if (!compareData || !compareData.localMsus) return 0;
+    // Handle both Map and object formats (Map gets serialized to object over HTTP)
+    if (compareData.localMsus instanceof Map) {
+      return compareData.localMsus.get(entityId) || 0;
+    } else if (typeof compareData.localMsus === 'object') {
+      return compareData.localMsus[entityId] || 0;
+    }
+    return 0;
+  };
+
+  const calculateGrowth = (currentMsus: number, compareMsus: number) => {
+    if (compareMsus === 0) return currentMsus > 0 ? 100 : 0;
+    return ((currentMsus - compareMsus) / compareMsus) * 100;
+  };
+
+  const getTotalCompareMsus = () => {
+    if (!compareData || !compareData.localMsus) return 0;
+    if (compareData.localMsus instanceof Map) {
+      return Array.from(compareData.localMsus.values()).reduce((sum: number, val: any) => sum + (typeof val === 'number' ? val : 0), 0);
+    } else if (typeof compareData.localMsus === 'object') {
+      return Object.values(compareData.localMsus).reduce((sum: number, val: any) => sum + (typeof val === 'number' ? val : 0), 0);
+    }
+    return 0;
   };
 
   const toggleSummarySort = (column: 'msu' | 'total') => {
@@ -83,10 +113,34 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
   });
 
   useEffect(() => {
+    if (formId && formType) {
+      loadAvailableForms();
+    }
+  }, [formId, formType]);
+
+  useEffect(() => {
     if (formId) {
       loadSignupData();
     }
   }, [formId, comparePhaseFilter]);
+
+  const loadAvailableForms = async () => {
+    if (!formType) return;
+    
+    try {
+      const endpoint = formType === 'oGV' ? '/api/dashboard/ogv-forms' : '/api/dashboard/tmr-forms';
+      const response = await fetch(endpoint);
+      const result = await response.json();
+      
+      if (result.success) {
+        // Filter out the current form from available forms
+        const filteredForms = result.data.filter((form: any) => form.id !== formId);
+        setAvailableForms(filteredForms);
+      }
+    } catch (error) {
+      console.error('Error loading available forms:', error);
+    }
+  };
 
   const loadSignupData = async () => {
     if (!formId) return;
@@ -108,6 +162,10 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
       if (result.success) {
         const entityStats = result.data.entityStats;
         const totalNationalNotFound = result.data.totalNationalNotFound || 0;
+        const compareData = result.data.compareData;
+        
+        // Store comparison data for use in calculations
+        setCompareData(compareData);
         
         // Separate local and national entities using entity_type provided by API
         const localStats = entityStats.filter((stat: any) => stat.entity_type === 'local');
@@ -116,6 +174,7 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
         // Convert local entityStats to SummaryRow format
         const localData: SummaryRow[] = localStats.map((stat: EntityStats) => ({
           entity: stat.entity_name,
+          entity_id: stat.entity_id,
           goal: stat.goal,
           total: stat.sus,
           msu: stat.msus,
@@ -128,6 +187,7 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
         // Calculate local totals
         const totals: SummaryRow = {
           entity: 'LOCAL',
+          entity_id: 0, // Special ID for totals
           goal: localData.reduce((sum, item) => sum + item.goal, 0),
           total: localData.reduce((sum, item) => sum + item.total, 0),
           msu: localData.reduce((sum, item) => sum + item.msu, 0),
@@ -203,9 +263,11 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
             onChange={(e) => setComparePhaseFilter(e.target.value)}
           >
             <option value="">None</option>
-            <option value="2024-1">2024-1</option>
-            <option value="2024-2">2024-2</option>
-            <option value="2025-1">2025-1</option>
+            {availableForms.map((form) => (
+              <option key={form.id} value={form.id.toString()}>
+                Phase {form.name.replace('oGV ', '').replace('Submissions', '')}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -232,18 +294,18 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
               <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại cho mọi market">SUs | utm source</th>
               <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại của EMT hoặc là SUs Organic">EMT + Organic</th>
               <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại mà entity NOT FOUND">not found from your utm source</th>
-              <th className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" colSpan={comparePhaseFilter ? 7 : 3}>
-                %GvA{comparePhaseFilter ? ` compared to ${comparePhaseFilter}` : ''}
+              <th className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" colSpan={comparePhaseFilter ? 9 : 3}>
+                %GvA{comparePhaseFilter ? ` compared to ${availableForms.find(f => f.id.toString() === comparePhaseFilter)?.name || comparePhaseFilter}` : ''}
               </th>
             </tr>
             <tr>
               <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="Progress = SUs / Goal">Progress</th>
               <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="%M.SUs/SUs = MSUs / SUs">%M.SUs/SUs</th>
-              <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600 rounded-tr-lg" title="%M.SUs/UTM = MSUs / SUs | utm source">%M.SUs/UTM</th>
+              <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="%M.SUs/UTM = MSUs / SUs | utm source">%M.SUs/UTM</th>
               {comparePhaseFilter && (
                 <>
-                  <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title={`MSU at ${comparePhaseFilter}`}>MSU ({comparePhaseFilter})</th>
-                  <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="%Growth = (MSU current - MSU compare) / MSU compare">%Growth</th>
+                  <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title={`MSUs at ${availableForms.find(f => f.id.toString() === comparePhaseFilter)?.name || comparePhaseFilter}`}>MSUs ({availableForms.find(f => f.id.toString() === comparePhaseFilter)?.name.replace("oGV", "").replace("Submissions", "") || comparePhaseFilter})</th>
+                  <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="%Growth = (MSUs current - MSUs compare) / MSUs compare">%Growth</th>
                 </>
               )}
             </tr>
@@ -267,8 +329,12 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
                 <td className="py-4 px-4 text-center font-semibold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(row.msu, row.yourUtm).toFixed(2)}%</td>
                 {comparePhaseFilter && (
                   <>
-                    <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
-                    <td className="py-4 px-4 text-center font-semibold bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">-</td>
+                    <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                      {getCompareMsus(row.entity_id)}
+                    </td>
+                    <td className="py-4 px-4 text-center font-semibold bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                      {calculateGrowth(row.msu, getCompareMsus(row.entity_id)).toFixed(1)}%
+                    </td>
                   </>
                 )}
               </tr>
@@ -290,8 +356,12 @@ export default function SignupSummary({ className = '', formId }: SignupSummaryP
                 <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(localTotals.msu, localTotals.yourUtm).toFixed(2)}%</td>
                 {comparePhaseFilter && (
                   <>
-                    <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
-                    <td className="py-4 px-4 font-bold text-center bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">-</td>
+                    <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                      {getTotalCompareMsus()}
+                    </td>
+                    <td className="py-4 px-4 font-bold text-center bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                      {calculateGrowth(localTotals.msu, getTotalCompareMsus()).toFixed(1)}%
+                    </td>
                   </>
                 )}
               </tr>
