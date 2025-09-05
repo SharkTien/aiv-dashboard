@@ -15,8 +15,6 @@ export default function UsersManager() {
 
   useEffect(() => {
     fetch("/api/entities").then((r) => r.json()).then((data) => {
-      console.log('UsersManager - Entities data:', data);
-      console.log('UsersManager - Entities items:', data.items);
       // Filter out national entities and organic (only show local entities)
       const localEntities = Array.isArray(data.items) ? data.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
       setEntities(localEntities);

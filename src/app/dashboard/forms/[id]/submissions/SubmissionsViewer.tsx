@@ -27,6 +27,8 @@ type FormResponse = {
   field_label: string;
   value: string;
   value_label?: string | null;
+  field_type?: string;
+  field_id?: number;
 };
 
 export default function SubmissionsViewer({ formId, options, inlineLoading }: { formId: number; options?: { showBack?: boolean; allowImport?: boolean; allowBulkActions?: boolean; showTemplate?: boolean; showEntity?: boolean }, inlineLoading?: boolean }) {
@@ -109,42 +111,35 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
         // Range: 2000-01-01 to 2030-12-31 (946684800000 to 1893456000000)
         else if (timestampNum >= 946684800000 && timestampNum <= 1893456000000) {
           date = new Date(timestampNum);
-        }
-        // If it's a large number but not in reasonable ranges, try as milliseconds anyway
-        else if (timestampNum > 1000000000) {
-          try {
-            date = new Date(timestampNum);
-            if (isNaN(date.getTime())) {
-              return <span className="text-gray-400">Invalid timestamp</span>;
-            }
-          } catch (e) {
-            return <span className="text-gray-400">Invalid timestamp</span>;
-          }
         } else {
-          return <span className="text-gray-400">Invalid timestamp</span>;
+          // Fall back to Date parsing
+          date = new Date(value);
         }
       }
-      // Handle other formats
       else {
+        // Attempt to parse as a general date string (e.g., 2024-12-31)
         date = new Date(value);
       }
-      
+
       if (isNaN(date.getTime())) {
-        return <span className="text-gray-400">Invalid date</span>;
+        return value;
       }
-      
-      // Format in local timezone (no timezone conversion)
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-      });
+
+      // Respect explicit field type for output format
+      if (fieldType === 'date') {
+        return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      }
+      if (fieldType === 'datetime') {
+        return date.toLocaleString('en-GB', { 
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+      }
+
+      // Default formatting
+      return date.toLocaleString();
     } catch (error) {
-      return <span className="text-gray-400">Error parsing date</span>;
+      return value;
     }
   };
 
@@ -232,6 +227,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
 
   useEffect(() => {
     loadData();
+    loadFormFields();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId]);
 
@@ -347,24 +343,19 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
     return headers;
   }, [formFields]);
 
-  useEffect(() => {
-    async function loadFormFields() {
-      try {
-        console.log("Loading form fields for formId:", formId);
-        const response = await fetch(`/api/forms/${formId}/fields`);
-        console.log("Response status:", response.status);
-        if (response.ok) {
-          const data = await response.json();
-          setFormFields(data.fields || []);
-        } else {
-          console.error("Failed to load form fields:", response.status, response.statusText);
-        }
-      } catch (error) {
-        console.error("Error loading form fields:", error);
+  async function loadFormFields() {
+    try {
+      const response = await fetch(`/api/forms/${formId}/fields`);
+      if (response.ok) {
+        const data = await response.json();
+        setFormFields(data.fields || []);
+      } else {
+        console.error("Failed to load form fields:", response.status, response.statusText);
       }
+    } catch (error) {
+      console.error("Error loading form fields:", error);
     }
-    loadFormFields();
-  }, [formId]);
+  }
 
   // Build facet options from current submissions
   const facetOptions = useMemo(() => {
@@ -1154,12 +1145,15 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
                           const fieldValue = resp?.value || "";
                           const display = resp?.value_label || fieldValue || "";
                           
-                          // Only apply date formatting when the VALUE looks like a real date/time
+                          // Prefer explicit field_type from response; fallback to heuristic by field name
+                          const fieldType = resp?.field_type;
                           const nameLower = h.name.toLowerCase();
-                          const looksLikeDateValue = /\d{2,4}[\/-]\d{1,2}|T\d{2}:\d{2}|^\d{9,13}$/.test(fieldValue);
-                          const shouldFormatDate = (nameLower.includes('time') || nameLower.includes('timestamp') || nameLower.includes('date')) && looksLikeDateValue;
-                          
-                          const displayNode = shouldFormatDate ? formatDateTime(fieldValue) : (display || "");
+                          const looksLikeDateValue = /\d{2,4}[\/-]\d{1,2}|T\d{2}:\d{2}|^\d{9,13}$/.test(fieldValue)
+                            || (/^\d+$/.test(fieldValue) && Number(fieldValue) >= 1 && Number(fieldValue) < 100000);
+                          const isDateLikeHeader = nameLower.includes('time') || nameLower.includes('timestamp') || nameLower.includes('date');
+                          const shouldFormatByType = (fieldType === 'date' || fieldType === 'datetime') && looksLikeDateValue;
+                          const shouldFormatByName = isDateLikeHeader && looksLikeDateValue;
+                          const displayNode = (shouldFormatByType || shouldFormatByName) ? formatDateTime(fieldValue, fieldType) : (display || "");
                           
                           return (
                             <td

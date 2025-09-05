@@ -36,7 +36,7 @@ export async function GET(
       submissions.map(async (submission) => {
         try {
                   const [responseRows] = await pool.query(
-          `SELECT ff.field_name, ff.field_label, fr.value,
+          `SELECT ff.field_name, ff.field_label, ff.field_type, fr.field_id, fr.value,
                   CASE 
                     WHEN fr.value = 'other--uni-2' THEN 'other--uni-2'
                     WHEN um.uni_name IS NOT NULL THEN um.uni_name

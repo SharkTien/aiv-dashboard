@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     
     // Get total forms count
     const [formsResult] = await pool.query(`
-      SELECT COUNT(*) as total FROM forms WHERE status = 'active'
+      SELECT COUNT(*) as total FROM forms
     `);
     const totalForms = Array.isArray(formsResult) && formsResult.length > 0 ? (formsResult[0] as any).total : 0;
     
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     /*
     // Get total forms count
     const [formsResult] = await pool.execute(`
-      SELECT COUNT(*) as total FROM forms WHERE status = 'active'
+      SELECT COUNT(*) as total FROM forms
     `);
     
     // Get active users count

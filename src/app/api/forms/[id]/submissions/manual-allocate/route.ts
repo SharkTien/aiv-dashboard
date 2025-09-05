@@ -17,14 +17,12 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid form ID' }, { status: 400 });
     }
 
-    console.log('Fetching submissions for form ID:', formId);
 
     const pool = getDbPool();
 
     // First, let's test with a simple query
     const testQuery = `SELECT COUNT(*) as count FROM form_submissions WHERE form_id = ?`;
     const [testResult] = await pool.query(testQuery, [formId]);
-    console.log('Test query result:', testResult);
 
     // Get submissions with empty entity_id or organic entity_id
     const submissionsQuery = `
@@ -48,9 +46,7 @@ export async function GET(
       WHERE fs.form_id = ? AND (fs.entity_id IS NULL OR fs.entity_id = 0 OR e.name = 'organic')
       ORDER BY fs.timestamp DESC
     `;
-    console.log('Executing query with formId:', formId);
     const [submissions] = await pool.query(submissionsQuery, [formId]);
-    console.log('Raw submissions result:', submissions);
 
     // Group responses by submission
     const groupedSubmissions: any[] = [];

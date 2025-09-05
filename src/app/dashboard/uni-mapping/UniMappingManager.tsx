@@ -51,7 +51,6 @@ export default function UniMappingManager() {
       }
       
       const data = await res.json();
-      console.log("Entities API response:", data);
       if (data.error) {
         console.error("API Error:", data.error);
         setEntities([]);
@@ -59,7 +58,6 @@ export default function UniMappingManager() {
         const entitiesArray = Array.isArray(data.items) ? data.items : [];
         // Filter out national entities and organic (only show local entities)
         const localEntities = entitiesArray.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic');
-        console.log("Local entities array:", localEntities);
         setEntities(localEntities);
       }
     } catch (error) {
@@ -112,7 +110,6 @@ export default function UniMappingManager() {
       uni_name: newUniName.trim()
     };
 
-    console.log("Sending payload:", payload);
 
     setSubmitting(true);
     try {
@@ -125,7 +122,6 @@ export default function UniMappingManager() {
       });
 
       const data = await res.json();
-      console.log("Response:", data);
       
       if (data.success) {
         setShowAddModal(false);

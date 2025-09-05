@@ -34,24 +34,6 @@ export async function GET(request: NextRequest) {
     const localEntities = entities.filter((entity: any) => entity.type === 'local');
     const nationalEntities = entities.filter((entity: any) => entity.type === 'national');
     
-    // Debug: Log all entities found
-    console.log('Debug - All entities found:', entities);
-    console.log('Debug - Local entities:', localEntities);
-    console.log('Debug - National entities:', nationalEntities);
-    
-    // Debug: Check all national entities
-    console.log('Debug - All national entities found:');
-    nationalEntities.forEach((entity: any) => {
-      console.log(`  - ${entity.name} (ID: ${entity.entity_id}, Type: ${entity.type})`);
-    });
-    
-    // Debug: Check if EST entity exists
-    const estEntity = entities.find((entity: any) => entity.name.toLowerCase() === 'est');
-    if (estEntity) {
-      console.log('Debug - EST entity found:', estEntity);
-    } else {
-      console.log('Debug - EST entity NOT found in database!');
-    }
 
     // Get EMT entity ID
     const [emtResult] = await pool.query(
@@ -81,12 +63,6 @@ export async function GET(request: NextRequest) {
       activeCampaignsByEntity.set(campaign.entity_id, campaign.code);
     });
     
-    // Debug: Check active campaigns for all national entities
-    console.log('Debug - Active campaigns by entity:');
-    nationalEntities.forEach((entity: any) => {
-      const activeCampaign = activeCampaignsByEntity.get(entity.entity_id);
-      console.log(`  - ${entity.name} (ID: ${entity.entity_id}): ${activeCampaign || 'No active campaign'}`);
-    });
 
     // Get all UTM campaigns from form responses for this form (for debug)
     const [utmCampaignsResult] = await pool.query(`
@@ -103,103 +79,6 @@ export async function GET(request: NextRequest) {
 
     const utmCampaigns = Array.isArray(utmCampaignsResult) ? utmCampaignsResult : [];
 
-    // Debug: Check EMT's active campaign
-    if (emtEntityId) {
-      const emtActiveCampaign = activeCampaignsByEntity.get(emtEntityId);
-      console.log('Debug - EMT Entity ID:', emtEntityId);
-      console.log('Debug - EMT Active Campaign:', emtActiveCampaign);
-      console.log('Debug - All active campaigns from utm_campaigns table:', Object.fromEntries(activeCampaignsByEntity));
-      console.log('Debug - All active campaigns data:', activeCampaigns);
-      
-      // Check if this campaign exists in form_responses
-      if (emtActiveCampaign) {
-        const [campaignCheckResult] = await pool.query(`
-          SELECT COUNT(*) as count
-          FROM form_submissions fs
-          JOIN form_responses fr ON fs.id = fr.submission_id
-          JOIN form_fields ff ON fr.field_id = ff.id
-          WHERE fs.form_id = ? 
-            AND ff.field_name = 'utm_campaign' 
-            AND fr.value = ?
-            AND fs.duplicated = FALSE
-        `, [formId, emtActiveCampaign]);
-        
-        const campaignCount = Array.isArray(campaignCheckResult) && campaignCheckResult.length > 0 ? (campaignCheckResult[0] as any).count : 0;
-        console.log('Debug - EMT Campaign exists in form_responses:', campaignCount, 'times');
-        
-        // List all unique utm_campaign values in this form
-        const [allCampaignsResult] = await pool.query(`
-          SELECT DISTINCT fr.value as campaign_name, COUNT(*) as count
-          FROM form_submissions fs
-          JOIN form_responses fr ON fs.id = fr.submission_id
-          JOIN form_fields ff ON fr.field_id = ff.id
-          WHERE fs.form_id = ? 
-            AND ff.field_name = 'utm_campaign' 
-            AND fr.value IS NOT NULL
-            AND fs.duplicated = FALSE
-          GROUP BY fr.value
-          ORDER BY count DESC
-        `, [formId]);
-        
-        console.log('Debug - All utm_campaign values in this form:', allCampaignsResult);
-        
-        // Debug: Show actual submissions with EMT's active campaign
-        const [emtSubmissionsResult] = await pool.query(`
-          SELECT 
-            fs.id as submission_id,
-            fs.timestamp,
-            fs.entity_id,
-            e.name as entity_name,
-            fr.value as utm_campaign,
-            phone.value as phone,
-            email.value as email
-          FROM form_submissions fs
-          JOIN form_responses fr ON fs.id = fr.submission_id
-          JOIN form_fields ff ON fr.field_id = ff.id
-          LEFT JOIN entity e ON fs.entity_id = e.entity_id
-          LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-            AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-          LEFT JOIN form_responses email ON fs.id = email.submission_id 
-            AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-          WHERE fs.form_id = ? 
-            AND ff.field_name = 'utm_campaign' 
-            AND fr.value = ?
-            AND fs.duplicated = FALSE
-          ORDER BY fs.timestamp DESC
-          LIMIT 10
-        `, [formId, formId, formId, emtActiveCampaign]);
-        
-        console.log('Debug - EMT Submissions (first 10):', emtSubmissionsResult);
-        
-        // Debug: Show all submissions with any utm_campaign
-        const [allUtmSubmissionsResult] = await pool.query(`
-          SELECT 
-            fs.id as submission_id,
-            fs.timestamp,
-            fs.entity_id,
-            e.name as entity_name,
-            fr.value as utm_campaign,
-            phone.value as phone,
-            email.value as email
-          FROM form_submissions fs
-          JOIN form_responses fr ON fs.id = fr.submission_id
-          JOIN form_fields ff ON fr.field_id = ff.id
-          LEFT JOIN entity e ON fs.entity_id = e.entity_id
-          LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-            AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-          LEFT JOIN form_responses email ON fs.id = email.submission_id 
-            AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-          WHERE fs.form_id = ? 
-            AND ff.field_name = 'utm_campaign' 
-            AND fr.value IS NOT NULL
-            AND fs.duplicated = FALSE
-          ORDER BY fs.timestamp DESC
-          LIMIT 20
-        `, [formId, formId, formId]);
-        
-        console.log('Debug - All UTM Submissions (first 20):', allUtmSubmissionsResult);
-      }
-    }
 
     // Get goals for the form (for all entities)
     const [goalsResult] = await pool.query(
@@ -212,56 +91,6 @@ export async function GET(request: NextRequest) {
       goalsByEntity.set(goal.entity_id, goal.goal_value);
     });
     
-    // Debug: Check all submissions for this form and their entity allocations
-    const [allSubmissionsDebug] = await pool.query(`
-      SELECT 
-        fs.id as submission_id,
-        fs.entity_id,
-        e.name as entity_name,
-        fs.timestamp
-      FROM form_submissions fs
-      LEFT JOIN entity e ON fs.entity_id = e.entity_id
-      WHERE fs.form_id = ? AND fs.duplicated = FALSE
-      ORDER BY fs.timestamp DESC
-      LIMIT 20
-    `, [formId]);
-    
-    console.log('Debug - All submissions for this form (first 20):', allSubmissionsDebug);
-    
-    // Debug: Check entity distribution
-    const [entityDistribution] = await pool.query(`
-      SELECT 
-        fs.entity_id,
-        e.name as entity_name,
-        COUNT(*) as count
-      FROM form_submissions fs
-      LEFT JOIN entity e ON fs.entity_id = e.entity_id
-      WHERE fs.form_id = ? AND fs.duplicated = FALSE
-      GROUP BY fs.entity_id, e.name
-      ORDER BY count DESC
-    `, [formId]);
-    
-    console.log('Debug - Entity distribution for this form:', entityDistribution);
-    
-    // Debug: Check submissions with NULL or 0 entity_id
-    const [nullEntitySubmissions] = await pool.query(`
-      SELECT 
-        fs.id as submission_id,
-        fs.entity_id,
-        fs.timestamp,
-        fr.value as utm_campaign
-      FROM form_submissions fs
-      LEFT JOIN form_responses fr ON fs.id = fr.submission_id
-      LEFT JOIN form_fields ff ON fr.field_id = ff.id
-      WHERE fs.form_id = ? 
-        AND (fs.entity_id IS NULL OR fs.entity_id = 0)
-        AND ff.field_name = 'utm_campaign'
-        AND fs.duplicated = FALSE
-      ORDER BY fs.timestamp DESC
-      LIMIT 10
-    `, [formId]);
-    
-    console.log('Debug - Submissions with NULL/0 entity_id (first 10):', nullEntitySubmissions);
 
 
     
@@ -422,7 +251,6 @@ export async function GET(request: NextRequest) {
           // Get EMT submissions (submissions with EMT active campaign) - with deduplication
           // EMT SUs = submissions that have utm_campaign = EMT's active campaign AND entity_id is NULL/0
           const emtActiveCampaign = activeCampaignsByEntity.get(emtEntityId);
-          console.log('Debug - EMT Entity Calculation - Active Campaign:', emtActiveCampaign);
           
           if (emtActiveCampaign) {
             // SUs | market = all submissions with EMT campaign (any entity), deduped
@@ -457,14 +285,10 @@ export async function GET(request: NextRequest) {
             msus = susUtmSource;
             otherSource = emtNotFound;
             
-            console.log('Debug - EMT Final Count (after deduplication):', sus);
-          } else {
-            console.log('Debug - EMT Active Campaign not found!');
           }
         } else if (entityName.toLowerCase() === 'est') {
           // EST SUs = submissions with EST active campaign AND entity_id is NULL/0
           const estActiveCampaign = activeCampaignsByEntity.get(estEntityId);
-          console.log('Debug - EST Entity Calculation - Active Campaign:', estActiveCampaign);
 
           if (estActiveCampaign) {
             // SUs | market = all submissions with EST campaign (any entity), deduped
@@ -495,9 +319,6 @@ export async function GET(request: NextRequest) {
             sus = Array.isArray(estCountResult) && estCountResult.length > 0 ? (estCountResult[0] as any).count : 0;
             msus = sus;
             otherSource = sus;
-            console.log('Debug - EST Final Count (entity not found):', sus);
-          } else {
-            console.log('Debug - EST Active Campaign not found!');
           }
         } else if (entityName.toLowerCase() === 'organic') {
           // Other Source (subset): submissions with entity not found AND utm_campaign not from the selected form
@@ -529,14 +350,11 @@ export async function GET(request: NextRequest) {
           `, [formId, formId, formId]);
           susUtmSource = Array.isArray(organicMarketResult) && organicMarketResult.length > 0 ? (organicMarketResult[0] as any).count : 0;
           sus = susUtmSource;
-          console.log('Debug - Organic (entity not found, campaign not from this form) Final Count:', sus);
         } else {
           // All other national entities (except EMT and Organic) are calculated like EMT
           // Get submissions with UTM campaign matching this entity's active campaign - with deduplication
-          console.log(`Debug - ${entityName} Entity Calculation - Entity ID: ${entityId}, Form ID: ${formId}`);
           
           const entityActiveCampaign = activeCampaignsByEntity.get(entityId);
-          console.log(`Debug - ${entityName} Active Campaign:`, entityActiveCampaign);
           
           if (entityActiveCampaign) {
             // SUs | market = all submissions with this national entity's campaign (any entity), deduped
@@ -552,33 +370,6 @@ export async function GET(request: NextRequest) {
             `, [formId, entityActiveCampaign]);
             susUtmSource = Array.isArray(entityMarketResult) && entityMarketResult.length > 0 ? (entityMarketResult[0] as any).count : 0;
 
-            // Debug: Check if there are any submissions with this entity's active campaign
-            const [debugEntitySubmissions] = await pool.query(`
-              SELECT 
-                fs.id as submission_id,
-                fs.entity_id,
-                e.name as entity_name,
-                fr.value as utm_campaign,
-                fs.timestamp,
-                phone.value as phone,
-                email.value as email
-              FROM form_submissions fs
-              JOIN form_responses fr ON fs.id = fr.submission_id
-              JOIN form_fields ff ON fr.field_id = ff.id
-              LEFT JOIN entity e ON fs.entity_id = e.entity_id
-              LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-                AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-              LEFT JOIN form_responses email ON fs.id = email.submission_id 
-                AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-              WHERE fs.form_id = ? 
-                AND ff.field_name = 'utm_campaign' 
-                AND fr.value = ?
-              ORDER BY fs.timestamp DESC
-              LIMIT 10
-            `, [formId, formId, formId, entityActiveCampaign]);
-            
-            console.log(`Debug - ${entityName} Submissions with active campaign (first 10):`, debugEntitySubmissions);
-            console.log(`Debug - ${entityName} Total submissions with active campaign:`, Array.isArray(debugEntitySubmissions) ? debugEntitySubmissions.length : 0);
             
             const [entityResult] = await pool.query(`
               SELECT COUNT(*) as count
@@ -597,13 +388,7 @@ export async function GET(request: NextRequest) {
             msus = sus; // For these entities, MSUs = SUs (all submissions have UTM campaign)
             otherSource = sus;
             
-            console.log(`Debug - ${entityName} Final Count (after deduplication):`, sus);
 
-            otherSource = 0;
-          } else {
-            console.log(`Debug - ${entityName} No active campaign found!`);
-            sus = 0;
-            msus = 0;
             otherSource = 0;
           }
         }
@@ -648,16 +433,13 @@ export async function GET(request: NextRequest) {
     
     const totalLocalNotFound = Array.isArray(totalLocalNotFoundResult) && totalLocalNotFoundResult.length > 0 ? (totalLocalNotFoundResult[0] as any).count : 0;
     
-    console.log('Debug - Total Local NOT FOUND count:', totalLocalNotFound);
 
     // Calculate Total National "Not Found from your UTM source" as the sum of national rows' other_source
     const totalNationalNotFound = nationalEntityStats.reduce((sum: number, stat: any) => sum + (stat.other_source || 0), 0);
-    console.log('Debug - Total National NOT FOUND count (from rows):', totalNationalNotFound);
 
     // Calculate "Total of Total" = Total Local NOT FOUND + Total National NOT FOUND
     const totalOfTotal = totalLocalNotFound + totalNationalNotFound;
     
-    console.log('Debug - Total of Total (Local + National NOT FOUND):', totalOfTotal);
 
     // Calculate total submissions after deduplication for the entire form
     const [totalDeduplicatedSubmissionsResult] = await pool.query(`
@@ -668,7 +450,6 @@ export async function GET(request: NextRequest) {
     
     const totalDeduplicatedSubmissions = Array.isArray(totalDeduplicatedSubmissionsResult) && totalDeduplicatedSubmissionsResult.length > 0 ? (totalDeduplicatedSubmissionsResult[0] as any).total : 0;
     
-    console.log('Debug - Total Deduplicated Submissions:', totalDeduplicatedSubmissions);
 
     // Combine all entity stats
     const entityStats = [...localEntityStats, ...nationalEntityStats];

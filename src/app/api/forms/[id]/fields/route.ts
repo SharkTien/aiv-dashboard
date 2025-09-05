@@ -10,15 +10,12 @@ export async function GET(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: formId } = await ctx.params;
-  console.log("API: Fetching fields for formId:", formId);
   const pool = getDbPool();
   
   try {
     // Verify form exists
     const [formRows] = await pool.query("SELECT id FROM forms WHERE id = ?", [formId]);
-    console.log("API: Form rows:", formRows);
     if (!Array.isArray(formRows) || (formRows as any).length === 0) {
-      console.log("API: Form not found");
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
@@ -32,7 +29,6 @@ export async function GET(
     );
     
     const data = Array.isArray(rows) ? (rows as any) : [];
-    console.log("API: Fields data:", data);
     
     const response = NextResponse.json({ fields: data });
     response.headers.set('Content-Type', 'application/json; charset=utf-8');

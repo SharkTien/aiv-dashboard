@@ -73,12 +73,9 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
   const body = await req.json();
-  console.log("Received body:", body);
   const { entity_id, uni_name } = body || {};
-  console.log("Extracted values:", { entity_id, uni_name });
   
   if (!entity_id || !uni_name || entity_id === "" || uni_name === "" || isNaN(Number(entity_id))) {
-    console.log("Validation failed:", { entity_id, uni_name });
     return NextResponse.json({ error: "Missing required fields: entity_id and uni_name" }, { status: 400 });
   }
 

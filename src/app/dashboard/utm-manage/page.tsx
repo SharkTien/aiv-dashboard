@@ -99,14 +99,12 @@ export default function UTMManagePage() {
   // Monitor sources and mediums state, auto-reload if they become empty
   useEffect(() => {
     if (sources.length === 0 && !loading) {
-      console.log('UTM Manage - Sources became empty, attempting to reload...');
       setTimeout(() => loadSourcesAndMediums(), 1000);
     }
   }, [sources.length, loading]);
 
   useEffect(() => {
     if (mediums.length === 0 && !loading) {
-      console.log('UTM Manage - Mediums became empty, attempting to reload...');
       setTimeout(() => loadSourcesAndMediums(), 1000);
     }
   }, [mediums.length, loading]);
@@ -114,13 +112,10 @@ export default function UTMManagePage() {
   // Reload sources and mediums when switching tabs to ensure data is always available
   useEffect(() => {
     if (activeTab === 'sources' && sources.length === 0) {
-      console.log('UTM Manage - Tab switched to sources, reloading...');
       loadSourcesAndMediums();
     } else if (activeTab === 'mediums' && mediums.length === 0) {
-      console.log('UTM Manage - Tab switched to mediums, reloading...');
       loadSourcesAndMediums();
     } else if (activeTab === 'campaigns' && (sources.length === 0 || mediums.length === 0)) {
-      console.log('UTM Manage - Tab switched to campaigns, checking sources/mediums...');
       if (sources.length === 0 || mediums.length === 0) {
         loadSourcesAndMediums();
       }
@@ -130,7 +125,6 @@ export default function UTMManagePage() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      console.log('UTM Manage - Loading all essential data...');
       
       // Load all essential data in parallel
       const [campaignsRes, sourcesRes, mediumsRes, entitiesRes, formsRes] = await Promise.all([
@@ -145,14 +139,12 @@ export default function UTMManagePage() {
       if (campaignsRes.ok) {
         const campaignsData = await campaignsRes.json();
         setCampaigns(Array.isArray(campaignsData) ? campaignsData : []);
-        console.log('UTM Manage - Campaigns loaded:', Array.isArray(campaignsData) ? campaignsData.length : 0);
       }
 
       // Handle sources data
       if (sourcesRes.ok) {
         const sourcesData = await sourcesRes.json();
         setSources(Array.isArray(sourcesData) ? sourcesData : []);
-        console.log('UTM Manage - Sources loaded:', Array.isArray(sourcesData) ? sourcesData.length : 0);
       } else {
         console.error('UTM Manage - Failed to load sources:', sourcesRes.status, sourcesRes.statusText);
       }
@@ -161,7 +153,6 @@ export default function UTMManagePage() {
       if (mediumsRes.ok) {
         const mediumsData = await mediumsRes.json();
         setMediums(Array.isArray(mediumsData) ? mediumsData : []);
-        console.log('UTM Manage - Mediums loaded:', Array.isArray(mediumsData) ? mediumsData.length : 0);
       } else {
         console.error('UTM Manage - Failed to load mediums:', mediumsRes.status, mediumsRes.statusText);
       }
@@ -171,7 +162,6 @@ export default function UTMManagePage() {
         const entData = await entitiesRes.json();
         const filteredEntities = Array.isArray(entData.items) ? entData.items.filter((e: any) => e.name.toLowerCase() !== 'organic') : [];
         setEntities(filteredEntities);
-        console.log('UTM Manage - Entities loaded:', filteredEntities.length);
       }
 
       // Handle forms data
@@ -179,14 +169,12 @@ export default function UTMManagePage() {
         const formsData = await formsRes.json();
         const formsArray = Array.isArray(formsData.items) ? formsData.items : [];
         setForms(formsArray);
-        console.log('UTM Manage - Forms loaded:', formsArray.length);
       }
 
     } catch (error) {
       console.error('UTM Manage - Error loading all data:', error);
       // Retry loading sources and mediums if they fail
       setTimeout(() => {
-        console.log('UTM Manage - Retrying sources and mediums...');
         loadSourcesAndMediums();
       }, 2000);
     } finally {
@@ -196,7 +184,6 @@ export default function UTMManagePage() {
 
   const loadSourcesAndMediums = async () => {
     try {
-      console.log('UTM Manage - Loading sources and mediums separately...');
       const [sourcesRes, mediumsRes] = await Promise.all([
         fetch('/api/utm/sources'),
         fetch('/api/utm/mediums')
@@ -206,7 +193,6 @@ export default function UTMManagePage() {
         const sourcesData = await sourcesRes.json();
         const sourcesList = Array.isArray(sourcesData) ? sourcesData : [];
         setSources(sourcesList);
-        console.log('UTM Manage - Sources retry loaded:', sourcesList.length);
       } else {
         console.error('UTM Manage - Failed to retry load sources:', sourcesRes.status, sourcesRes.statusText);
       }
@@ -215,7 +201,6 @@ export default function UTMManagePage() {
         const mediumsData = await mediumsRes.json();
         const mediumsList = Array.isArray(mediumsData) ? mediumsData : [];
         setMediums(mediumsList);
-        console.log('UTM Manage - Mediums retry loaded:', mediumsList.length);
       } else {
         console.error('UTM Manage - Failed to retry load mediums:', mediumsRes.status, mediumsRes.statusText);
       }
@@ -264,7 +249,6 @@ export default function UTMManagePage() {
         // Handle entities data
         if (results[resultIndex]?.ok) {
           const entData = await results[resultIndex].json();
-          console.log('UTM Manage - Entities data:', entData);
           const filteredEntities = Array.isArray(entData.items) ? entData.items.filter((e: any) => e.name.toLowerCase() !== 'organic') : [];
           setEntities(filteredEntities);
         }
@@ -883,7 +867,6 @@ export default function UTMManagePage() {
                         >
                           <option value="">All LC</option>
                           {entities.map((ent) => {
-                            console.log('UTM Manage - Rendering entity:', ent);
                             return (
                               <option key={ent.entity_id} value={ent.entity_id}>{ent.name}</option>
                             );

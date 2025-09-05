@@ -51,10 +51,6 @@ export default function ManualAllocateViewer({ formId }: ManualAllocateViewerPro
              submissionsRes.json(),
              entitiesRes.json()
            ]);
-           console.log('Submissions data:', submissionsData);
-           console.log('Entities data:', entitiesData);
-           console.log('Entities items:', entitiesData.items);
-           console.log('Entities items length:', entitiesData.items?.length);
            setSubmissions(submissionsData.submissions || []);
            // Filter out national entities and organic (only show local entities)
            const localEntities = Array.isArray(entitiesData.items) ? entitiesData.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
@@ -338,7 +334,6 @@ export default function ManualAllocateViewer({ formId }: ManualAllocateViewerPro
                         >
                           <option value="">Select entity...</option>
                           {entities.map(entity => {
-                            console.log('Rendering entity:', entity);
                             return (
                               <option key={entity.entity_id} value={entity.entity_id}>
                                 {entity.name}

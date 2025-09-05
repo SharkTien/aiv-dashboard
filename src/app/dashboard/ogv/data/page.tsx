@@ -27,14 +27,6 @@ export default function Page() {
   const [activeTab, setActiveTab] = useState<TabType>('raw');
 
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await loadForms("");
-      setLoading(false);
-    })();
-  }, []);
-
   async function loadForms(query: string) {
     setLoadingForms(true);
     try {
@@ -51,9 +43,12 @@ export default function Page() {
     } finally { setLoadingForms(false); }
   }
 
-  // Debounced search
+  // Debounced search - this will handle both initial load and search
   useEffect(() => {
-    const t = setTimeout(() => { loadForms(q); }, 350);
+    setLoading(true);
+    const t = setTimeout(() => { 
+      loadForms(q).finally(() => setLoading(false));
+    }, q === "" ? 0 : 350); // No delay for initial load, 350ms delay for search
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);

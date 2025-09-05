@@ -17,7 +17,7 @@ export async function POST(
   try {
     // Get the original form
     const [formRows] = await pool.query(
-      "SELECT id, name, code FROM forms WHERE id = ?",
+      "SELECT id, name, code, type FROM forms WHERE id = ?",
       [formId]
     );
     
@@ -40,8 +40,8 @@ export async function POST(
     const newFormCode = `${originalForm.code}_copy_${Date.now()}`;
 
     const [newFormResult] = await pool.query(
-      "INSERT INTO forms (name, code) VALUES (?, ?)",
-      [newFormName, newFormCode]
+      "INSERT INTO forms (name, code, type) VALUES (?, ?, ?)",
+      [newFormName, newFormCode, originalForm.type]
     );
     
     const newFormId = (newFormResult as any).insertId;
@@ -67,7 +67,8 @@ export async function POST(
       newForm: {
         id: newFormId,
         name: newFormName,
-        code: newFormCode
+        code: newFormCode,
+        type: originalForm.type
       },
       fieldsCopied: fields.length
     });

@@ -77,7 +77,6 @@ export default function FormBuilder({ formId }: { formId: number }) {
       const res = await fetch(`/api/forms/${formId}/fields`);
       if (res.ok) {
         const data = await res.json();
-        console.log("FormBuilder: Fields data:", data);
         setFields(Array.isArray(data.fields) ? data.fields : []);
       } else {
         console.error("Failed to load fields:", res.status, res.statusText);
@@ -98,7 +97,6 @@ export default function FormBuilder({ formId }: { formId: number }) {
 
   // Debug: Log fields whenever they change
   useEffect(() => {
-    console.log("FormBuilder: Fields state updated:", fields);
   }, [fields]);
 
   useEffect(() => {

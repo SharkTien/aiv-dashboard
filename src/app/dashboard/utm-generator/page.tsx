@@ -90,19 +90,15 @@ export default function UTMGeneratorPage() {
 
   // Debug: Log state changes
   useEffect(() => {
-    console.log('Sources state changed:', sources.length);
     // If sources become empty unexpectedly, try to reload
     if (sources.length === 0 && !loading) {
-      console.log('Sources became empty, attempting to reload...');
       setTimeout(() => loadSourcesAndMediums(), 1000);
     }
   }, [sources, loading]);
 
   useEffect(() => {
-    console.log('Mediums state changed:', mediums.length);
     // If mediums become empty unexpectedly, try to reload
     if (mediums.length === 0 && !loading) {
-      console.log('Mediums became empty, attempting to reload...');
       setTimeout(() => loadSourcesAndMediums(), 1000);
     }
   }, [mediums, loading]);
@@ -155,9 +151,7 @@ export default function UTMGeneratorPage() {
   // Reload sources and mediums when switching to create tab to ensure data is available
   useEffect(() => {
     if (activeTab === 'create' && (sources.length === 0 || mediums.length === 0)) {
-      console.log('Tab switched to create, checking sources/mediums...');
       if (sources.length === 0) {
-        console.log('Sources empty, reloading...');
         loadSourcesAndMediums();
       }
     }
@@ -193,7 +187,6 @@ export default function UTMGeneratorPage() {
 
   const loadSourcesAndMediums = async () => {
     try {
-      console.log('Loading sources and mediums separately...');
       const [sourcesRes, mediumsRes] = await Promise.all([
         fetch('/api/utm/sources'),
         fetch('/api/utm/mediums')
@@ -203,7 +196,6 @@ export default function UTMGeneratorPage() {
         const sourcesData = await sourcesRes.json();
         const sourcesList = Array.isArray(sourcesData) ? sourcesData : [];
         setSources(sourcesList);
-        console.log('Sources retry loaded:', sourcesList.length);
       } else {
         console.error('Failed to retry load sources:', sourcesRes.status, sourcesRes.statusText);
       }
@@ -212,7 +204,6 @@ export default function UTMGeneratorPage() {
         const mediumsData = await mediumsRes.json();
         const mediumsList = Array.isArray(mediumsData) ? mediumsData : [];
         setMediums(mediumsList);
-        console.log('Mediums retry loaded:', mediumsList.length);
       } else {
         console.error('Failed to retry load mediums:', mediumsRes.status, mediumsRes.statusText);
       }
@@ -224,7 +215,6 @@ export default function UTMGeneratorPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      console.log('Loading UTM data...');
       const [meRes, entitiesRes, sourcesRes, mediumsRes, activeRes] = await Promise.all([
         fetch('/api/auth/me'),
         fetch('/api/entities'),
@@ -248,14 +238,12 @@ export default function UTMGeneratorPage() {
         // Filter out national entities and organic (only show local entities)
         const localEntities = Array.isArray(entitiesData.items) ? entitiesData.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
         setEntities(localEntities);
-        console.log('Entities loaded:', localEntities.length);
       }
 
       if (sourcesRes.ok) {
         const sourcesData = await sourcesRes.json();
         const sourcesList = Array.isArray(sourcesData) ? sourcesData : [];
         setSources(sourcesList);
-        console.log('Sources loaded:', sourcesList.length);
       } else {
         console.error('Failed to load sources:', sourcesRes.status, sourcesRes.statusText);
       }
@@ -264,7 +252,6 @@ export default function UTMGeneratorPage() {
         const mediumsData = await mediumsRes.json();
         const mediumsList = Array.isArray(mediumsData) ? mediumsData : [];
         setMediums(mediumsList);
-        console.log('Mediums loaded:', mediumsList.length);
       } else {
         console.error('Failed to load mediums:', mediumsRes.status, mediumsRes.statusText);
       }
@@ -276,14 +263,12 @@ export default function UTMGeneratorPage() {
       // Determine type from query param; default oGV
       const typeParam = searchParams.get('type');
       const formType = typeParam === 'TMR' ? 'TMR' : 'oGV';
-      console.log('Form type from URL:', formType, 'typeParam:', typeParam);
       
       const formsRes = await fetch(`/api/forms?type=${encodeURIComponent(formType)}&limit=100`);
       if (formsRes.ok) {
         const formsData = await formsRes.json();
         const formsList = Array.isArray(formsData.items) ? formsData.items : [];
         setAvailableForms(formsList);
-        console.log('Forms loaded for type', formType, ':', formsList.length);
       } else {
         console.error('Failed to load forms:', formsRes.status, formsRes.statusText);
       }
@@ -293,7 +278,6 @@ export default function UTMGeneratorPage() {
       console.error('Error loading data:', error);
       // Retry loading sources and mediums if they fail
       setTimeout(() => {
-        console.log('Retrying sources and mediums...');
         loadSourcesAndMediums();
       }, 2000);
     } finally {

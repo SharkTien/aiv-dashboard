@@ -83,6 +83,7 @@ export async function GET(
           fr.submission_id,
           ff.field_name, 
           ff.field_label, 
+          ff.field_type,
           fr.value,
           CASE 
             WHEN fr.value = 'other--uni-2' THEN NULL
@@ -101,18 +102,16 @@ export async function GET(
 
       const responses = Array.isArray(responsesResult) ? responsesResult : [];
       
-      // Group responses by submission_id and filter out cleaned values
-      const responsesBySubmission = new Map();
+      // Group responses by submission_id into a field_name -> value map
+      const responsesBySubmission = new Map<number, Record<string, string>>();
       responses.forEach((response: any) => {
-        // Skip responses where value_label is NULL (cleaned out)
-        if (response.value_label === null) {
-          return;
+        const subId = response.submission_id as number;
+        if (!responsesBySubmission.has(subId)) {
+          responsesBySubmission.set(subId, {});
         }
-        
-        if (!responsesBySubmission.has(response.submission_id)) {
-          responsesBySubmission.set(response.submission_id, []);
-        }
-        responsesBySubmission.get(response.submission_id).push(response);
+        const bucket = responsesBySubmission.get(subId)!;
+        // Prefer value_label when provided, otherwise raw value
+        bucket[response.field_name] = response.value_label ?? response.value ?? "";
       });
 
       // Assign responses to submissions
@@ -124,7 +123,7 @@ export async function GET(
         formCode: submission.formCode,
         utmCampaign: submission.utmCampaign,
         utmCampaignName: submission.utmCampaignName,
-        responses: responsesBySubmission.get(submission.id) || []
+        responses: responsesBySubmission.get(submission.id) || {}
       }));
     }
 

@@ -100,7 +100,6 @@ export async function POST(req: NextRequest) {
     const timestamp = Date.now();
     const code = `${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${timestamp}`;
     
-    console.log('Creating form with code:', code, 'name:', name, 'type:', type);
     
     const [result] = await pool.query(
       "INSERT INTO forms (code, name, type) VALUES (?, ?, ?)",
@@ -108,11 +107,9 @@ export async function POST(req: NextRequest) {
     );
     
     const formId = (result as any).insertId;
-    console.log('Form created with ID:', formId);
     
     // Commit transaction
     await pool.query('COMMIT');
-    console.log('Form created successfully');
     
     return NextResponse.json({ 
       success: true, 
@@ -122,7 +119,6 @@ export async function POST(req: NextRequest) {
     // Rollback transaction on error
     try {
       await pool.query('ROLLBACK');
-      console.log('Transaction rolled back due to error');
     } catch (rollbackError) {
       console.error("Error rolling back transaction:", rollbackError);
     }

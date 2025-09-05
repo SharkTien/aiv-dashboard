@@ -30,8 +30,6 @@ export default function UTMCampaignBuilderPage() {
       ]);
       if (entRes.ok) {
         const entData = await entRes.json();
-        console.log('UTM Campaign Builder - Entities data:', entData);
-        console.log('UTM Campaign Builder - Entities items:', entData.items);
         // Filter out organic, but include local entities and specific entities (emt, est)
         const filteredEntities = Array.isArray(entData.items) ? entData.items.filter((e: any) => {
           const name = e.name.toLowerCase();
@@ -41,12 +39,10 @@ export default function UTMCampaignBuilderPage() {
       }
       if (formsRes.ok) {
         const formsData = await formsRes.json();
-        console.log('UTM Campaign Builder - Forms data:', formsData);
         setForms(Array.isArray(formsData.items) ? formsData.items : []);
       }
       if (campRes.ok) {
         const data: Campaign[] = await campRes.json();
-        console.log('UTM Campaign Builder - Campaigns data:', data);
         setActiveCampaigns(Array.isArray(data) ? data : []);
       }
     } catch (e) {

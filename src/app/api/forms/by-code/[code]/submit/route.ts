@@ -74,8 +74,6 @@ export async function POST(
     const fields: Array<{ id: number; field_name: string; field_type: string; field_options: string | null }> = Array.isArray(fieldRows) ? (fieldRows as any) : [];
     const nameToField = new Map(fields.map(f => [f.field_name, f]));
     
-    console.log("Form fields:", fields.map(f => ({ name: f.field_name, type: f.field_type, options: f.field_options })));
-    console.log("Available field names:", Array.from(nameToField.keys()));
 
     // 1) Create submission row with duplicated flag
     const [submissionResult] = await conn.query(
@@ -83,29 +81,20 @@ export async function POST(
       [formId]
     );
     const submissionId = (submissionResult as any).insertId as number;
-    console.log(`Created submission with ID: ${submissionId}`);
 
     // Track uni value (uni_id) if provided
     let uniIdFromPayload: string | number | null = null;
-    console.log("=== Starting form submission processing ===");
-    console.log("Form body:", JSON.stringify(body, null, 2));
 
     // 2) Save responses
-    console.log("=== Processing form fields ===");
     for (const [key, rawValue] of Object.entries(body)) {
-      console.log(`Processing field: "${key}" = "${rawValue}"`);
       const field = nameToField.get(key);
       if (!field) {
-        console.log(`Field "${key}" not found in form definition, skipping`);
         continue;
       }
       let saveValue: any = rawValue;
       
       // Debug logging for uni field
       if (key === "uni") {
-        console.log(`Field "uni" details:`, {
-          field_name: field.field_name,
-          field_type: field.field_type,
           field_options: field.field_options,
           rawValue: rawValue
         });
@@ -159,11 +148,9 @@ export async function POST(
 
       // Handle uni field - convert uni_name to uni_id (for all cases)
       if (key === "uni" && saveValue != null && saveValue !== "") {
-        console.log(`Processing uni field: "${saveValue}" (field_type: ${field.field_type})`);
         
         // If it's already a number (uni_id), use it directly
         if (!isNaN(Number(saveValue)) && Number(saveValue) > 0) {
-          console.log(`Value "${saveValue}" is already a uni_id, using directly`);
           uniIdFromPayload = Number(saveValue);
         } else {
           // It's a uni_name, need to map to uni_id
@@ -175,20 +162,17 @@ export async function POST(
               [uniName]
             );
             const uniList = Array.isArray(uniRows) ? (uniRows as any) : [];
-            console.log(`Uni mapping query result for "${uniName}":`, uniList);
             
             if (uniList.length > 0 && uniList[0].uni_id != null) {
               // Found matching uni_name, save uni_id
               const originalValue = saveValue;
               saveValue = String(uniList[0].uni_id);
               uniIdFromPayload = uniList[0].uni_id;
-              console.log(`Mapped "${originalValue}" to uni_id: ${saveValue}`);
             } else {
               // No matching uni_name found, save as "other--uni-2"
               const originalValue = saveValue;
               saveValue = "other--uni-2";
               uniIdFromPayload = null;
-              console.log(`No mapping found for "${originalValue}", saved as: ${saveValue}`);
             }
           }
         }
@@ -196,7 +180,6 @@ export async function POST(
 
       // Debug logging for uni field
       if (key === "uni") {
-        console.log(`Saving uni field value: "${saveValue}" for field_id: ${field.id}`);
       }
       
       await conn.query(
@@ -270,7 +253,6 @@ export async function POST(
       );
       
       if (Array.isArray(duplicateRows) && (duplicateRows as any).length > 0) {
-        console.log(`Found duplicate submission with phone: ${phone}, email: ${email}`);
         
         // Update current submission to be marked as duplicate
         await conn.query(
@@ -281,22 +263,17 @@ export async function POST(
     }
 
     // 4) Map uni_id -> entity_id and update submission
-    console.log(`Final uniIdFromPayload: ${uniIdFromPayload}`);
     let entityId = null;
     
     if (uniIdFromPayload != null) {
-      console.log(`Looking up entity_id for uni_id: ${uniIdFromPayload}`);
       const [mapRows] = await conn.query(
         "SELECT entity_id FROM uni_mapping WHERE uni_id = ? LIMIT 1",
         [uniIdFromPayload]
       );
       const list = Array.isArray(mapRows) ? (mapRows as any) : [];
-      console.log(`Entity mapping result:`, list);
       if (list.length > 0 && list[0].entity_id != null) {
         entityId = list[0].entity_id;
-        console.log(`Found entity_id: ${entityId} for uni_id: ${uniIdFromPayload}`);
       } else {
-        console.log(`No entity_id found for uni_id: ${uniIdFromPayload}`);
       }
     }
     
@@ -304,14 +281,11 @@ export async function POST(
     
     // Update submission with entity_id
     if (entityId != null) {
-      console.log(`Updating submission ${submissionId} with entity_id: ${entityId}`);
       await conn.query(
         "UPDATE form_submissions SET entity_id = ? WHERE id = ?",
         [entityId, submissionId]
       );
-      console.log(`Successfully updated entity_id for submission ${submissionId}`);
     } else {
-      console.log(`No entity_id available for submission ${submissionId}`);
     }
 
     await conn.commit();

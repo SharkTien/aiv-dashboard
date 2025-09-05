@@ -111,7 +111,7 @@ export default function TMRHubDashboard() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <Image src="/tmr.png" alt="TMR Hub Logo" width={150} height={32} />
+                <Image src="/tmr.webp" alt="TMR Hub Logo" width={150} height={32} />
               </div>
               <div className="hidden md:flex items-center space-x-1 text-sm text-gray-500 dark:text-gray-400">
                 <span>Dashboard</span>

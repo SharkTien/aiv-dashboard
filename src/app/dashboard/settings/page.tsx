@@ -26,15 +26,11 @@ export default function Page() {
         ]);
         if (entRes.ok) {
           const ents = await entRes.json();
-          console.log('Settings - Entities data:', ents);
-          console.log('Settings - Entities items:', ents.items);
           setEntities(Array.isArray(ents.items) ? ents.items : []);
         }
         if (meRes.ok) {
           const data = await meRes.json();
-          console.log('Settings - User data:', data);
           const user = data.user as Me;
-          console.log('Settings - User entity_id:', user.entity_id);
           setMe(user);
           setName(user.name);
           setEmail(user.email as any);
