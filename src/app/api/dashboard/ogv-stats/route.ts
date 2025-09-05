@@ -486,8 +486,8 @@ export async function GET(request: NextRequest) {
           // Get MSUs for each local entity in compare form
           const compareLocalStats = [];
           for (const entity of compareEntities) {
-            const entityId = entity.entity_id;
-            const entityName = entity.entity_name;
+            const entityId = (entity as any).entity_id;
+            const entityName = (entity as any).entity_name;
             
             // Get MSUs for this entity in compare form
             // MSUs = submissions with utm_campaign that belongs to this entity AND comes from the compare form
