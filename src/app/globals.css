@@ -116,3 +116,54 @@ input:checked + .slider:before {
 .no-scrollbar::-webkit-scrollbar { /* Chrome, Safari and Opera */
   display: none;
 }
+
+/* Hide main page scrollbar globally */
+html, body, #__next, main {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important;    /* Firefox */
+  overflow-x: hidden !important;
+}
+
+/* Hide scrollbar for all elements */
+* {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important;    /* Firefox */
+}
+
+*::-webkit-scrollbar { /* Chrome, Safari and Opera */
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html::-webkit-scrollbar, 
+body::-webkit-scrollbar, 
+#__next::-webkit-scrollbar,
+main::-webkit-scrollbar { /* Chrome, Safari and Opera */
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Custom animations for analytics */
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawCircle {
+  from {
+    stroke-dasharray: 0 691;
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dasharray: var(--target-dasharray);
+    stroke-dashoffset: var(--target-dashoffset);
+  }
+}
