@@ -95,9 +95,7 @@ export async function POST(
       
       // Debug logging for uni field
       if (key === "uni") {
-          field_options: field.field_options,
-          rawValue: rawValue
-        });
+        // no-op for now; keep hook for potential future logging
       }
 
       if (field.field_type === "database") {
