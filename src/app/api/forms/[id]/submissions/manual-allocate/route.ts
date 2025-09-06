@@ -20,12 +20,8 @@ export async function GET(
 
     const pool = getDbPool();
 
-    // First, let's test with a simple query
-    const testQuery = `SELECT COUNT(*) as count FROM form_submissions WHERE form_id = ?`;
-    const [testResult] = await pool.query(testQuery, [formId]);
-
-    // Get submissions with empty entity_id or organic entity_id
-    const submissionsQuery = `
+    // Get submissions with empty entity_id or organic entity_id in a single optimized query
+    const [submissionsResult] = await pool.query(`
       SELECT 
         fs.id,
         fs.form_id,
@@ -44,29 +40,27 @@ export async function GET(
       LEFT JOIN uni_mapping um ON ff.field_name = 'uni' AND fr.value = um.uni_id
       LEFT JOIN entity e ON fs.entity_id = e.entity_id
       WHERE fs.form_id = ? AND (fs.entity_id IS NULL OR fs.entity_id = 0 OR e.name = 'organic')
-      ORDER BY fs.timestamp DESC
-    `;
-    const [submissions] = await pool.query(submissionsQuery, [formId]);
+      ORDER BY fs.timestamp DESC, ff.sort_order ASC
+    `, [formId]);
+
+    const rows = Array.isArray(submissionsResult) ? submissionsResult : [];
 
     // Group responses by submission
-    const groupedSubmissions: any[] = [];
-    const submissionMap = new Map();
-
-    (submissions as any[]).forEach((row: any) => {
-      if (!submissionMap.has(row.id)) {
-        const submission = {
+    const submissionsMap = new Map();
+    
+    rows.forEach((row: any) => {
+      if (!submissionsMap.has(row.id)) {
+        submissionsMap.set(row.id, {
           id: row.id,
           form_id: row.form_id,
           entity_id: row.entity_id,
           timestamp: row.timestamp,
           responses: []
-        };
-        submissionMap.set(row.id, submission);
-        groupedSubmissions.push(submission);
+        });
       }
 
       if (row.field_name && row.value !== null) {
-        submissionMap.get(row.id).responses.push({
+        submissionsMap.get(row.id).responses.push({
           field_name: row.field_name,
           value: row.value,
           value_label: row.value_label
@@ -74,9 +68,16 @@ export async function GET(
       }
     });
 
-    return NextResponse.json({
+    const groupedSubmissions = Array.from(submissionsMap.values());
+
+    const response = NextResponse.json({
       submissions: groupedSubmissions
     });
+    
+    // Cache for 1 minute
+    response.headers.set('Cache-Control', 'private, max-age=60');
+    
+    return response;
 
   } catch (error) {
     console.error('Error fetching submissions for manual allocation:', error);

@@ -26,35 +26,6 @@ export async function GET(
   const pool = getDbPool();
 
   try {
-    // Get all submissions with duplicated = false
-    const [submissionsResult] = await pool.query(`
-      SELECT 
-        fs.id,
-        fs.timestamp,
-        fs.entity_id,
-        e.name as entity_name,
-        f.code as form_code,
-        phone.value as phone_value,
-        email.value as email_value,
-        utm.value as utm_campaign_value,
-        uc.name as utm_campaign_name
-      FROM form_submissions fs
-      LEFT JOIN entity e ON fs.entity_id = e.entity_id
-      LEFT JOIN forms f ON fs.form_id = f.id
-      LEFT JOIN form_responses phone ON fs.id = phone.submission_id 
-        AND phone.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'phone')
-      LEFT JOIN form_responses email ON fs.id = email.submission_id 
-        AND email.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'email')
-      LEFT JOIN form_responses utm ON fs.id = utm.submission_id 
-        AND utm.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_campaign')
-      LEFT JOIN utm_campaigns uc ON utm.value = uc.code
-      WHERE fs.form_id = ? AND fs.duplicated = FALSE
-      ORDER BY fs.timestamp DESC
-      ${getUnlimited ? '' : 'LIMIT ? OFFSET ?'}
-    `, getUnlimited ? [formId, formId, formId, formId] : [formId, formId, formId, formId, limit, offset]);
-
-    const submissions = Array.isArray(submissionsResult) ? submissionsResult : [];
-
     // Get total count of non-duplicated submissions
     const [countResult] = await pool.query(`
       SELECT COUNT(*) as total
@@ -64,80 +35,73 @@ export async function GET(
 
     const total = Array.isArray(countResult) && countResult.length > 0 ? (countResult[0] as any).total : 0;
 
-    // Get responses for each submission
-    const submissionIds = submissions.map((s: any) => s.id);
-    let submissionsWithResponses: Array<{
-      id: any;
-      timestamp: any;
-      entityId: any;
-      entityName: any;
-      formCode: any;
-      utmCampaign: any;
-      utmCampaignName: any;
-      responses: Record<string, string>;
-    }> = submissions.map((s: any) => ({
-      id: s.id,
-      timestamp: s.timestamp,
-      entityId: s.entity_id,
-      entityName: s.entity_name,
-      formCode: s.form_code,
-      utmCampaign: s.utm_campaign_value,
-      utmCampaignName: s.utm_campaign_name,
-      responses: {}
-    }));
+    // Get all submissions with responses in a single optimized query
+    const [submissionsResult] = await pool.query(`
+      SELECT 
+        fs.id,
+        fs.timestamp,
+        fs.entity_id,
+        e.name as entity_name,
+        f.code as form_code,
+        ff.field_name,
+        fr.value,
+        ff.field_label,
+        ff.field_type,
+        ff.sort_order,
+        CASE 
+          WHEN fr.value = 'other--uni-2' THEN NULL
+          WHEN fr.value = 'other--uni' THEN 'uni'
+          WHEN um.uni_name IS NOT NULL THEN um.uni_name
+          ELSE fr.value
+        END AS value_label,
+        utm_campaign.value as utm_campaign_value,
+        uc.name as utm_campaign_name
+      FROM form_submissions fs
+      LEFT JOIN entity e ON fs.entity_id = e.entity_id
+      LEFT JOIN forms f ON fs.form_id = f.id
+      LEFT JOIN form_responses fr ON fs.id = fr.submission_id
+      LEFT JOIN form_fields ff ON fr.field_id = ff.id
+      LEFT JOIN uni_mapping um
+        ON ff.field_name = 'uni'
+        AND fr.value = um.uni_id
+      LEFT JOIN form_responses utm_campaign ON fs.id = utm_campaign.submission_id 
+        AND utm_campaign.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_campaign')
+      LEFT JOIN utm_campaigns uc ON utm_campaign.value = uc.code
+      WHERE fs.form_id = ? AND fs.duplicated = FALSE
+      ORDER BY fs.timestamp DESC, ff.sort_order ASC
+      ${getUnlimited ? '' : 'LIMIT ? OFFSET ?'}
+    `, getUnlimited ? [formId, formId] : [formId, formId, limit, offset]);
 
-    if (submissionIds.length > 0) {
-      const [responsesResult] = await pool.query(`
-        SELECT 
-          fr.submission_id,
-          ff.field_name, 
-          ff.field_label, 
-          ff.field_type,
-          fr.value,
-          CASE 
-            WHEN fr.value = 'other--uni-2' THEN NULL
-            WHEN fr.value = 'other--uni' THEN 'uni'
-            WHEN um.uni_name IS NOT NULL THEN um.uni_name
-            ELSE fr.value
-          END AS value_label
-        FROM form_responses fr
-        JOIN form_fields ff ON fr.field_id = ff.id
-        LEFT JOIN uni_mapping um
-          ON ff.field_name = 'uni'
-          AND fr.value = um.uni_id
-        WHERE fr.submission_id IN (${submissionIds.map(() => '?').join(',')})
-        ORDER BY fr.submission_id, ff.sort_order ASC
-      `, submissionIds);
-
-      const responses = Array.isArray(responsesResult) ? responsesResult : [];
+    const rows = Array.isArray(submissionsResult) ? submissionsResult : [];
+    
+    // Group submissions and responses
+    const submissionsMap = new Map();
+    
+    rows.forEach((row: any) => {
+      if (!submissionsMap.has(row.id)) {
+        submissionsMap.set(row.id, {
+          id: row.id,
+          timestamp: row.timestamp,
+          entityId: row.entity_id,
+          entityName: row.entity_name,
+          formCode: row.form_code,
+          utmCampaign: row.utm_campaign_value,
+          utmCampaignName: row.utm_campaign_name,
+          responses: {}
+        });
+      }
       
-      // Group responses by submission_id into a field_name -> value map
-      const responsesBySubmission = new Map<number, Record<string, string>>();
-      responses.forEach((response: any) => {
-        const subId = response.submission_id as number;
-        if (!responsesBySubmission.has(subId)) {
-          responsesBySubmission.set(subId, {});
-        }
-        const bucket = responsesBySubmission.get(subId)!;
-        bucket[response.field_name] = response.value_label ?? response.value ?? "";
-      });
-
-      // Assign responses to submissions
-      submissionsWithResponses = submissionsWithResponses.map((submission: any) => ({
-        id: submission.id,
-        timestamp: submission.timestamp,
-        entityId: submission.entityId,
-        entityName: submission.entityName,
-        formCode: submission.formCode,
-        utmCampaign: submission.utmCampaign,
-        utmCampaignName: submission.utmCampaignName,
-        responses: responsesBySubmission.get(submission.id) || {}
-      }));
-    }
+      // Add response if field data exists
+      if (row.field_name) {
+        submissionsMap.get(row.id).responses[row.field_name] = row.value_label ?? row.value ?? "";
+      }
+    });
+    
+    const submissionsWithResponses = Array.from(submissionsMap.values());
 
     const totalPages = Math.ceil(total / limit);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       items: submissionsWithResponses,
       pagination: {
         page,
@@ -148,6 +112,11 @@ export async function GET(
         hasPrev: page > 1
       }
     });
+    
+    // Cache for 1 minute
+    response.headers.set('Cache-Control', 'private, max-age=60');
+    
+    return response;
 
   } catch (error) {
     console.error("Error fetching clean submissions:", error);

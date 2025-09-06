@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     const totalPages = Math.ceil(total / limit);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       items: forms,
       pagination: {
@@ -65,6 +65,11 @@ export async function GET(request: NextRequest) {
         hasPrev: page > 1
       }
     });
+    
+    // Cache for 2 minutes
+    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300');
+    
+    return response;
 
   } catch (error) {
     console.error('Error fetching forms:', error);

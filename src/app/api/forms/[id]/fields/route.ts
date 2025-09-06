@@ -32,6 +32,8 @@ export async function GET(
     
     const response = NextResponse.json({ fields: data });
     response.headers.set('Content-Type', 'application/json; charset=utf-8');
+    // Cache for 5 minutes
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     return response;
   } catch (error) {
     console.error("Error fetching form fields:", error);

@@ -16,10 +16,15 @@ export async function GET(request: NextRequest) {
       ORDER BY type, name
     `);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       items: entities
     });
+    
+    // Cache for 5 minutes
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    
+    return response;
 
   } catch (error) {
     console.error('Error fetching entities:', error);

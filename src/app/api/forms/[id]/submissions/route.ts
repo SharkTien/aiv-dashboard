@@ -76,6 +76,8 @@ export async function GET(
     
     const response = NextResponse.json({ items: submissionsWithResponses });
     response.headers.set('Content-Type', 'application/json; charset=utf-8');
+    // Cache for 1 minute
+    response.headers.set('Cache-Control', 'private, max-age=60');
     return response;
   } catch (error) {
     console.error("Error fetching form submissions:", error);

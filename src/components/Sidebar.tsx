@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { HomeIcon, DatabaseIcon, ChartIcon, HandshakeIcon, UsersIcon, SettingsIcon, LogoutIcon, MenuIcon, XIcon, LinkIcon } from "@/components/icons";
+import { HomeIcon, DatabaseIcon, ChartIcon, HandshakeIcon, UsersIcon, SettingsIcon, LogoutIcon, MenuIcon, XIcon, LinkIcon, BellIcon } from "@/components/icons";
 import { useSidebar } from "./SidebarContext";
 
 type NavItemProps = {
@@ -98,9 +98,12 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
           <div className="flex-1 space-y-4">
             {/* Main Navigation */}
             <div>
-                             <NavItem href="/dashboard" icon={<HomeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
-                 HOME
-               </NavItem>
+              <NavItem href="/dashboard" icon={<HomeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                HOME
+              </NavItem>
+              <NavItem href="/dashboard/notifications" icon={<BellIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                Notifications
+              </NavItem>
             </div>
 
             {/* Separator */}

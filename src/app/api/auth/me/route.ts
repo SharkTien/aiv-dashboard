@@ -14,10 +14,16 @@ export async function GET(_req: NextRequest) {
     const dbUser = Array.isArray(rows) && rows.length ? rows[0] : null;
     // Fallback to session values if not found
     const merged = dbUser || user;
-    return NextResponse.json({ user: merged });
+    const response = NextResponse.json({ user: merged });
+    // Cache for 1 minute
+    response.headers.set('Cache-Control', 'private, max-age=60');
+    return response;
   } catch (e) {
     // On error, still return session user
-    return NextResponse.json({ user });
+    const response = NextResponse.json({ user });
+    // Cache for 1 minute
+    response.headers.set('Cache-Control', 'private, max-age=60');
+    return response;
   }
 }
 
