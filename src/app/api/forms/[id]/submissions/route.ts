@@ -19,60 +19,60 @@ export async function GET(
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
-    // Get submissions with responses and entity information (all submissions including duplicates)
+    // Get submissions with responses and entity information in a single optimized query
     const [submissionRows] = await pool.query(
-      `SELECT fs.id, fs.timestamp, fs.entity_id, e.name as entity_name, fs.duplicated
+      `SELECT 
+        fs.id, fs.timestamp, fs.entity_id, e.name as entity_name, fs.duplicated,
+        fr.field_id, fr.value,
+        ff.field_name, ff.field_label, ff.field_type, ff.sort_order,
+        CASE 
+          WHEN fr.value = 'other--uni-2' THEN 'other--uni-2'
+          WHEN um.uni_name IS NOT NULL THEN um.uni_name
+          ELSE fr.value
+        END AS value_label
        FROM form_submissions fs
        LEFT JOIN entity e ON fs.entity_id = e.entity_id
+       LEFT JOIN form_responses fr ON fs.id = fr.submission_id
+       LEFT JOIN form_fields ff ON fr.field_id = ff.id
+       LEFT JOIN uni_mapping um
+         ON ff.field_name = 'uni'
+        AND fr.value = um.uni_id
        WHERE fs.form_id = ?
-       ORDER BY fs.timestamp DESC`,
+       ORDER BY fs.timestamp DESC, ff.sort_order ASC`,
       [formId]
     );
     
-    const submissions: any[] = Array.isArray(submissionRows) ? (submissionRows as any) : [];
+    const rows: any[] = Array.isArray(submissionRows) ? (submissionRows as any) : [];
     
-    // Get responses for each submission, include value_label when sourced from uni_mapping
-    const submissionsWithResponses = await Promise.all(
-      submissions.map(async (submission) => {
-        try {
-                  const [responseRows] = await pool.query(
-          `SELECT ff.field_name, ff.field_label, ff.field_type, fr.field_id, fr.value,
-                  CASE 
-                    WHEN fr.value = 'other--uni-2' THEN 'other--uni-2'
-                    WHEN um.uni_name IS NOT NULL THEN um.uni_name
-                    ELSE fr.value
-                  END AS value_label
-           FROM form_responses fr
-           JOIN form_fields ff ON fr.field_id = ff.id
-           LEFT JOIN uni_mapping um
-             ON ff.field_name = 'uni'
-            AND fr.value = um.uni_id
-           WHERE fr.submission_id = ?
-           ORDER BY ff.sort_order ASC`,
-          [submission.id]
-        );
-          
-          return {
-            id: submission.id,
-            timestamp: submission.timestamp,
-            entityId: submission.entity_id,
-            entityName: submission.entity_name || null,
-            duplicated: submission.duplicated === 1,
-            responses: Array.isArray(responseRows) ? (responseRows as any) : []
-          };
-        } catch (error) {
-          console.error(`Error fetching responses for submission ${submission.id}:`, error);
-          return {
-            id: submission.id,
-            timestamp: submission.timestamp,
-            entityId: submission.entity_id,
-            entityName: submission.entity_name || null,
-            duplicated: submission.duplicated === 1,
-            responses: []
-          };
-        }
-      })
-    );
+    // Group responses by submission
+    const submissionsMap = new Map();
+    
+    rows.forEach(row => {
+      if (!submissionsMap.has(row.id)) {
+        submissionsMap.set(row.id, {
+          id: row.id,
+          timestamp: row.timestamp,
+          entityId: row.entity_id,
+          entityName: row.entity_name || null,
+          duplicated: row.duplicated === 1,
+          responses: []
+        });
+      }
+      
+      // Add response if field data exists
+      if (row.field_id) {
+        submissionsMap.get(row.id).responses.push({
+          field_id: row.field_id,
+          field_name: row.field_name,
+          field_label: row.field_label,
+          field_type: row.field_type,
+          value: row.value,
+          value_label: row.value_label
+        });
+      }
+    });
+    
+    const submissionsWithResponses = Array.from(submissionsMap.values());
     
     const response = NextResponse.json({ items: submissionsWithResponses });
     response.headers.set('Content-Type', 'application/json; charset=utf-8');

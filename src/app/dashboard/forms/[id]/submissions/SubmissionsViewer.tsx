@@ -244,6 +244,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   }
 
   useEffect(() => {
+    setLoading(true); // Reset loading state when formId changes
     loadData();
     loadFormFields();
     loadUtmCampaigns();
