@@ -42,6 +42,7 @@ type UTMLink = {
   medium_id: number;
   utm_name: string | null;
   base_url: string;
+  shortened_url: string | null;
   created_at: string;
   entity_name: string;
   campaign_code: string;
@@ -84,9 +85,20 @@ export default function UTMGeneratorPage() {
   const [utmName, setUtmName] = useState("");
   const [selectedMediumData, setSelectedMediumData] = useState<UTMMedium | null>(null);
   const [availableForms, setAvailableForms] = useState<Array<{ id: number; name: string; code: string }>>([]);
+  const [shorteningUrls, setShorteningUrls] = useState<Set<number>>(new Set());
+  const [editingAlias, setEditingAlias] = useState<number | null>(null);
+  const [aliasInput, setAliasInput] = useState<string>('');
+  const [updatingAlias, setUpdatingAlias] = useState<Set<number>>(new Set());
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Toast function
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
-    loadData();
+    loadData(); 
   }, [searchParams]);
 
   // Debug: Log state changes
@@ -382,10 +394,114 @@ export default function UTMGeneratorPage() {
   };
 
   const copyToClipboard = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); alert('URL copied to clipboard!'); } catch {}
+    try { 
+      await navigator.clipboard.writeText(text); 
+      showToast('URL copied to clipboard!', 'success'); 
+    } catch {
+      showToast('Failed to copy URL', 'error');
+    }
+  };
+
+  const shortenUrl = async (linkId: number, url: string) => {
+    setShorteningUrls(prev => new Set(prev).add(linkId));
+    
+    try {
+      const response = await fetch('/api/url-shortener', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Save shortened URL to database
+        const updateResponse = await fetch(`/api/utm/links/${linkId}/shorten`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            shortenedUrl: data.shortenedUrl,
+            shortIoId: data.shortIoId || data.id
+          })
+        });
+
+        if (updateResponse.ok) {
+          // Reload links to get updated data
+          if (pagination) {
+            loadLinks(pagination.page);
+          }
+          showToast('URL shortened successfully!', 'success');
+        } else {
+          showToast('URL shortened but failed to save to database', 'error');
+        }
+      } else {
+        const errorData = await response.json();
+        showToast(`Failed to shorten URL: ${errorData.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error shortening URL:', error);
+      showToast('Failed to shorten URL', 'error');
+    } finally {
+      setShorteningUrls(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(linkId);
+        return newSet;
+      });
+    }
   };
 
   const handlePageChange = (page: number) => { if (pagination) loadLinks(page); };
+
+  const handleUpdateAlias = async (linkId: number) => {
+    if (!aliasInput.trim()) {
+      showToast('Please enter an alias', 'error');
+      return;
+    }
+
+    setUpdatingAlias(prev => new Set(prev).add(linkId));
+
+    try {
+      const response = await fetch(`/api/utm/links/${linkId}/update-alias`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias: aliasInput.trim() })
+      });
+
+      if (response.ok) {
+        // Reload links to get updated data
+        if (pagination) {
+          loadLinks(pagination.page);
+        }
+        setEditingAlias(null);
+        setAliasInput('');
+        showToast('Alias updated successfully!', 'success');
+      } else {
+        const errorData = await response.json();
+        showToast(`Failed to update alias: ${errorData.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error updating alias:', error);
+      showToast('Failed to update alias', 'error');
+    } finally {
+      setUpdatingAlias(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(linkId);
+        return newSet;
+      });
+    }
+  };
+
+  const startEditAlias = (linkId: number, currentUrl: string) => {
+    // Extract current alias from URL if exists
+    const url = new URL(currentUrl);
+    const currentAlias = url.pathname.substring(1); // Remove leading slash
+    setAliasInput(currentAlias || '');
+    setEditingAlias(linkId);
+  };
+
+
+
+
   const handleDeleteLink = async (id: number) => {
     if (!confirm('Delete this UTM link?')) return;
     try {
@@ -498,6 +614,7 @@ export default function UTMGeneratorPage() {
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Medium</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Name</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Generated URL</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Shortened Link</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Actions</th>
                     </tr>
                   </thead>
@@ -509,7 +626,80 @@ export default function UTMGeneratorPage() {
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.medium_name}</td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.utm_name || '-'}</td>
                       <td className="py-3 px-4 text-sm">
-                        <div className="max-w-xs truncate text-blue-600 dark:text-blue-400">{utmUrl}</div>
+                        <div 
+                          className="max-w-xs truncate text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                          onClick={() => copyToClipboard(utmUrl)}
+                          title="Click to copy"
+                        >
+                          {utmUrl}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm">
+                        {(() => {
+                          const shortenedUrl = link.shortened_url;
+                          const isShortening = shorteningUrls.has(link.id);
+                          return shortenedUrl ? (
+                            editingAlias === link.id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={aliasInput}
+                                  onChange={(e) => setAliasInput(e.target.value)}
+                                  placeholder="Enter alias"
+                                  className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                  onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleUpdateAlias(link.id);
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => handleUpdateAlias(link.id)}
+                                  disabled={updatingAlias.has(link.id)}
+                                  className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                >
+                                  {updatingAlias.has(link.id) && <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>}
+                                  {updatingAlias.has(link.id) ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingAlias(null);
+                                    setAliasInput('');
+                                  }}
+                                  className="px-2 py-1 text-xs rounded bg-gray-500 text-white hover:bg-gray-600"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <div 
+                                  className="max-w-xs truncate text-green-600 dark:text-green-400 cursor-pointer hover:underline"
+                                  onClick={() => copyToClipboard(shortenedUrl)}
+                                  title="Click to copy"
+                                >
+                                  {shortenedUrl}
+                                </div>
+                                <button
+                                  onClick={() => startEditAlias(link.id, shortenedUrl)}
+                                  className="px-1 py-1 text-xs rounded bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
+                                  title="Edit alias"
+                                >
+                                  ✏️
+                                </button>
+                              </div>
+                            )
+                          ) : (
+                            <button 
+                              onClick={() => shortenUrl(link.id, utmUrl)}
+                              disabled={isShortening}
+                              className="px-2 py-1 text-xs rounded-lg bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                            >
+                              {isShortening && <div className="w-3 h-3 border border-green-700 border-t-transparent rounded-full animate-spin"></div>}
+                              {isShortening ? 'Shortening...' : 'Shorten'}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-4 text-sm">
                         <button onClick={() => copyToClipboard(utmUrl)} className="px-3 py-1 text-xs rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-medium transition-colors">Copy URL</button>
@@ -527,11 +717,13 @@ export default function UTMGeneratorPage() {
         <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Available UTM Links</h2>
-            {pagination && (
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
-              </div>
-            )}
+            <div className="flex items-center gap-4">
+              {pagination && (
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
+                </div>
+              )}
+            </div>
           </div>
           {links.length === 0 ? (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">No links found.</div>
@@ -547,6 +739,7 @@ export default function UTMGeneratorPage() {
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Medium</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Name</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Generated URL</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Shortened Link</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Created</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Actions</th>
                     </tr>
@@ -554,6 +747,8 @@ export default function UTMGeneratorPage() {
                   <tbody>
                     {links.map(link => {
                       const utmUrl = generateUTMUrl(link);
+                      const shortenedUrl = link.shortened_url;
+                      const isShortening = shorteningUrls.has(link.id);
                       return (
                         <tr key={link.id} className="border-b border-gray-200/50 dark:border-gray-600/50 hover:bg-gray-50/50 dark:hover:bg-gray-600/50">
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.entity_name}</td>
@@ -561,7 +756,77 @@ export default function UTMGeneratorPage() {
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.source_name}</td>
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.medium_name}</td>
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.utm_name || '-'}</td>
-                          <td className="py-3 px-4 text-sm"><div className="max-w-xs truncate text-blue-600 dark:text-blue-400">{utmUrl}</div></td>
+                          <td className="py-3 px-4 text-sm">
+                            <div 
+                              className="max-w-xs truncate text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                              onClick={() => copyToClipboard(utmUrl)}
+                              title="Click to copy"
+                            >
+                              {utmUrl}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            {shortenedUrl ? (
+                              editingAlias === link.id ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={aliasInput}
+                                    onChange={(e) => setAliasInput(e.target.value)}
+                                    placeholder="Enter alias"
+                                    className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                    onKeyPress={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleUpdateAlias(link.id);
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    onClick={() => handleUpdateAlias(link.id)}
+                                    disabled={updatingAlias.has(link.id)}
+                                    className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                  >
+                                    {updatingAlias.has(link.id) && <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>}
+                                    {updatingAlias.has(link.id) ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingAlias(null);
+                                      setAliasInput('');
+                                    }}
+                                    className="px-2 py-1 text-xs rounded bg-gray-500 text-white hover:bg-gray-600"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="max-w-xs truncate text-green-600 dark:text-green-400 cursor-pointer hover:underline"
+                                    onClick={() => copyToClipboard(shortenedUrl)}
+                                    title="Click to copy"
+                                  >
+                                    {shortenedUrl}
+                                  </div>
+                                  <button
+                                    onClick={() => startEditAlias(link.id, shortenedUrl)}
+                                    className="px-1 py-1 text-xs rounded bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
+                                    title="Edit alias"
+                                  >
+                                    ✏️
+                                  </button>
+                                </div>
+                              )
+                            ) : (
+                              <button
+                                onClick={() => shortenUrl(link.id, utmUrl)}
+                                disabled={isShortening}
+                                className="px-2 py-1 text-xs rounded-lg bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {isShortening ? 'Shortening...' : 'Shorten'}
+                              </button>
+                            )}
+                          </td>
                           <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{new Date(link.created_at).toLocaleDateString()}</td>
                           <td className="py-3 px-4 text-sm">
                             <div className="relative">
@@ -601,8 +866,23 @@ export default function UTMGeneratorPage() {
                                     }}
                                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                   >
-                                    Copy URL
+                                    Copy Original URL
                                   </button>
+                                  {shortenedUrl && (
+                                    <button
+                                      onClick={() => {
+                                        copyToClipboard(shortenedUrl);
+                                        // Close menu after action
+                                        const menu = document.getElementById(`menu-${link.id}`);
+                                        if (menu) {
+                                          menu.classList.add('hidden');
+                                        }
+                                      }}
+                                      className="block w-full text-left px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
+                                    >
+                                      Copy Shortened URL
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => {
                                       handleDeleteLink(link.id);
@@ -709,6 +989,20 @@ export default function UTMGeneratorPage() {
           )}
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg transition-all duration-300 ${
+          toast.type === 'success' 
+            ? 'bg-green-500 text-white' 
+            : 'bg-red-500 text-white'
+        }`}>
+          <div className="flex items-center gap-2">
+            {toast.type === 'success' ? '✅' : '❌'}
+            <span className="font-medium">{toast.message}</span>
+          </div>
+        </div>
+      )}
 
       <LoadingOverlay isVisible={creating} message="Creating UTM link..." />
     </div>
