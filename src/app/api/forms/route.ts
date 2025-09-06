@@ -125,14 +125,9 @@ export async function POST(req: NextRequest) {
     try {
       await pool.query('ROLLBACK');
     } catch (rollbackError) {
-      console.error("Error rolling back transaction:", rollbackError);
     }
     
     console.error("Error creating form:", error);
-    console.error("Error details:", {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
-    });
     
     return NextResponse.json({ error: "Failed to create form" }, { status: 500 });
   }

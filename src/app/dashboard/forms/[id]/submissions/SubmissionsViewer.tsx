@@ -147,10 +147,11 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
     }
   };
 
-  async function loadData() {
+  async function loadData(forceRefresh = false) {
     try {
       // Load form info
-      const formRes = await fetch(`/api/forms/${formId}`);
+      const formUrl = `/api/forms/${formId}${forceRefresh ? `?t=${Date.now()}` : ''}`;
+      const formRes = await fetch(formUrl, forceRefresh ? { cache: 'no-store' } : {});
       if (formRes.ok) {
         const formData = await formRes.json();
         setForm(formData.form);
@@ -159,7 +160,8 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
       }
 
       // Load submissions
-      const submissionsRes = await fetch(`/api/forms/${formId}/submissions`);
+      const submissionsUrl = `/api/forms/${formId}/submissions${forceRefresh ? `?t=${Date.now()}` : ''}`;
+      const submissionsRes = await fetch(submissionsUrl, forceRefresh ? { cache: 'no-store' } : {});
       if (submissionsRes.ok) {
         const submissionsData = await submissionsRes.json();
         setSubmissions(Array.isArray(submissionsData.items) ? submissionsData.items : []);
@@ -279,10 +281,13 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   // Facet filters
   const [selectedYear, setSelectedYear] = useState<Set<string>>(new Set());
   const [selectedMajor, setSelectedMajor] = useState<Set<string>>(new Set());
-  const [selectedStartDate, setSelectedStartDate] = useState<Set<string>>(new Set());
+  const [selectedStartDate, setSelectedStartDate] = useState<Set<string>>(new Set()); // Keep for oGV
   const [selectedReceiveInfo, setSelectedReceiveInfo] = useState<Set<string>>(new Set());
   const [selectedChannel, setSelectedChannel] = useState<Set<string>>(new Set());
+  const [selectedAppliedBefore, setSelectedAppliedBefore] = useState<Set<string>>(new Set()); // TMR only
+  const [selectedGoCamp, setSelectedGoCamp] = useState<Set<string>>(new Set()); // TMR only
   const [selectedEntity, setSelectedEntity] = useState<Set<string>>(new Set());
+  const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<Set<string>>(new Set());
 
   const FIELD_MAP = {
     year: ["year", "năm", "Year"],
@@ -316,6 +321,25 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
       "Receive Info"
     ],
     channel: ["channel", "kênh", "Channel"],
+    appliedBefore: [
+      "applied before",
+      "applied_before",
+      "appliedbefore",
+      "đã apply trước",
+      "da apply truoc",
+      "từng apply",
+      "tung apply",
+      "Applied Before"
+    ],
+    goCamp: [
+      "go camp",
+      "go_camp",
+      "gocamp",
+      "camp",
+      "trại hè",
+      "trai he",
+      "Go Camp"
+    ],
     formCode: ["form-code", "form_code", "code", "mã"],
     name: ["name", "họ tên", "full name"],
     phone: ["phone", "số điện thoại"],
@@ -396,13 +420,29 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
       }
     });
 
+    // Collect UTM campaigns
+    const utmCampaigns = new Set<string>();
+    submissions.forEach(sub => {
+      // Check for UTM campaign in responses
+      const utmResponse = sub.responses.find(r => 
+        r.field_name?.toLowerCase().includes('utm') || 
+        r.field_name?.toLowerCase().includes('campaign')
+      );
+      if (utmResponse?.value) {
+        utmCampaigns.add(utmResponse.value);
+      }
+    });
+
     return {
       years: collect(FIELD_MAP.year).sort(),
       majors: collect(FIELD_MAP.major).sort(),
-      startDates: collect(FIELD_MAP.startDate).sort(),
+      startDates: collect(FIELD_MAP.startDate).sort(), // For oGV
       receiveInfos: collect(FIELD_MAP.receiveInfo).sort(),
       channels: collect(FIELD_MAP.channel).sort(),
+      appliedBefores: collect(FIELD_MAP.appliedBefore).sort(), // For TMR
+      goCamps: collect(FIELD_MAP.goCamp).sort(), // For TMR
       entities: Array.from(entities).sort(),
+      utmCampaigns: Array.from(utmCampaigns).sort(),
     };
   }, [submissions]);
 
@@ -451,16 +491,35 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
 
       if (!checkSet(selectedYear, FIELD_MAP.year)) return false;
       if (!checkSet(selectedMajor, FIELD_MAP.major)) return false;
-      if (!checkSet(selectedStartDate, FIELD_MAP.startDate)) return false;
       if (!checkSet(selectedReceiveInfo, FIELD_MAP.receiveInfo)) return false;
       if (!checkSet(selectedChannel, FIELD_MAP.channel)) return false;
+      
+      // Form type specific filters
+      if (form?.type === 'oGV') {
+        // oGV specific filters
+        if (!checkSet(selectedStartDate, FIELD_MAP.startDate)) return false;
+      } else if (form?.type === 'TMR') {
+        // TMR specific filters
+        if (!checkSet(selectedAppliedBefore, FIELD_MAP.appliedBefore)) return false;
+        if (!checkSet(selectedGoCamp, FIELD_MAP.goCamp)) return false;
+      }
       
       // Entity filter
       if (selectedEntity.size > 0 && !selectedEntity.has(submission.entityName || '')) return false;
       
+      // UTM Campaign filter
+      if (selectedUtmCampaign.size > 0) {
+        const utmResponse = submission.responses.find(r => 
+          r.field_name?.toLowerCase().includes('utm') || 
+          r.field_name?.toLowerCase().includes('campaign')
+        );
+        const campaignValue = utmResponse?.value || '';
+        if (!selectedUtmCampaign.has(campaignValue)) return false;
+      }
+      
       return true;
     });
-  }, [submissions, startDate, endDate, textQuery, selectedYear, selectedMajor, selectedStartDate, selectedReceiveInfo, selectedChannel, selectedEntity]);
+  }, [submissions, startDate, endDate, textQuery, selectedYear, selectedMajor, selectedStartDate, selectedReceiveInfo, selectedChannel, selectedAppliedBefore, selectedGoCamp, selectedEntity, selectedUtmCampaign, form?.type]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredSubmissions.length / itemsPerPage);
@@ -511,8 +570,18 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
 
       if (response.ok) {
         setImportResult({ success: true, message: result.message, details: result.details });
-        // Reload submissions after successful import
-        await loadData();
+        // Clear cache and reload submissions after successful import
+        try {
+          await fetch('/api/clear-cache', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ formId })
+          });
+        } catch (cacheError) {
+          console.warn('Failed to clear cache:', cacheError);
+        }
+        // Force reload with cache busting
+        await loadData(true);
       } else {
         setImportResult({ success: false, message: result.error || "Import failed" });
       }
@@ -1104,10 +1173,22 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
             </div>
           <FacetDropdown title="Year" options={facetOptions.years} selected={selectedYear} onChange={setSelectedYear} />
           <FacetDropdown title="Major" options={facetOptions.majors} selected={selectedMajor} onChange={setSelectedMajor} />
-          <FacetDropdown title="Start Date" options={facetOptions.startDates} selected={selectedStartDate} onChange={setSelectedStartDate} />
           <FacetDropdown title="Receive Info" options={facetOptions.receiveInfos} selected={selectedReceiveInfo} onChange={setSelectedReceiveInfo} />
           <FacetDropdown title="Channel" options={facetOptions.channels} selected={selectedChannel} onChange={setSelectedChannel} />
+          
+          {/* Form type specific filters */}
+          {form?.type === 'oGV' && (
+            <FacetDropdown title="Start Date" options={facetOptions.startDates} selected={selectedStartDate} onChange={setSelectedStartDate} />
+          )}
+          {form?.type === 'TMR' && (
+            <>
+              <FacetDropdown title="Applied Before" options={facetOptions.appliedBefores} selected={selectedAppliedBefore} onChange={setSelectedAppliedBefore} />
+              <FacetDropdown title="Go Camp" options={facetOptions.goCamps} selected={selectedGoCamp} onChange={setSelectedGoCamp} />
+            </>
+          )}
+          
           <FacetDropdown title="Entity" options={facetOptions.entities} selected={selectedEntity} onChange={setSelectedEntity} />
+          <FacetDropdown title="UTM Campaign" options={facetOptions.utmCampaigns} selected={selectedUtmCampaign} onChange={setSelectedUtmCampaign} />
         </div>
               {/* Loading Overlay for Import */}
       {options?.allowImport !== false && (

@@ -27,7 +27,6 @@ export async function GET(
     const fieldIds = Array.isArray(rows) ? (rows as any[]).map(r => r.field_id) : [];
     return NextResponse.json({ success: true, fieldIds });
   } catch (e) {
-    console.error('Error fetching duplicate settings:', e);
     return NextResponse.json({ success: false, error: 'Failed to load settings' }, { status: 500 });
   }
 }
@@ -54,7 +53,6 @@ export async function PUT(
     return NextResponse.json({ success: true });
   } catch (e) {
     try { await (getDbPool()).query('ROLLBACK'); } catch {}
-    console.error('Error saving duplicate settings:', e);
     return NextResponse.json({ success: false, error: 'Failed to save settings' }, { status: 500 });
   }
 }

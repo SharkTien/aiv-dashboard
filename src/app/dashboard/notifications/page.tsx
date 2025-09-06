@@ -108,6 +108,11 @@ export default function NotificationsPage() {
       setNotifications(prev => 
         prev.map(n => n.id === notificationId ? { ...n, is_read: true, read_at: new Date().toISOString() } : n)
       );
+      
+      // Refresh notification count in sidebar
+      if ((window as any).refreshNotificationCount) {
+        (window as any).refreshNotificationCount();
+      }
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -124,6 +129,11 @@ export default function NotificationsPage() {
       if (res.ok) {
         await loadAllocationRequests();
         await loadNotifications(); // Refresh notifications
+        
+        // Refresh notification count in sidebar
+        if ((window as any).refreshNotificationCount) {
+          (window as any).refreshNotificationCount();
+        }
       }
     } catch (error) {
       console.error('Error processing allocation request:', error);

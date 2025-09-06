@@ -2,6 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import { HomeIcon, DatabaseIcon, ChartIcon, HandshakeIcon, UsersIcon, SettingsIcon, LogoutIcon, MenuIcon, XIcon, LinkIcon, BellIcon } from "@/components/icons";
 import { useSidebar } from "./SidebarContext";
 
@@ -10,9 +11,10 @@ type NavItemProps = {
   children: React.ReactNode;
   icon?: React.ReactNode;
   isCollapsed: boolean;
+  badge?: number;
 };
 
-function NavItem({ href, children, icon, isCollapsed }: NavItemProps) {
+function NavItem({ href, children, icon, isCollapsed, badge }: NavItemProps) {
   const pathname = usePathname();
   const isActive = pathname === href;
   
@@ -21,11 +23,20 @@ function NavItem({ href, children, icon, isCollapsed }: NavItemProps) {
       href={href} 
       title={isCollapsed ? String(children) : undefined}
       aria-label={isCollapsed ? String(children) : undefined}
-      className={`rounded-lg w-full ${isCollapsed ? 'px-2 py-3 justify-center' : 'px-3 py-2'} hover:bg-black/5 dark:hover:bg-white/10 inline-flex items-center gap-2 text-gray-700 dark:text-gray-200 transition-colors ${
+      className={`rounded-lg w-full ${isCollapsed ? 'px-2 py-3 justify-center' : 'px-3 py-2'} hover:bg-black/5 dark:hover:bg-white/10 inline-flex items-center gap-2 text-gray-700 dark:text-gray-200 transition-colors relative ${
         isActive ? 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300' : ''
       }`}
     >
-      {icon}
+      <div className="relative">
+        {icon}
+        {badge && badge > 0 && (
+          <span className={`absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 z-10 ${
+            isCollapsed ? 'text-[10px] min-w-[14px] h-[14px]' : 'text-[10px]'
+          }`}>
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
+      </div>
       {!isCollapsed && <span>{children}</span>}
     </Link>
   );
@@ -34,6 +45,40 @@ function NavItem({ href, children, icon, isCollapsed }: NavItemProps) {
 export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean }) {
   const { isCollapsed, setIsCollapsed, toggleSidebar } = useSidebar();
   const router = useRouter();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Load unread notifications count
+  const loadUnreadCount = async () => {
+    try {
+      const response = await fetch('/api/notifications?unread_only=true&limit=1');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setUnreadCount(data.pagination?.total || 0);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading unread notifications count:', error);
+    }
+  };
+
+  // Load unread count on mount and set up polling
+  useEffect(() => {
+    if (user) {
+      loadUnreadCount();
+      // Poll every 30 seconds for new notifications
+      const interval = setInterval(loadUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  // Expose loadUnreadCount to global scope for other components to use
+  useEffect(() => {
+    (window as any).refreshNotificationCount = loadUnreadCount;
+    return () => {
+      delete (window as any).refreshNotificationCount;
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -101,7 +146,7 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
               <NavItem href="/dashboard" icon={<HomeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                 HOME
               </NavItem>
-              <NavItem href="/dashboard/notifications" icon={<BellIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+              <NavItem href="/dashboard/notifications" icon={<BellIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed} badge={unreadCount}>
                 Notifications
               </NavItem>
             </div>
@@ -145,6 +190,9 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
               <div className="space-y-1">
                 <NavItem href="/dashboard/tmr-hub" icon={<HomeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                   Dashboard
+                </NavItem>
+                <NavItem href="/dashboard/tmr/analytics" icon={<ChartIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                  Analytics
                 </NavItem>
                 <NavItem href="/dashboard/utm-generator?type=TMR" icon={<LinkIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
                   UTM Generator

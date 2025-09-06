@@ -116,7 +116,6 @@ export async function POST(
             databaseLookups.set(field.field_name, lookupMap);
           }
         } catch (e) {
-          console.warn(`Failed to pre-fetch lookup data for field ${field.field_name}:`, e);
         }
       }
     }
@@ -140,13 +139,13 @@ export async function POST(
           }
         }
       } catch (e) {
-        console.warn("Failed to fetch existing form codes:", e);
       }
     }
 
     // Process and insert submissions in batches
     let successCount = 0;
     let errorCount = 0;
+    let duplicateCount = 0;
     const errors: string[] = [];
     const batchSize = 100;
 
@@ -185,7 +184,69 @@ export async function POST(
               }
             }
 
+            // Check for duplicate email/phone before importing
+            if (!isDuplicate) {
+              const duplicateCheckValues: string[] = [];
+              
+              // Get email and phone values from current row
+              const emailField = fields.find(f => f.field_name === 'email');
+              const phoneField = fields.find(f => f.field_name === 'phone');
+              
+              if (emailField) {
+                const emailHeader = Object.keys(columnMapping).find(header =>
+                  columnMapping[header] === 'email'
+                );
+                if (emailHeader) {
+                  const columnIndex = headers.indexOf(emailHeader);
+                  if (columnIndex >= 0 && columnIndex < row.length) {
+                    const emailValue = String(row[columnIndex] || "").trim();
+                    if (emailValue) duplicateCheckValues.push(`email:${emailValue}`);
+                  }
+                }
+              }
+              
+              if (phoneField) {
+                const phoneHeader = Object.keys(columnMapping).find(header =>
+                  columnMapping[header] === 'phone'
+                );
+                if (phoneHeader) {
+                  const columnIndex = headers.indexOf(phoneHeader);
+                  if (columnIndex >= 0 && columnIndex < row.length) {
+                    const phoneValue = String(row[columnIndex] || "").trim();
+                    if (phoneValue) duplicateCheckValues.push(`phone:${phoneValue}`);
+                  }
+                }
+              }
+              
+              // Check if any of these values already exist in database
+              if (duplicateCheckValues.length > 0) {
+                for (const checkValue of duplicateCheckValues) {
+                  const [fieldName, fieldValue] = checkValue.split(':');
+                  const field = fields.find(f => f.field_name === fieldName);
+                  
+                  if (field) {
+                    const [existingRows] = await pool.query(
+                      `SELECT COUNT(*) as count 
+                       FROM form_responses fr 
+                       JOIN form_submissions fs ON fr.submission_id = fs.id 
+                       WHERE fs.form_id = ? AND fr.field_id = ? AND fr.value = ? AND fs.duplicated = FALSE`,
+                      [formId, field.id, fieldValue]
+                    );
+                    
+                    if (Array.isArray(existingRows) && existingRows.length > 0) {
+                      const count = (existingRows[0] as any).count;
+                      if (count > 0) {
+                        isDuplicate = true;
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
             if (isDuplicate) {
+              duplicateCount++;
               continue;
             }
 
@@ -229,12 +290,10 @@ export async function POST(
               if (timestampValue !== null && timestampValue !== undefined && String(timestampValue).trim() !== "") {
                 try {
                   const timestampStr = String(timestampValue).trim();
-                  console.log(`[DEBUG] Processing timestamp: "${timestampStr}" (type: ${typeof timestampValue})`);
                   let parsedDate: Date | null = null;
 
                   // Special handling for Excel date objects
                   if (timestampValue instanceof Date) {
-                    console.log(`[DEBUG] Detected Date object: ${timestampValue.toISOString()}`);
                     parsedDate = timestampValue;
                   }
                   
@@ -245,17 +304,14 @@ export async function POST(
                       const xlsxDate = XLSX.SSF.parse_date_code(timestampValue);
                       if (xlsxDate) {
                         parsedDate = new Date(xlsxDate.y, xlsxDate.m - 1, xlsxDate.d, xlsxDate.H || 0, xlsxDate.M || 0, xlsxDate.S || 0);
-                        console.log(`[DEBUG] XLSX date parsed to: ${parsedDate.toISOString()}`);
                       }
                     } catch (e) {
-                      console.log(`[DEBUG] XLSX date parsing failed: ${e}`);
                     }
                   }
 
                   // Check if it's a pure Excel serial number (just digits and decimal)
                   if (!parsedDate && /^\d+(\.\d+)?$/.test(timestampStr)) {
                     const serialNumber = parseFloat(timestampStr);
-                    console.log(`[DEBUG] Detected Excel serial number: ${serialNumber}`);
                     // Excel serial numbers are typically large numbers (40000+ for recent dates)
                     if (serialNumber >= 1 && serialNumber <= 100000) {
                       // More accurate Excel date calculation
@@ -274,16 +330,13 @@ export async function POST(
                       
                       // Use UTC to avoid timezone issues
                       parsedDate = new Date(Date.UTC(1900, 0, adjustedDays, hours, minutes, seconds));
-                      console.log(`[DEBUG] Excel serial parsed to: ${parsedDate.toISOString()}`);
                       // Keep original timezone - no conversion
                     }
                   }
 
                   if (!parsedDate || isNaN(parsedDate.getTime())) {
-                    console.log(`[DEBUG] Trying to parse as date string: "${timestampStr}"`);
                     // Handle DD/MM/YYYY HH:mm format (e.g., "1/8/2025 0:00" = 1st August 2025)
                     if (/^\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}(:\d{2})?(\s+[AP]M)?$/i.test(timestampStr)) {
-                      console.log(`[DEBUG] Matched DD/MM/YYYY HH:mm format`);
                       const [datePart, timePart] = timestampStr.split(' ');
                       const [day, month, year] = datePart.split('/'); // Note: day first, then month
                       const [time, ampm] = timePart.split(' ');
@@ -308,11 +361,9 @@ export async function POST(
                       
                       // Parse as local time to match server timezone
                       parsedDate = new Date(yearNum, monthNum, dayNum, hourNum, minuteNum, secondNum);
-                      console.log(`[DEBUG] DD/MM/YYYY HH:mm parsed to: ${parsedDate.toISOString()}`);
                     }
                     // Handle MM/DD/YYYY format (date only)
                     else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(timestampStr)) {
-                      console.log(`[DEBUG] Matched MM/DD/YYYY format`);
                       const [month, day, year] = timestampStr.split('/');
                       const monthNum = parseInt(month) - 1;
                       const dayNum = parseInt(day);
@@ -346,9 +397,7 @@ export async function POST(
                     }
                     // Fallback to native Date parsing
                     else {
-                      console.log(`[DEBUG] Using native Date parsing for: "${timestampStr}"`);
                       parsedDate = new Date(timestampStr);
-                      console.log(`[DEBUG] Native Date parsed to: ${parsedDate.toISOString()}`);
                     }
                   }
 
@@ -362,12 +411,7 @@ export async function POST(
                     const seconds = String(parsedDate.getSeconds()).padStart(2, '0');
                     
                     submissionTimestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-                    console.log(`[DEBUG] Final timestamp (local): ${submissionTimestamp}`);
-                    console.log(`[DEBUG] Original date object: ${parsedDate.toString()}`);
-                    console.log(`[DEBUG] UTC string: ${parsedDate.toUTCString()}`);
-                    console.log(`[DEBUG] Local string: ${parsedDate.toString()}`);
                   } else {
-                    console.log(`[DEBUG] Failed to parse timestamp: "${timestampStr}"`);
                   }
                 } catch (error) {
                   // ignore, fallback to now
@@ -380,14 +424,12 @@ export async function POST(
               submissionTimestamp = now.toISOString().slice(0, 19).replace('T', ' ');
             }
 
-            console.log(`[DEBUG] Inserting submission with timestamp: ${submissionTimestamp}`);
             submissionsToInsert.push([Number(formId), submissionTimestamp]);
             rowResponseCounts.push(rowResponseCount);
             successCount++;
           } catch (error) {
             errorCount++;
             errors.push(`Row ${globalRowIndex + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            console.error(`Error processing row ${globalRowIndex + 2}:`, error);
           }
         }
 
@@ -409,7 +451,6 @@ export async function POST(
             const submissionId = submissionIds[i];
             const rowResponseCount = rowResponseCounts[i];
             if (responseIndex + rowResponseCount > responsesToInsert.length) {
-              console.error(`Row ${i + 1}: Expected ${rowResponseCount} responses but only ${responsesToInsert.length - responseIndex} available`);
               continue;
             }
             const rowResponses = responsesToInsert.slice(responseIndex, responseIndex + rowResponseCount);
@@ -429,7 +470,6 @@ export async function POST(
       } catch (error) {
         errorCount += batch.length;
         errors.push(`Batch ${Math.floor(batchStart / batchSize) + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        console.error(`Error processing batch starting at row ${batchStart + 1}:`, error);
       }
     }
 
@@ -463,110 +503,41 @@ export async function POST(
                 entityUpdateCount++;
               }
             } catch (error) {
-              console.error(`Error updating entity_id for submission ${submission.id}:`, error);
             }
           }
         }
       }
     } catch (error) {
-      console.error("Error updating entity_id for submissions:", error);
     }
 
-    // Check for duplicate phone/email and update duplicated field
+    // Note: Duplicate prevention is now handled during import process
+    // No need for post-import duplicate detection since we prevent duplicates from being imported
     let duplicateCheckCount = 0;
-    try {
-      // Load per-form duplicate field settings
-      let duplicateFieldIds: number[] = [];
-      try {
-        const [dupRows] = await pool.query(
-          `SELECT field_id FROM form_duplicate_settings WHERE form_id = ?`,
-          [formId]
-        );
-        duplicateFieldIds = Array.isArray(dupRows) ? (dupRows as any[]).map(r => r.field_id) : [];
-      } catch (e) {
-        console.warn('Duplicate settings table not found or error querying. Falling back to phone/email if exist.');
-      }
 
-      // Resolve fields to check
-      let fieldsToCheck = fields.filter(f => duplicateFieldIds.includes(f.id));
-      if (fieldsToCheck.length === 0) {
-        const phoneField = fields.find(f => f.field_name === 'phone');
-        const emailField = fields.find(f => f.field_name === 'email');
-        fieldsToCheck = [phoneField, emailField].filter(Boolean) as any[];
-      }
-
-      if (fieldsToCheck.length > 0) {
-        let query = `
-          SELECT fs.id, fs.timestamp, fs.duplicated
-        FROM form_submissions fs
-        `;
-        const params: any[] = [];
-        const aliasList: string[] = [];
-        fieldsToCheck.forEach((field, idx) => {
-          const alias = `f${idx}`;
-          aliasList.push(alias);
-          query += ` LEFT JOIN form_responses ${alias} ON fs.id = ${alias}.submission_id AND ${alias}.field_id = ?`;
-          params.push(field.id);
-        });
-        query += ` WHERE fs.form_id = ? ORDER BY fs.id ASC`;
-        params.push(formId);
-
-        const [allSubmissionRows] = await pool.query(query, params);
-
-        if (Array.isArray(allSubmissionRows) && allSubmissionRows.length > 0) {
-          const groups: { [key: string]: any[] } = {};
-          for (const submission of allSubmissionRows as any[]) {
-            const parts: string[] = [];
-            fieldsToCheck.forEach((_, idx) => {
-              const alias = `f${idx}`;
-              const val = submission?.[`${alias}.value`] ?? submission?.[alias]?.value ?? submission?.[alias + '_value'] ?? '';
-              parts.push(String(val || '').trim());
-            });
-            const key = parts.join('|');
-            if (!key || parts.every(p => p === '')) continue;
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(submission);
-          }
-
-          const duplicateIds = new Set<number>();
-          for (const submissions of Object.values(groups)) {
-            if (submissions.length > 1) {
-              const sorted = (submissions as any[]).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-              for (let i = 1; i < sorted.length; i++) {
-                duplicateIds.add(sorted[i].id);
-              }
-            }
-          }
-          if (duplicateIds.size > 0) {
-            const duplicateIdsArray = Array.from(duplicateIds);
-            await pool.query(
-              "UPDATE form_submissions SET duplicated = 1 WHERE id IN (?)",
-              [duplicateIdsArray]
-            );
-            duplicateCheckCount = duplicateIdsArray.length;
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error checking for duplicate phone/email submissions:", error);
-    }
-
-    return NextResponse.json({
+    // Clear relevant caches after successful import
+    const response = NextResponse.json({
       success: true,
-      message: `Import completed. ${successCount} submissions imported successfully, ${errorCount} failed.`,
+      message: `Import completed. ${successCount} submissions imported successfully, ${errorCount} failed, ${duplicateCount} duplicates skipped.`,
       details: {
         totalRows: dataRows.length,
         successCount,
         errorCount,
+        duplicateCount,
         validFields,
         formCodeField,
         timestampField,
-        duplicateCount: dataRows.length - successCount - errorCount,
         entityUpdateCount,
         duplicateCheckCount,
         errors: errors.slice(0, 10)
       }
     });
+
+    // Clear cache headers to force fresh data on next request
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+
+    return response;
 
   } catch (error) {
     console.error("Error importing submissions:", error);

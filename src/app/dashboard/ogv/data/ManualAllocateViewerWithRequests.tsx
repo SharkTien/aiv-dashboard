@@ -150,7 +150,7 @@ export default function ManualAllocateViewerWithRequests({ formId }: ManualAlloc
     setAllocating(submissionId);
     try {
       const response = await fetch(`/api/forms/${formId}/submissions/${submissionId}/allocate-entity`, {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entity_id: entityId })
       });
@@ -235,6 +235,11 @@ export default function ManualAllocateViewerWithRequests({ formId }: ManualAlloc
                   data: { request_id: userRequest.id }
                 })
               });
+              
+              // Refresh notification count in sidebar
+              if ((window as any).refreshNotificationCount) {
+                (window as any).refreshNotificationCount();
+              }
             } catch (notificationError) {
               console.error('Error deleting notifications:', notificationError);
               // Don't show error to user as the main action succeeded

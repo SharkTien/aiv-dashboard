@@ -77,12 +77,10 @@ export async function GET(
     const response = NextResponse.json({ items: submissionsWithResponses });
     response.headers.set('Content-Type', 'application/json; charset=utf-8');
     // Cache for 1 minute
-    response.headers.set('Cache-Control', 'private, max-age=60');
+    response.headers.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
     return response;
   } catch (error) {
     console.error("Error fetching form submissions:", error);
-    console.error("Error details:", error instanceof Error ? error.message : "Unknown error");
-    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
     return NextResponse.json({ error: "Failed to fetch form submissions" }, { status: 500 });
   }
 }

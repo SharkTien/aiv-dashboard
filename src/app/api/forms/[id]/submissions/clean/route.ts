@@ -87,13 +87,21 @@ export async function GET(
           formCode: row.form_code,
           utmCampaign: row.utm_campaign_value,
           utmCampaignName: row.utm_campaign_name,
-          responses: {}
+          responses: []
         });
       }
       
       // Add response if field data exists
       if (row.field_name) {
-        submissionsMap.get(row.id).responses[row.field_name] = row.value_label ?? row.value ?? "";
+        const existingResponse = submissionsMap.get(row.id).responses.find((r: any) => r.field_name === row.field_name);
+        if (!existingResponse) {
+          submissionsMap.get(row.id).responses.push({
+            field_name: row.field_name,
+            field_label: row.field_label,
+            value: row.value ?? "",
+            value_label: row.value_label
+          });
+        }
       }
     });
     
@@ -114,7 +122,7 @@ export async function GET(
     });
     
     // Cache for 1 minute
-    response.headers.set('Cache-Control', 'private, max-age=60');
+    response.headers.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
     
     return response;
 

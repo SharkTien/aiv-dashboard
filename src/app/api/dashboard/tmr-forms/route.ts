@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbPool } from "@/lib/db";
 
-export async function GET() {
-  const pool = getDbPool();
-
+export async function GET(request: NextRequest) {
   try {
+    const pool = getDbPool();
+
+    // Get all TMR forms
     const [formsResult] = await pool.query(`
-      SELECT id, name, code, created_at, updated_at
-      FROM forms 
+      SELECT id, name, code
+      FROM forms
       WHERE type = 'TMR'
       ORDER BY created_at DESC
     `);
@@ -20,9 +21,10 @@ export async function GET() {
     });
 
   } catch (error) {
-    console.error("Error fetching TMR forms:", error);
-    return NextResponse.json({ error: "Failed to fetch TMR forms" }, { status: 500 });
+    console.error('Error fetching TMR forms:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch TMR forms' },
+      { status: 500 }
+    );
   }
 }
-
-

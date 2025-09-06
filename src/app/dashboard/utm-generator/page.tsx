@@ -6,6 +6,7 @@ import LoadingOverlay from "@/components/LoadingOverlay";
 type Entity = {
   entity_id: number;
   name: string;
+  type: string;
 };
 
 type CampaignBlock = { type: "text"; value: string } | { type: "entity_id" };
@@ -119,6 +120,7 @@ export default function UTMGeneratorPage() {
     setSelectedForm("all");
   }, [selectedEntity]);
 
+
   // Load active campaign for the selected entity and form
   useEffect(() => {
     const loadActiveForEntity = async () => {
@@ -185,6 +187,17 @@ export default function UTMGeneratorPage() {
 
   const activeCampaignString = useMemo(() => buildCampaignString(activeCampaign?.format_blocks || null, selectedEntity), [activeCampaign, entities, selectedEntity]);
 
+  // Filter entities (all types except organic)
+  const filteredEntities = useMemo(() => {
+    if (role !== 'admin') {
+      // Non-admin users: only show local entities (excluding organic)
+      return entities.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic');
+    }
+    
+    // Admin users: show all entities (local + national, excluding organic)
+    return entities.filter((e: any) => e.name.toLowerCase() !== 'organic');
+  }, [entities, role]);
+
   const loadSourcesAndMediums = async () => {
     try {
       const [sourcesRes, mediumsRes] = await Promise.all([
@@ -235,9 +248,9 @@ export default function UTMGeneratorPage() {
 
       if (entitiesRes.ok) {
         const entitiesData = await entitiesRes.json();
-        // Filter out national entities and organic (only show local entities)
-        const localEntities = Array.isArray(entitiesData.items) ? entitiesData.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
-        setEntities(localEntities);
+        // Store all entities for filtering
+        const allEntities = Array.isArray(entitiesData.items) ? entitiesData.items : [];
+        setEntities(allEntities);
       }
 
       if (sourcesRes.ok) {
@@ -418,7 +431,11 @@ export default function UTMGeneratorPage() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Entity Name *</label>
               <select value={selectedEntity.toString()} onChange={(e) => setSelectedEntity(e.target.value ? Number(e.target.value) : "")} disabled={role !== 'admin'} className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all disabled:opacity-60" required>
                 <option value="">Select Entity</option>
-                {entities.map((entity) => (<option key={entity.entity_id} value={entity.entity_id}>{entity.name}</option>))}
+                {filteredEntities.map((entity) => (
+                  <option key={entity.entity_id} value={entity.entity_id}>
+                    {entity.name} {entity.type === 'national' ? '(National)' : ''}
+                  </option>
+                ))}
               </select>
             </div>
             <div>

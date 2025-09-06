@@ -69,7 +69,7 @@ export default function ManualAllocateViewer({ formId }: { formId: number }) {
     setAllocating(submissionId);
     try {
       const response = await fetch(`/api/forms/${formId}/submissions/${submissionId}/allocate-entity`, {
-        method: 'POST',
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
