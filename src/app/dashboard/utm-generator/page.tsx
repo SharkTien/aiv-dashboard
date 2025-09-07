@@ -864,7 +864,7 @@ export default function UTMGeneratorPage() {
                           <td className="py-3 px-4 text-sm">
                             <div className="relative">
                               <button
-                                onClick={() => {
+                                onClick={(e) => {
                                   // Close all other menus first
                                   document.querySelectorAll('[id^="menu-"]').forEach(otherMenu => {
                                     if (otherMenu.id !== `menu-${link.id}`) {
@@ -874,6 +874,26 @@ export default function UTMGeneratorPage() {
                                   
                                   const menu = document.getElementById(`menu-${link.id}`);
                                   if (menu) {
+                                    const isHidden = menu.classList.contains('hidden');
+                                    if (isHidden) {
+                                      // Calculate position
+                                      const buttonRect = e.currentTarget.getBoundingClientRect();
+                                      const menuWidth = 192; // w-48 = 12rem = 192px
+                                      const menuHeight = 120; // Approximate height
+                                      
+                                      // Position relative to viewport
+                                      let left = buttonRect.right - menuWidth;
+                                      let top = buttonRect.bottom + 8;
+                                      
+                                      // Adjust if would go off screen
+                                      if (left < 8) left = 8;
+                                      if (top + menuHeight > window.innerHeight - 8) {
+                                        top = buttonRect.top - menuHeight - 8;
+                                      }
+                                      
+                                      menu.style.left = `${left}px`;
+                                      menu.style.top = `${top}px`;
+                                    }
                                     menu.classList.toggle('hidden');
                                   }
                                 }}
@@ -885,7 +905,13 @@ export default function UTMGeneratorPage() {
                               </button>
                               <div
                                 id={`menu-${link.id}`}
-                                className="dropdown-menu hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10"
+                                className="dropdown-menu hidden fixed w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-[9999]"
+                                style={{
+                                  top: 'auto',
+                                  right: 'auto',
+                                  left: 'auto',
+                                  bottom: 'auto'
+                                }}
                               >
                                 <div className="py-1">
                                   <button
