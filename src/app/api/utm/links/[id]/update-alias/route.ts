@@ -45,16 +45,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ul.source_id,
         ul.medium_id,
         ul.utm_name,
-        ul.base_url,
         uc.code as campaign_code,
         us.code as source_code,
         um.code as medium_code,
-        e.name as entity_name
+        e.name as entity_name,
+        f.type as form_type
       FROM utm_links ul
       JOIN utm_campaigns uc ON ul.campaign_id = uc.id
       JOIN utm_sources us ON ul.source_id = us.id
       JOIN utm_mediums um ON ul.medium_id = um.id
       JOIN entity e ON ul.entity_id = e.entity_id
+      JOIN forms f ON uc.form_id = f.id
       WHERE ul.id = ?
     `, [linkId]);
 
@@ -64,8 +65,25 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const details = linkDetails[0] as any;
     
+    // Get base URL from config based on form type
+    const hubType = details.form_type === 'TMR' ? 'TMR' : 'oGV';
+    const [baseUrlRows] = await pool.query(
+      `SELECT base_url FROM utm_base_urls WHERE hub_type = ?`,
+      [hubType]
+    );
+    
+    // Default URLs
+    const defaultUrls = {
+      oGV: "https://www.aiesec.vn/globalvolunteer/home",
+      TMR: "https://www.aiesec.vn/join-aiesec-fall-2025"
+    };
+    
+    const baseUrl = Array.isArray(baseUrlRows) && baseUrlRows.length > 0 
+      ? (baseUrlRows[0] as any).base_url 
+      : defaultUrls[hubType as keyof typeof defaultUrls];
+    
     // Build UTM URL
-    const utmUrl = new URL(details.base_url);
+    const utmUrl = new URL(baseUrl);
     utmUrl.searchParams.set('utm_source', details.source_code);
     utmUrl.searchParams.set('utm_medium', details.medium_code);
     utmUrl.searchParams.set('utm_campaign', details.campaign_code);
