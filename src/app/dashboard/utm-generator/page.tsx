@@ -41,7 +41,7 @@ type UTMLink = {
   source_id: number;
   medium_id: number;
   utm_name: string | null;
-  base_url: string;
+  base_url?: string; // Optional - will be added from config when needed
   shortened_url: string | null;
   created_at: string;
   entity_name: string;
@@ -90,6 +90,7 @@ export default function UTMGeneratorPage() {
   const [aliasInput, setAliasInput] = useState<string>('');
   const [updatingAlias, setUpdatingAlias] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [baseUrl, setBaseUrl] = useState<string>('https://www.aiesec.vn/globalvolunteer/home');
 
   // Toast function
   const showToast = (message: string, type: 'success' | 'error') => {
@@ -99,6 +100,30 @@ export default function UTMGeneratorPage() {
 
   useEffect(() => {
     loadData(); 
+  }, [searchParams]);
+
+  // Load base URL based on hub type
+  useEffect(() => {
+    const loadBaseUrl = async () => {
+      const typeParam = searchParams.get('type');
+      const hubType = typeParam === 'TMR' ? 'TMR' : 'oGV';
+      
+      try {
+        const response = await fetch(`/api/utm/base-urls/${hubType}`);
+        if (response.ok) {
+          const data = await response.json();
+          setBaseUrl(data.base_url);
+        }
+      } catch (error) {
+        console.error('Error loading base URL:', error);
+        // Keep default URL if loading fails
+      }
+    };
+    
+    loadBaseUrl();
+    
+    // Clear lastCreated when switching hub types
+    setLastCreated(null);
   }, [searchParams]);
 
   // Debug: Log state changes
@@ -353,8 +378,7 @@ export default function UTMGeneratorPage() {
           campaign_id: activeCampaign.id,
           source_id: selectedSource,
           medium_id: selectedMedium,
-          utm_name: utmName.trim() || null,
-          base_url: 'https://www.aiesec.vn/globalvolunteer/home'
+          utm_name: utmName.trim() || null
         })
       });
 
@@ -384,7 +408,8 @@ export default function UTMGeneratorPage() {
   };
 
   const generateUTMUrl = (link: UTMLink) => {
-    const url = new URL(link.base_url);
+    // Use the current base URL from state (which comes from config)
+    const url = new URL(baseUrl);
     url.searchParams.set('utm_source', link.source_code);
     url.searchParams.set('utm_medium', link.medium_code);
     const campaignParam = buildCampaignString(activeCampaign?.format_blocks || null, link.entity_id) || link.campaign_code;
@@ -426,6 +451,14 @@ export default function UTMGeneratorPage() {
         });
 
         if (updateResponse.ok) {
+          // Update the lastCreated link with shortened URL
+          if (lastCreated && lastCreated.id === linkId) {
+            setLastCreated(prev => prev ? {
+              ...prev,
+              shortened_url: data.shortenedUrl
+            } : null);
+          }
+          
           // Reload links to get updated data
           if (pagination) {
             loadLinks(pagination.page);

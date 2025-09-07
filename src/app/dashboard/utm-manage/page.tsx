@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import UTMCampaignBuilderPage from "@/app/dashboard/utm-campaigns/builder/page";
+import BaseUrlManager from "@/components/BaseUrlManager";
 
 type UTMCampaign = {
   id: number;
@@ -39,7 +40,7 @@ type UTMMedium = {
   updated_at: string;
 };
 
-type TabType = 'campaigns' | 'sources' | 'mediums' | 'builder';
+type TabType = 'campaigns' | 'sources' | 'mediums' | 'builder' | 'base-urls';
 
 export default function UTMManagePage() {
   const [activeTab, setActiveTab] = useState<TabType>('campaigns');
@@ -649,7 +650,8 @@ export default function UTMManagePage() {
             { id: 'campaigns', label: 'Campaigns' },
             { id: 'sources', label: 'Sources' },
             { id: 'mediums', label: 'Mediums' },
-            { id: 'builder', label: 'Campaign Builder' }
+            { id: 'builder', label: 'Campaign Builder' },
+            { id: 'base-urls', label: 'Base URLs' }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -681,6 +683,8 @@ export default function UTMManagePage() {
 
       {activeTab === 'builder' ? (
         <UTMCampaignBuilderPage />
+      ) : activeTab === 'base-urls' ? (
+        <BaseUrlManager />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Form Panel */}

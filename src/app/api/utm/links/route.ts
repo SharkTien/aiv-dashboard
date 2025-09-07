@@ -23,7 +23,6 @@ export async function GET(req: NextRequest) {
         ul.source_id,
         ul.medium_id,
         ul.utm_name,
-        ul.base_url,
         ul.shortened_url,
         ul.created_at,
         e.name as entity_name,
@@ -32,7 +31,8 @@ export async function GET(req: NextRequest) {
         us.code as source_code,
         us.name as source_name,
         um.code as medium_code,
-        um.name as medium_name
+        um.name as medium_name,
+        f.type as form_type
       FROM utm_links ul
       JOIN entity e ON ul.entity_id = e.entity_id
       JOIN utm_campaigns uc ON ul.campaign_id = uc.id
@@ -65,6 +65,28 @@ export async function GET(req: NextRequest) {
     const [rows] = await pool.query(query, params);
     const links = Array.isArray(rows) ? rows : [];
 
+    // Get base URLs from config and add to each link
+    const [baseUrlRows] = await pool.query(
+      `SELECT hub_type, base_url FROM utm_base_urls`
+    );
+    const baseUrls = Array.isArray(baseUrlRows) ? baseUrlRows as any[] : [];
+    
+    // Default URLs
+    const defaultUrls = {
+      oGV: "https://www.aiesec.vn/globalvolunteer/home",
+      TMR: "https://www.aiesec.vn/join-aiesec-fall-2025"
+    };
+    
+    // Add base_url to each link based on form_type
+    const linksWithBaseUrl = links.map((link: any) => {
+      const hubType = link.form_type === 'TMR' ? 'TMR' : 'oGV';
+      const configUrl = baseUrls.find((url: any) => url.hub_type === hubType)?.base_url;
+      return {
+        ...link,
+        base_url: configUrl || defaultUrls[hubType as keyof typeof defaultUrls]
+      };
+    });
+
     // Get total count for pagination
     let countQuery = `
       SELECT COUNT(*) as total FROM utm_links ul
@@ -92,7 +114,7 @@ export async function GET(req: NextRequest) {
     const totalPages = Math.ceil(total / limit);
     
     return NextResponse.json({
-      items: links,
+      items: linksWithBaseUrl,
       pagination: {
         page,
         limit,
@@ -113,7 +135,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
   const body = await req.json();
-  const { entity_id, campaign_id, source_id, medium_id, utm_name, base_url = 'https://www.aiesec.vn/globalvolunteer/home' } = body || {};
+  const { entity_id, campaign_id, source_id, medium_id, utm_name, hub_type } = body || {};
   
   if (!entity_id || !campaign_id || !source_id || !medium_id) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -140,10 +162,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Insert UTM link
+    // Insert UTM link (without base_url - will be determined from config when needed)
     const [result] = await pool.query(
-      "INSERT INTO utm_links (entity_id, campaign_id, source_id, medium_id, utm_name, base_url) VALUES (?, ?, ?, ?, ?, ?)",
-      [entity_id, campaign_id, source_id, medium_id, utm_name || null, base_url]
+      "INSERT INTO utm_links (entity_id, campaign_id, source_id, medium_id, utm_name) VALUES (?, ?, ?, ?, ?)",
+      [entity_id, campaign_id, source_id, medium_id, utm_name || null]
     );
     
     const linkId = (result as any).insertId;
@@ -157,7 +179,6 @@ export async function POST(req: NextRequest) {
         ul.source_id,
         ul.medium_id,
         ul.utm_name,
-        ul.base_url,
         ul.shortened_url,
         ul.created_at,
         e.name as entity_name,
