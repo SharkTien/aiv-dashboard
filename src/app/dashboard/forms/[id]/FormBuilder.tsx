@@ -62,7 +62,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
 
   async function loadForm() {
     try {
-      const res = await fetch(`/api/forms/${formId}`);
+      const res = await fetch(`/api/forms/${formId}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setForm(data.form);
@@ -74,7 +74,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
 
   async function loadFields() {
     try {
-      const res = await fetch(`/api/forms/${formId}/fields`);
+      const res = await fetch(`/api/forms/${formId}/fields`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setFields(Array.isArray(data.fields) ? data.fields : []);

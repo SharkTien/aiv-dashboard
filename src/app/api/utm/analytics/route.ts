@@ -57,8 +57,13 @@ export async function GET(req: NextRequest) {
 
     const params: any[] = [startDate, endDate + ' 23:59:59'];
 
-    // Optional entity filter (only for admin when explicitly requested)
-    if (entityId && user.role === 'admin') {
+    // Entity scope:
+    // - Non-admin: always limited to their own entity
+    // - Admin: may optionally filter by entity
+    if (user.role !== 'admin') {
+      query += " AND ul.entity_id = ?";
+      params.push(user.entity_id);
+    } else if (entityId) {
       query += " AND ul.entity_id = ?";
       params.push(entityId);
     }

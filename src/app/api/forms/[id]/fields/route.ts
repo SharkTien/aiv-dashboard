@@ -30,11 +30,13 @@ export async function GET(
     
     const data = Array.isArray(rows) ? (rows as any) : [];
     
-    const response = NextResponse.json({ fields: data });
-    response.headers.set('Content-Type', 'application/json; charset=utf-8');
-    // Cache for 5 minutes
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
-    return response;
+    return NextResponse.json({ fields: data }, {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        // Disable caching to ensure builder sees latest changes immediately
+        'Cache-Control': 'no-store'
+      }
+    });
   } catch (error) {
     console.error("Error fetching form fields:", error);
     return NextResponse.json({ error: "Failed to fetch form fields" }, { status: 500 });

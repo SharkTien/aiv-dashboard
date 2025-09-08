@@ -574,7 +574,7 @@ export default function UTMGeneratorPage() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">UTM Link Generator</h1>
         <p className="text-gray-600 dark:text-gray-400 mt-2">Create and manage UTM tracking links for Global Volunteer campaigns.</p>
         <div className="mt-2 text-xs rounded-md bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 px-3 py-2 ring-1 ring-yellow-200/60 dark:ring-yellow-800/50">
-          <strong>Note:</strong> Only clicks on the <span className="font-semibold">Tracking Link</span> (or <span className="font-semibold">Tracking Short URL</span>) are counted. The original generated URL (<span className="italic">aiesec.vn</span>) does not record clicks.
+          <strong>Note:</strong> Only clicks on the <span className="font-semibold">Tracking Link</span> (or <span className="font-semibold">Tracking Short URL</span>) are counted. The original generated URL (<span className="italic">aiesec.vn</span>) and its shortened link does not record clicks.
         </div>
       </div>
       <div className="border-b border-gray-200 dark:border-gray-700">

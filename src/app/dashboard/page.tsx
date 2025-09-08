@@ -271,7 +271,7 @@ function Card({ title, subtitle, href, featured }: { title: string; subtitle: st
 
 function NotificationsCard({ notifications, loading }: { notifications: any[]; loading: boolean }) {
   const cardContent = (
-    <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur rounded-2xl p-6 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white/80 dark:hover:bg-gray-800/80 transition-all duration-300 h-full">
+    <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur h-full rounded-2xl p-6 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white/80 dark:hover:bg-gray-800/80 transition-all duration-300 h-full">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-sky-100 dark:bg-sky-900/30 rounded-lg flex items-center justify-center">
@@ -359,7 +359,7 @@ function FormTypeCard({
   href: string;
 }) {
   const cardContent = (
-    <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur rounded-2xl p-6 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white/80 dark:hover:bg-gray-800/80 transition-all duration-300">
+    <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur h-full rounded-2xl p-6 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white/80 dark:hover:bg-gray-800/80 transition-all duration-300">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <Image src={logo} alt={title} width={96} height={96} className="rounded-lg" />

@@ -325,15 +325,28 @@ export async function DELETE(req: NextRequest) {
 
   const pool = getDbPool();
   try {
-    // Check ownership for non-admin users
-    const [rows] = await pool.query("SELECT entity_id FROM utm_links WHERE id = ?", [id]);
+    // Check ownership for non-admin users and fetch short.io info
+    const [rows] = await pool.query("SELECT entity_id, short_io_id, tracking_short_url, shortened_url FROM utm_links WHERE id = ?", [id]);
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json({ error: "UTM link not found" }, { status: 404 });
     }
-    const linkEntityId = (rows[0] as any).entity_id as number;
+    const linkRow = rows[0] as any;
+    const linkEntityId = linkRow.entity_id as number;
     if (user.role !== 'admin' && user.entity_id !== linkEntityId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    // Try delete corresponding short.io link if configured
+    try {
+      const apiKey = process.env.SHORT_IO_API_KEY;
+      const apiBase = process.env.SHORT_IO_API_BASE || 'https://api.short.io';
+      const shortId = linkRow.short_io_id;
+      if (apiKey && shortId) {
+        await fetch(`${apiBase}/links/${encodeURIComponent(shortId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: apiKey },
+        });
+      }
+    } catch {}
 
     await pool.query("DELETE FROM utm_links WHERE id = ?", [id]);
     return NextResponse.json({ success: true });
