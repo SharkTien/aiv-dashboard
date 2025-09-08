@@ -9,6 +9,7 @@ export default function UsersManager() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<"admin" | "lead" | "member">("member");
+  const [program, setProgram] = useState<"oGV" | "TMR" | "">("");
   const [password, setPassword] = useState("");
   const [result, setResult] = useState<any>(null);
   const [open, setOpen] = useState(false);
@@ -31,15 +32,16 @@ export default function UsersManager() {
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
     if (!entityId) return alert("Select entity");
+    if (!program) return alert("Select program");
     const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entity_id: entityId, email, name, password, role }),
+      body: JSON.stringify({ entity_id: entityId, email, name, password, role, program }),
     });
     const data = await res.json();
     if (!res.ok) return alert(data.error || "Create failed");
     setResult(data);
-    setEmail(""); setName(""); setPassword(""); setRole("member"); setEntityId("");
+    setEmail(""); setName(""); setPassword(""); setRole("member"); setEntityId(""); setProgram("");
   }
 
   return (
@@ -65,6 +67,19 @@ export default function UsersManager() {
                         {entities.map((e) => (
                           <option key={e.entity_id} value={e.entity_id}>{e.name}</option>
                         ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Program</label>
+                      <select 
+                        value={program || ""}
+                        onChange={(e) => setProgram((e.target.value || "") as any)}
+                        className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
+                        required
+                      >
+                        <option value="">Select program…</option>
+                        <option value="oGV">oGV</option>
+                        <option value="TMR">TMR</option>
                       </select>
                     </div>
                     <div className="grid gap-2">

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
-type User = { user_id: number; email: string; name: string; role: string; status: number; entity_id: number; created_at: string };
+type User = { user_id: number; email: string; name: string; role: string; status: number; entity_id: number; program?: string; created_at: string };
 
 export default function UsersList() {
   const [items, setItems] = useState<User[]>([]);
@@ -70,6 +70,7 @@ export default function UsersList() {
               <th className="px-4 py-2 border-b border-black/10 dark:border-white/10">Name</th>
               <th className="px-4 py-2 border-b border-black/10 dark:border-white/10">Email</th>
               <th className="px-4 py-2 border-b border-black/10 dark:border-white/10">Role</th>
+              <th className="px-4 py-2 border-b border-black/10 dark:border-white/10">Program</th>
               <th className="px-4 py-2 border-b border-black/10 dark:border-white/10">Status</th>
               <th className="px-4 py-2 border-b border-black/10 dark:border-white/10">Created</th>
               <th className="px-4 py-2 border-b border-black/10 dark:border-white/10 text-right">Actions</th>
@@ -81,6 +82,7 @@ export default function UsersList() {
                 <td className="px-4 py-2 text-gray-900 dark:text-white">{u.name}</td>
                 <td className="px-4 py-2 text-gray-900 dark:text-white">{u.email}</td>
                 <td className="px-4 py-2 text-gray-900 dark:text-white">{u.role}</td>
+                <td className="px-4 py-2 text-gray-900 dark:text-white">{u.program || '-'}</td>
                 <td className="px-4 py-2 text-gray-900 dark:text-white">{u.status ? "active" : "inactive"}</td>
                 <td className="px-4 py-2 text-gray-900 dark:text-white">{new Date(u.created_at).toLocaleDateString()}</td>
                 <td className="px-4 py-2 text-right">
@@ -162,13 +164,14 @@ function EditUserModal({ user, entities, onClose, onSaved }: { user: User; entit
   const [role, setRole] = useState<User['role']>(user.role);
   const [status, setStatus] = useState<number>(user.status);
   const [entityId, setEntityId] = useState<number>(user.entity_id);
+  const [program, setProgram] = useState<string>(user.program || "");
   const [saving, setSaving] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch('/api/users', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: user.user_id, name, role, status, entity_id: entityId }) });
+      const res = await fetch('/api/users', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: user.user_id, name, role, status, entity_id: entityId, program }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
       onSaved();
@@ -207,6 +210,14 @@ function EditUserModal({ user, entities, onClose, onSaved }: { user: User; entit
                   <option key="member" value="member">Member</option>
                   <option key="lead" value="lead">Lead</option>
                   <option key="admin" value="admin">Admin</option>
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Program</label>
+                <select value={program} onChange={(e) => setProgram(e.target.value)} className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all">
+                  <option value="">Select program…</option>
+                  <option value="oGV">oGV</option>
+                  <option value="TMR">TMR</option>
                 </select>
               </div>
               <div className="grid gap-2">
