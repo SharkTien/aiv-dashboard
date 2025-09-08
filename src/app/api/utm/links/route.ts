@@ -229,23 +229,8 @@ export async function POST(req: NextRequest) {
     
     const linkId = (result as any).insertId;
     
-    // Build original URL with UTM parameters (DO NOT LOSE UTM)
-    // Fetch codes for source/medium/campaign
-    const [[srcRow] = []] = (await pool.query("SELECT code FROM utm_sources WHERE id = ?", [source_id])) as any;
-    const [[medRow] = []] = (await pool.query("SELECT code FROM utm_mediums WHERE id = ?", [medium_id])) as any;
-    const [[campRow] = []] = (await pool.query("SELECT code FROM utm_campaigns WHERE id = ?", [campaign_id])) as any;
-    const sourceCode = srcRow?.code || '';
-    const mediumCode = medRow?.code || '';
-    const campaignCode = campRow?.code || '';
-
-    const originalUrl = new URL(snapshotBaseUrl);
-    if (sourceCode) originalUrl.searchParams.set('utm_source', sourceCode);
-    if (mediumCode) originalUrl.searchParams.set('utm_medium', mediumCode);
-    if (campaignCode) originalUrl.searchParams.set('utm_campaign', campaignCode);
-    if (utm_name) originalUrl.searchParams.set('utm_name', utm_name);
-
-    // Generate tracking link that redirects to original URL with UTM params
-    const trackingLink = generateTrackingLink(linkId, originalUrl.toString());
+    // Generate tracking link
+    const trackingLink = generateTrackingLink(linkId, snapshotBaseUrl);
     
     // Update UTM link with tracking_link
     await pool.query(
