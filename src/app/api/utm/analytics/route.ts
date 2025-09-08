@@ -164,7 +164,7 @@ export async function GET(req: NextRequest) {
 
     // Aggregate data for insights
     const insights = generateUTMInsights(analyticsData);
-
+    
     // Always compute Top 5 national EMT links (visible to all users)
     let emtTopLinks: any[] = [];
     try {

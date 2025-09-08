@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import SubmissionsViewer from "@/app/dashboard/forms/[id]/submissions/SubmissionsViewer";
 import CleanDataViewer from "./CleanDataViewer";
@@ -19,8 +20,16 @@ type Form = {
 };
 
 export default function Page() {
+  const searchParams = useSearchParams();
   const [forms, setForms] = useState<Form[]>([]);
-  const [selectedFormId, setSelectedFormId] = useState<number | null>(null);
+  const initialFormId = (() => {
+    const p = searchParams.get('formId');
+    if (!p) return null;
+    const n = Number(p);
+    return Number.isNaN(n) ? null : n;
+  })();
+  const [selectedFormId, setSelectedFormId] = useState<number | null>(initialFormId);
+  const [hasAutoSelected, setHasAutoSelected] = useState(!!initialFormId);
   const [loading, setLoading] = useState(true);
   const [loadingForms, setLoadingForms] = useState(false);
   const [q, setQ] = useState("");
@@ -36,8 +45,13 @@ export default function Page() {
         const data = await res.json();
         const items = Array.isArray(data.items) ? data.items : [];
         setForms(items);
-        // Default select newest by created_at (API already orders by created_at DESC)
-        if (!selectedFormId && items.length > 0) setSelectedFormId(items[0].id);
+        // Default select only once on first load; do not override user selection later
+        if (!hasAutoSelected) {
+          if (!selectedFormId && items.length > 0) {
+            setSelectedFormId(items[0].id);
+          }
+          setHasAutoSelected(true);
+        }
       }
     } finally { setLoadingForms(false); }
   }
@@ -51,6 +65,15 @@ export default function Page() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
+
+  // Sync selected form to URL without full navigation
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (selectedFormId) url.searchParams.set('formId', String(selectedFormId));
+    else url.searchParams.delete('formId');
+    window.history.replaceState({}, '', url.toString());
+  }, [selectedFormId]);
 
   return (
     <div className="p-8 space-y-6">

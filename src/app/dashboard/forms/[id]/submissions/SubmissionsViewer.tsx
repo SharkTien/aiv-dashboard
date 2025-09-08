@@ -36,6 +36,62 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   const [form, setForm] = useState<Form | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  // Admin detection for inline edit
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        const json = await res.json();
+        setIsAdmin(json?.user?.role === 'admin');
+      } catch {}
+    })();
+  }, []);
+
+  const [editingCell, setEditingCell] = useState<{ submissionId: number; fieldName: string } | null>(null);
+  const [editingValue, setEditingValue] = useState<string>('');
+
+  const startEdit = (submissionId: number, fieldName: string, currentValue: string) => {
+    if (!isAdmin) return;
+    setEditingCell({ submissionId, fieldName });
+    setEditingValue(currentValue ?? '');
+  };
+
+  const saveEdit = async () => {
+    if (!editingCell) return;
+    const { submissionId, fieldName } = editingCell;
+    try {
+      const res = await fetch(`/api/forms/${formId}/submissions/${submissionId}/edit-field`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_name: fieldName, value: editingValue })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) throw new Error(json?.error || 'Update failed');
+      // Optimistic update
+      setSubmissions(prev => prev.map(sub => {
+        if (sub.id !== submissionId) return sub;
+        const next = { ...sub } as any;
+        const resp = next.responses.find((r: any) => r.field_name === fieldName);
+        if (resp) {
+          resp.value = editingValue;
+          if ('value_label' in resp) resp.value_label = json.value_label ?? editingValue;
+        } else {
+          next.responses.push({ field_name: fieldName, field_label: fieldName, value: editingValue } as any);
+        }
+        return next;
+      }));
+      setEditingCell(null);
+      setEditingValue('');
+    } catch (e) {
+      alert((e as Error).message || 'Update failed');
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingCell(null);
+    setEditingValue('');
+  };
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [importing, setImporting] = useState(false);
@@ -1330,29 +1386,31 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
                           const shouldFormatByName = isDateLikeHeader && looksLikeDateValue;
                           const displayNode = (shouldFormatByType || shouldFormatByName) ? formatDateTime(fieldValue, fieldType) : (display || "");
                           
+                          const isEditing = editingCell && editingCell.submissionId === sub.id && editingCell.fieldName === h.name;
                           return (
                             <td
                               key={h.name}
                               className="px-3 py-2 max-w-48 text-gray-900 dark:text-white align-top whitespace-nowrap overflow-clip cursor-pointer"
                               title={display}
-                              onClick={() => {
-                                if (display) {
-                                  navigator.clipboard.writeText(display).then(() => {
-                                    const toast = document.createElement('div');
-                                    toast.textContent = 'Copied!';
-                                    toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50 text-sm animate-fade-in';
-                                    document.body.appendChild(toast);
-                                    setTimeout(() => {
-                                      toast.classList.add('opacity-0');
-                                      setTimeout(() => document.body.removeChild(toast), 400);
-                                    }, 1200);
-                                  });
-                                }
-                              }}
+                              onDoubleClick={() => startEdit(sub.id, h.name, fieldValue)}
                             >
-                              <span className="block overflow-clip text-ellipsis" style={{ maxWidth: '12rem' }}>
-                                {displayNode || <span className="text-gray-400">(empty)</span>}
-                              </span>
+                              {isEditing ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    autoFocus
+                                    value={editingValue}
+                                    onChange={(e) => setEditingValue(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                                    className="h-8 px-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                  />
+                                  <button onClick={saveEdit} className="px-2 py-1 text-xs rounded bg-blue-600 text-white">Save</button>
+                                  <button onClick={cancelEdit} className="px-2 py-1 text-xs rounded bg-gray-500 text-white">Cancel</button>
+                                </div>
+                              ) : (
+                                <span className="block overflow-clip text-ellipsis" style={{ maxWidth: '12rem' }}>
+                                  {displayNode || <span className="text-gray-400">(empty)</span>}
+                                </span>
+                              )}
                             </td>
                           );
                         })}

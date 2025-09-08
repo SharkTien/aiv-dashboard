@@ -61,8 +61,8 @@ export async function GET(req: NextRequest) {
   }
 
   // Track the click
+  const pool = getDbPool();
   try {
-    const pool = getDbPool();
     const visitorInfo = await extractVisitorInfo(req);
     const isUnique = await checkUniqueVisitor(pool, parseInt(utm_link_id), click_type, visitorInfo.session_id);
     
@@ -79,7 +79,37 @@ export async function GET(req: NextRequest) {
     // Don't fail the redirect if tracking fails
   }
   
-  // Redirect to original URL if provided
+  // Build original URL from database by id (authoritative), ignore provided url param
+  try {
+    const [rows] = await pool.query(
+      `SELECT 
+         ul.base_url,
+         ul.utm_name,
+         us.code AS source_code,
+         um.code AS medium_code,
+         uc.code AS campaign_code
+       FROM utm_links ul
+       JOIN utm_sources us ON ul.source_id = us.id
+       JOIN utm_mediums um ON ul.medium_id = um.id
+       JOIN utm_campaigns uc ON ul.campaign_id = uc.id
+       WHERE ul.id = ?
+       LIMIT 1`,
+      [parseInt(utm_link_id)]
+    );
+    const link = Array.isArray(rows) && rows.length > 0 ? (rows as any)[0] : null;
+    if (link && link.base_url) {
+      const url = new URL(link.base_url);
+      if (link.source_code) url.searchParams.set('utm_source', link.source_code);
+      if (link.medium_code) url.searchParams.set('utm_medium', link.medium_code);
+      if (link.campaign_code) url.searchParams.set('utm_campaign', link.campaign_code);
+      if (link.utm_name) url.searchParams.set('utm_name', link.utm_name);
+      return NextResponse.redirect(url.toString());
+    }
+  } catch (e) {
+    // fall through to other redirect strategies
+  }
+
+  // Fallback: if url param existed, redirect there
   if (redirect_url) {
     return NextResponse.redirect(decodeURIComponent(redirect_url));
   }
