@@ -436,7 +436,7 @@ function NotificationNavItem({
 
       {/* Notification Preview Popup */}
       {showPreview && !isCollapsed && (
-        <div className="absolute left-full ml-2 top-0 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 p-4">
+        <div className="fixed bottom-4 right-4 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Recent Notifications</h3>
             {unreadCount > 0 && (
