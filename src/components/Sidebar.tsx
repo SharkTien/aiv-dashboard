@@ -274,7 +274,7 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
                      Form Management
                    </NavItem>
                    <NavItem href="/dashboard/utm-manage" icon={<LinkIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
-                     UTM Management
+                     Link Management
                    </NavItem>
                  </div>
               </div>

@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       ...visitorInfo,
       is_unique: isUnique
     });
+    await upsertDailyCounters(pool, utm_link_id, isUnique);
     
     // Update UTM link counters
     await updateLinkCounters(pool, utm_link_id, isUnique);
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
       ...visitorInfo,
       is_unique: isUnique
     });
-    
+    await upsertDailyCounters(pool, parseInt(utm_link_id), isUnique);
     await updateLinkCounters(pool, parseInt(utm_link_id), isUnique);
   } catch (error) {
     console.error('Error tracking click:', error);
@@ -97,6 +98,26 @@ export async function GET(req: NextRequest) {
       'Expires': '0'
     }
   });
+}
+
+// Upsert daily counters into utm_clicks_daily
+async function upsertDailyCounters(pool: any, utmLinkId: number, isUnique: boolean) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT source_id, medium_id FROM utm_links WHERE id = ? LIMIT 1`,
+      [utmLinkId]
+    );
+    const link = Array.isArray(rows) && rows.length ? rows[0] : null;
+    if (!link) return;
+    await pool.query(
+      `INSERT INTO utm_clicks_daily (utm_link_id, source_id, medium_id, date, clicks, unique_clicks)
+       VALUES (?, ?, ?, CURDATE(), 1, ?)
+       ON DUPLICATE KEY UPDATE
+         clicks = clicks + 1,
+         unique_clicks = unique_clicks + VALUES(unique_clicks)`,
+      [utmLinkId, link.source_id, link.medium_id, isUnique ? 1 : 0]
+    );
+  } catch {}
 }
 
 // Extract visitor information from request
@@ -265,9 +286,6 @@ async function updateLinkCounters(pool: any, utmLinkId: number, isUnique: boolea
         "UPDATE utm_links SET last_click_at = NOW() WHERE id = ?",
         [utmLinkId]
       );
-    } else {
-      // If columns don't exist, just log the click (data is still tracked in click_logs)
-      console.log(`Click tracked for UTM link ${utmLinkId}, unique: ${isUnique} (counters not updated - columns missing)`);
     }
   } catch (error) {
     console.error('Error updating link counters:', error);

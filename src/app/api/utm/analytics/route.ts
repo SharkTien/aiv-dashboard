@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getDbPool } from "@/lib/db";
 
-// Short.io API integration for UTM tracking analytics
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -161,18 +160,7 @@ export async function GET(req: NextRequest) {
     // Aggregate data for insights
     const insights = generateUTMInsights(analyticsData);
     
-    // Debug insights aggregation
-    console.log('Analytics Debug:', {
-      totalLinks: analyticsData.length,
-      totalClicks: insights.totalClicks,
-      totalUniqueClicks: insights.totalUniqueClicks,
-      sampleLinks: analyticsData.slice(0, 3).map(link => ({
-        id: link.id,
-        utm_name: link.utm_name,
-        clicks: link.clicks,
-        uniqueClicks: link.uniqueClicks
-      }))
-    });
+    // (debug logs removed)
 
     const response = NextResponse.json({
       success: true,
@@ -516,17 +504,7 @@ async function getDatabaseClickData(pool: any, utmLinkId: number, startDate: str
     const totalClicks = Number(click?.totalClicks || 0);
     const uniqueClicks = Number(click?.uniqueClicks || 0);
     
-    // Debug database click data
-    if (utmLinkId === 38) {
-      console.log('Database click data for UTM link 38:', {
-        utmLinkId,
-        startDate,
-        endDate,
-        clickData,
-        totalClicks,
-        uniqueClicks
-      });
-    }
+    // (debug logs removed)
     
     // Get daily clicks breakdown
     const [dailyData] = await pool.query(

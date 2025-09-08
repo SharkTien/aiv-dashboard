@@ -40,7 +40,7 @@ type UTMMedium = {
   updated_at: string;
 };
 
-type TabType = 'campaigns' | 'sources' | 'mediums' | 'builder' | 'base-urls';
+type TabType = 'campaigns' | 'sources' | 'mediums' | 'builder' | 'base-urls' | 'maintenance';
 
 export default function UTMManagePage() {
   const [activeTab, setActiveTab] = useState<TabType>('campaigns');
@@ -62,6 +62,10 @@ export default function UTMManagePage() {
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   const [bulkEditFormId, setBulkEditFormId] = useState<number | ''>('');
   const [bulkEditing, setBulkEditing] = useState(false);
+  // Maintenance modal state
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletingAll, setDeletingAll] = useState(false);
 
   // Tab-specific loading states
   const [campaignsLoading, setCampaignsLoading] = useState(false);
@@ -586,7 +590,7 @@ export default function UTMManagePage() {
               {/* Loading text */}
               <div className="text-center">
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  Loading UTM Management...
+                  Loading Link Management...
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Please wait while we fetch the data...
@@ -621,7 +625,7 @@ export default function UTMManagePage() {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">UTM Management</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Link Management</h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">
               Manage UTM campaigns, sources, and mediums for tracking links.
             </p>
@@ -651,7 +655,8 @@ export default function UTMManagePage() {
             { id: 'sources', label: 'Sources' },
             { id: 'mediums', label: 'Mediums' },
             { id: 'builder', label: 'Campaign Builder' },
-            { id: 'base-urls', label: 'Base URLs' }
+            { id: 'base-urls', label: 'Base URLs' },
+            { id: 'maintenance', label: 'Maintenance' }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -685,6 +690,23 @@ export default function UTMManagePage() {
         <UTMCampaignBuilderPage />
       ) : activeTab === 'base-urls' ? (
         <BaseUrlManager />
+      ) : activeTab === 'maintenance' ? (
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Maintenance</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Admin tools for housekeeping.</p>
+          <div className="space-y-4">
+            <div className="p-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
+              <h3 className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Delete all Short.io links</h3>
+              <p className="text-xs text-red-700/80 dark:text-red-300/80 mb-3">This will attempt to delete all links under your Short.io domain configured in environment variables. Irreversible.</p>
+              <button
+                onClick={() => { setShowDeleteAllModal(true); setDeleteConfirmText(""); }}
+                className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white text-sm"
+              >
+                Delete all Short.io links
+              </button>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Form Panel */}
@@ -1032,6 +1054,51 @@ export default function UTMManagePage() {
                   );
                 })()}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete All Modal */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-red-700 dark:text-red-300 mb-2">Delete all Short.io links</h3>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+              This action will remove ALL links from your Short.io domain. Type <span className="font-mono font-semibold">DELETE</span> to confirm.
+            </p>
+            <input
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              className="w-full h-10 rounded-md ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
+              placeholder="Type DELETE to confirm"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setShowDeleteAllModal(false)}
+                disabled={deletingAll}
+                className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (deleteConfirmText !== 'DELETE') return;
+                  setDeletingAll(true);
+                  try {
+                    const res = await fetch('/api/utm/links/cleanup-old-links', { method: 'POST' });
+                    const data = await res.json();
+                    if (res.ok) alert(`Deleted ${data.deleted || 0} links on Short.io`);
+                    else alert(data.error || 'Cleanup failed');
+                    setShowDeleteAllModal(false);
+                  } catch {
+                    alert('Cleanup failed');
+                  } finally { setDeletingAll(false); }
+                }}
+                disabled={deleteConfirmText !== 'DELETE' || deletingAll}
+                className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+              >
+                {deletingAll ? 'Deleting…' : 'Confirm delete'}
+              </button>
             </div>
           </div>
         </div>

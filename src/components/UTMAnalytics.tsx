@@ -70,9 +70,42 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
     return date.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  // Admin-only entity filter
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<string>('');
+  const [entities, setEntities] = useState<Array<{ entity_id: number; name: string }>>([]);
+  // Pagination state (must be declared before any conditional returns)
+  const [page, setPage] = useState(1);
+
+  // Load entities for admin filter
+  const loadEntities = async () => {
+    try {
+      const response = await fetch('/api/entities', { cache: 'no-store' });
+      const result = await response.json();
+      if (result?.success) {
+        setEntities(Array.isArray(result.items) ? result.items : []);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    // fetch role to know if admin
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        const json = await res.json();
+        setIsAdmin(json?.user?.role === 'admin');
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) loadEntities();
+  }, [isAdmin]);
+
   useEffect(() => {
     loadAnalytics();
-  }, [startDate, endDate, selectedFormId]);
+  }, [startDate, endDate, selectedFormId, selectedEntity, isAdmin]);
 
 
 
@@ -91,6 +124,10 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
       } else if (formType) {
         // If no specific form selected, filter by form type (oGV/TMR/EWA)
         params.append('form_type', formType);
+      }
+      // Admin may filter by entity
+      if (isAdmin && selectedEntity) {
+        params.append('entity_id', selectedEntity);
       }
 
       const response = await fetch(`/api/utm/analytics?${params.toString()}`, { cache: 'no-store' });
@@ -135,16 +172,29 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
 
   const { links, insights } = data;
 
-  // Prepare chart data
-  const dailyClicksData = links.length > 0 
-    ? links[0].clicksByDate?.map(day => ({
-        date: new Date(day.date).toLocaleDateString(),
-        clicks: links.reduce((sum, link) => {
-          const dayData = link.clicksByDate?.find(d => d.date === day.date);
-          return sum + (dayData?.clicks || 0);
-        }, 0)
-      })) || []
-    : [];
+  // Prepare chart data (union of all dates across links)
+  let dailyClicksData: Array<{ date: string; clicks: number }> = [];
+  if (links.length > 0) {
+    const allDates = Array.from(new Set(
+      links.flatMap((l) => (l.clicksByDate || []).map((d) => d.date))
+    )).sort((a, b) => a.localeCompare(b));
+
+    dailyClicksData = allDates.map((dateISO) => ({
+      date: new Date(dateISO).toLocaleDateString(),
+      clicks: links.reduce((sum, link) => {
+        const dayData = link.clicksByDate?.find((d) => d.date === dateISO);
+        return sum + (dayData?.clicks || 0);
+      }, 0),
+    }));
+  }
+
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(links.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedLinks = links.slice(startIndex, startIndex + pageSize);
+  const goPrev = () => setPage((p) => Math.max(1, p - 1));
+  const goNext = () => setPage((p) => Math.min(totalPages, p + 1));
 
   return (
     <div className="space-y-6">
@@ -174,7 +224,26 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
           />
         </div>
 
-        
+        {/* Admin: Entity filter */}
+        {isAdmin && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+              Entity (Admin)
+            </label>
+            <select
+              value={selectedEntity}
+              onChange={(e) => setSelectedEntity(e.target.value)}
+              className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
+            >
+              <option value="">All Entities</option>
+              {entities.map((entity) => (
+                <option key={entity.entity_id} value={entity.entity_id}>
+                  {entity.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <button
           onClick={loadAnalytics}
@@ -312,7 +381,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {links.map((link) => (
+              {paginatedLinks.map((link) => (
                 <tr key={link.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-4 py-4">
                     <div className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2">
@@ -374,6 +443,16 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 dark:border-gray-700">
+          <div className="text-xs text-gray-600 dark:text-gray-300">
+            Showing {links.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + pageSize, links.length)} of {links.length}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={goPrev} disabled={currentPage === 1} className="h-9 px-3 rounded-md bg-gray-100 dark:bg-gray-700 disabled:opacity-50 text-sm">Previous</button>
+            <span className="text-sm text-gray-700 dark:text-gray-200">Page {currentPage} / {totalPages}</span>
+            <button onClick={goNext} disabled={currentPage === totalPages} className="h-9 px-3 rounded-md bg-gray-100 dark:bg-gray-700 disabled:opacity-50 text-sm">Next</button>
+          </div>
         </div>
         
         {/* Performance Legend */}

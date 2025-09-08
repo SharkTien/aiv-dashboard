@@ -114,12 +114,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             if (deleteResponse.ok) {
             } else {
               const errorData = await deleteResponse.json();
-              console.warn(`Failed to delete old Short.io link ${shortIoId}:`, errorData);
+              // silent
             }
           }
         }
       } catch (error) {
-        console.warn('Failed to delete old shortened URL:', error);
+        // silent
         // Continue with creating new link even if deletion fails
       }
     }

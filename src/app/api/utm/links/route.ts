@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   const page = Math.max(Number(searchParams.get("page") || 1), 1);
   const offset = (page - 1) * limit;
   const typeFilter = searchParams.get("type"); // 'TMR' | 'oGV' | 'EWA' | null
+  const entityFilter = searchParams.get("entity_id");
 
   const pool = getDbPool();
   
@@ -64,6 +65,9 @@ export async function GET(req: NextRequest) {
     if (user.role !== 'admin') {
       whereClauses.push("ul.entity_id = ?");
       params.push(user.entity_id);
+    } else if (entityFilter) {
+      whereClauses.push("ul.entity_id = ?");
+      params.push(Number(entityFilter));
     }
 
     if (typeFilter && ["oGV","TMR","EWA"].includes(typeFilter)) {
@@ -123,6 +127,9 @@ export async function GET(req: NextRequest) {
     if (user.role !== 'admin') {
       countWhere.push("ul.entity_id = ?");
       countParams.push(user.entity_id);
+    } else if (entityFilter) {
+      countWhere.push("ul.entity_id = ?");
+      countParams.push(Number(entityFilter));
     }
     if (typeFilter && ["oGV","TMR","EWA"].includes(typeFilter)) {
       countWhere.push("f.type = ?");
@@ -251,7 +258,7 @@ export async function POST(req: NextRequest) {
         );
       }
     } catch (error) {
-      console.warn('Failed to auto-shorten tracking link:', error);
+      // silent
       // Continue without shortened URL
     }
     

@@ -79,6 +79,8 @@ export default function UTMGeneratorPage() {
   const [links, setLinks] = useState<UTMLink[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [activeLoading, setActiveLoading] = useState(true);
+  // Admin-only entity filter for Available Links
+  const [entityFilter, setEntityFilter] = useState<number | "">("");
 
   // Form state
   const [selectedEntity, setSelectedEntity] = useState<number | "">("");
@@ -190,7 +192,7 @@ export default function UTMGeneratorPage() {
     if (activeTab === 'links') {
       void loadLinks(1);
     }
-  }, [activeTab, searchParams]); // Added searchParams dependency to reload when hub type changes
+  }, [activeTab, searchParams, entityFilter]); // reload when hub type or entity filter changes
 
   // Reload sources and mediums when switching to create tab to ensure data is available
   useEffect(() => {
@@ -347,6 +349,10 @@ export default function UTMGeneratorPage() {
       console.log('Loading UTM links for hub type:', typeParam || 'default (oGV)');
       if (typeParam && (typeParam === 'TMR' || typeParam === 'oGV' || typeParam === 'EWA')) {
         params.set('type', typeParam);
+      }
+      // Admin can filter by entity
+      if (role === 'admin' && entityFilter) {
+        params.set('entity_id', String(entityFilter));
       }
       const res = await fetch(`/api/utm/links?${params.toString()}`);
       if (res.ok) {
@@ -567,6 +573,9 @@ export default function UTMGeneratorPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">UTM Link Generator</h1>
         <p className="text-gray-600 dark:text-gray-400 mt-2">Create and manage UTM tracking links for Global Volunteer campaigns.</p>
+        <div className="mt-2 text-xs rounded-md bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 px-3 py-2 ring-1 ring-yellow-200/60 dark:ring-yellow-800/50">
+          <strong>Note:</strong> Only clicks on the <span className="font-semibold">Tracking Link</span> (or <span className="font-semibold">Tracking Short URL</span>) are counted. The original generated URL (<span className="italic">aiesec.vn</span>) does not record clicks.
+        </div>
       </div>
       <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex gap-6">
@@ -768,7 +777,39 @@ export default function UTMGeneratorPage() {
                             {link.tracking_short_url}
                           </div>
                         ) : (
-                          <span className="text-gray-400 dark:text-gray-500 text-xs">Not shortened</span>
+                          <button
+                            onClick={async () => {
+                              if (!link.tracking_link) {
+                                showToast('No tracking link to shorten', 'error');
+                                return;
+                              }
+                              try {
+                                const res = await fetch('/api/url-shortener', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ url: link.tracking_link, alias: `track-${link.id}` })
+                                });
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  await fetch(`/api/utm/links/${link.id}/shorten`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ shortenedUrl: data.shortenedUrl, shortIoId: data.shortIoId || data.id })
+                                  });
+                                  if (pagination) loadLinks(pagination.page);
+                                  showToast('Tracking short URL created', 'success');
+                                } else {
+                                  const e = await res.json();
+                                  showToast(e.error || 'Failed to shorten tracking link', 'error');
+                                }
+                              } catch {
+                                showToast('Failed to shorten tracking link', 'error');
+                              }
+                            }}
+                            className="px-2 py-1 text-xs rounded-lg bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300 font-medium transition-colors"
+                          >
+                            Create
+                          </button>
                         )}
                       </td>
                       <td className="py-3 px-4 text-sm">
@@ -788,6 +829,21 @@ export default function UTMGeneratorPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Available UTM Links</h2>
             <div className="flex items-center gap-4">
+              {role === 'admin' && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Filter by Entity</label>
+                  <select
+                    value={entityFilter.toString()}
+                    onChange={(e) => setEntityFilter(e.target.value ? Number(e.target.value) : "")}
+                    className="h-10 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
+                  >
+                    <option value="">All Entities</option>
+                    {entities.map((ent) => (
+                      <option key={ent.entity_id} value={ent.entity_id}>{ent.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {pagination && (
                 <div className="text-sm text-gray-500 dark:text-gray-400">
                   Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
