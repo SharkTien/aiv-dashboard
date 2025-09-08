@@ -1,6 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbPool } from "@/lib/db";
 
+// Simple in-memory cache for UTM link data
+const linkCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedLinkData(pool: any, linkId: number) {
+  const cacheKey = `link_${linkId}`;
+  const cached = linkCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT 
+         ul.base_url,
+         ul.utm_name,
+         us.code AS source_code,
+         um.code AS medium_code,
+         uc.code AS campaign_code
+       FROM utm_links ul
+       JOIN utm_sources us ON ul.source_id = us.id
+       JOIN utm_mediums um ON ul.medium_id = um.id
+       JOIN utm_campaigns uc ON ul.campaign_id = uc.id
+       WHERE ul.id = ?
+       LIMIT 1`,
+      [linkId]
+    );
+    
+    const link = Array.isArray(rows) && rows.length > 0 ? (rows as any)[0] : null;
+    linkCache.set(cacheKey, { data: link, timestamp: Date.now() });
+    return link;
+  } catch (error) {
+    console.error('Error fetching link data:', error);
+    return null;
+  }
+}
+
 // Track UTM link clicks
 export async function POST(req: NextRequest) {
   const pool = getDbPool();
@@ -60,53 +98,43 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing id parameter" }, { status: 400 });
   }
 
-  // Track the click
   const pool = getDbPool();
-  try {
-    const visitorInfo = await extractVisitorInfo(req);
-    const isUnique = await checkUniqueVisitor(pool, parseInt(utm_link_id), click_type, visitorInfo.session_id);
-    
-    await insertClickLog(pool, {
-      utm_link_id: parseInt(utm_link_id),
-      click_type,
-      ...visitorInfo,
-      is_unique: isUnique
-    });
-    await upsertDailyCounters(pool, parseInt(utm_link_id), isUnique);
-    await updateLinkCounters(pool, parseInt(utm_link_id), isUnique);
-  } catch (error) {
-    console.error('Error tracking click:', error);
-    // Don't fail the redirect if tracking fails
-  }
-  
-  // Build original URL from database by id (authoritative), ignore provided url param
-  try {
-    const [rows] = await pool.query(
-      `SELECT 
-         ul.base_url,
-         ul.utm_name,
-         us.code AS source_code,
-         um.code AS medium_code,
-         uc.code AS campaign_code
-       FROM utm_links ul
-       JOIN utm_sources us ON ul.source_id = us.id
-       JOIN utm_mediums um ON ul.medium_id = um.id
-       JOIN utm_campaigns uc ON ul.campaign_id = uc.id
-       WHERE ul.id = ?
-       LIMIT 1`,
-      [parseInt(utm_link_id)]
-    );
-    const link = Array.isArray(rows) && rows.length > 0 ? (rows as any)[0] : null;
-    if (link && link.base_url) {
-      const url = new URL(link.base_url);
-      if (link.source_code) url.searchParams.set('utm_source', link.source_code);
-      if (link.medium_code) url.searchParams.set('utm_medium', link.medium_code);
-      if (link.campaign_code) url.searchParams.set('utm_campaign', link.campaign_code);
-      if (link.utm_name) url.searchParams.set('utm_name', link.utm_name);
-      return NextResponse.redirect(url.toString());
-    }
-  } catch (e) {
-    // fall through to other redirect strategies
+  const linkId = parseInt(utm_link_id);
+
+  // Run tracking and link data fetching in parallel for better performance
+  const [trackingResult, linkData] = await Promise.allSettled([
+    // Track the click
+    (async () => {
+      try {
+        const visitorInfo = await extractVisitorInfo(req);
+        const isUnique = await checkUniqueVisitor(pool, linkId, click_type, visitorInfo.session_id);
+        
+        await insertClickLog(pool, {
+          utm_link_id: linkId,
+          click_type,
+          ...visitorInfo,
+          is_unique: isUnique
+        });
+        await upsertDailyCounters(pool, linkId, isUnique);
+        await updateLinkCounters(pool, linkId, isUnique);
+      } catch (error) {
+        console.error('Error tracking click:', error);
+        // Don't fail the redirect if tracking fails
+      }
+    })(),
+    // Get link data from cache
+    getCachedLinkData(pool, linkId)
+  ]);
+
+  // Build redirect URL from cached database data
+  if (linkData.status === 'fulfilled' && linkData.value && linkData.value.base_url) {
+    const link = linkData.value;
+    const url = new URL(link.base_url);
+    if (link.source_code) url.searchParams.set('utm_source', link.source_code);
+    if (link.medium_code) url.searchParams.set('utm_medium', link.medium_code);
+    if (link.campaign_code) url.searchParams.set('utm_campaign', link.campaign_code);
+    if (link.utm_name) url.searchParams.set('utm_name', link.utm_name);
+    return NextResponse.redirect(url.toString());
   }
 
   // Fallback: if url param existed, redirect there
