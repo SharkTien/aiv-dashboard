@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const visitorInfo = await extractVisitorInfo(req);
     
     // Check if this is a unique click for this visitor/link combination
-    const isUnique = await checkUniqueVisitor(pool, utm_link_id, click_type, visitorInfo.sessionId);
+    const isUnique = await checkUniqueVisitor(pool, utm_link_id, click_type, visitorInfo.session_id);
     
     // Insert click log
     await insertClickLog(pool, {
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   try {
     const pool = getDbPool();
     const visitorInfo = await extractVisitorInfo(req);
-    const isUnique = await checkUniqueVisitor(pool, parseInt(utm_link_id), click_type, visitorInfo.sessionId);
+    const isUnique = await checkUniqueVisitor(pool, parseInt(utm_link_id), click_type, visitorInfo.session_id);
     
     await insertClickLog(pool, {
       utm_link_id: parseInt(utm_link_id),
