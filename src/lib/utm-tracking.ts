@@ -108,15 +108,15 @@ export class UTMTracker {
         return;
       }
 
-      // Send tracking request
-      await this.sendTrackingRequest({
+      // Fire-and-forget tracking to avoid delaying navigation
+      this.sendTrackingRequest({
         utm_link_id: parseInt(utmLinkId),
         click_type: clickType,
         url: href,
         element_type: 'link',
         element_text: link.textContent?.trim() || '',
         element_position: this.getElementPosition(link)
-      });
+      }).catch(() => {});
 
     } catch (error) {
       console.error('Error tracking link click:', error);
@@ -175,18 +175,24 @@ export class UTMTracker {
   // Send tracking request
   private async sendTrackingRequest(data: any) {
     try {
+      // Prefer sendBeacon for non-blocking delivery
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+        const ok = navigator.sendBeacon(this.config.apiEndpoint!, blob);
+        if (ok) return { success: true, method: 'beacon' } as any;
+      }
+
+      // Fallback to fetch with keepalive to not block navigation
       const response = await fetch(this.config.apiEndpoint!, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
+        keepalive: true,
+        cache: 'no-store'
       });
-      
-      if (!response.ok) {
-        throw new Error(`Tracking request failed: ${response.status}`);
-      }
-      
+      if (!response.ok) throw new Error(`Tracking request failed: ${response.status}`);
       return await response.json();
     } catch (error) {
       // Use image pixel as fallback for tracking
