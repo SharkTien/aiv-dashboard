@@ -101,34 +101,30 @@ export async function GET(req: NextRequest) {
   const pool = getDbPool();
   const linkId = parseInt(utm_link_id);
 
-  // Run tracking and link data fetching in parallel for better performance
-  const [trackingResult, linkData] = await Promise.allSettled([
-    // Track the click
-    (async () => {
-      try {
-        const visitorInfo = await extractVisitorInfo(req);
-        const isUnique = await checkUniqueVisitor(pool, linkId, click_type, visitorInfo.session_id);
-        
-        await insertClickLog(pool, {
-          utm_link_id: linkId,
-          click_type,
-          ...visitorInfo,
-          is_unique: isUnique
-        });
-        await upsertDailyCounters(pool, linkId, isUnique);
-        await updateLinkCounters(pool, linkId, isUnique);
-      } catch (error) {
-        console.error('Error tracking click:', error);
-        // Don't fail the redirect if tracking fails
-      }
-    })(),
-    // Get link data from cache
-    getCachedLinkData(pool, linkId)
-  ]);
+  // Kick off tracking WITHOUT awaiting to minimize redirect latency
+  (async () => {
+    try {
+      const visitorInfo = await extractVisitorInfo(req);
+      const isUnique = await checkUniqueVisitor(pool, linkId, click_type, visitorInfo.session_id);
+      await insertClickLog(pool, {
+        utm_link_id: linkId,
+        click_type,
+        ...visitorInfo,
+        is_unique: isUnique
+      });
+      await upsertDailyCounters(pool, linkId, isUnique);
+      await updateLinkCounters(pool, linkId, isUnique);
+    } catch (error) {
+      console.error('Error tracking click:', error);
+    }
+  })();
+
+  // Fetch link data (cached) to build redirect URL
+  const linkData = await getCachedLinkData(pool, linkId);
 
   // Build redirect URL from cached database data
-  if (linkData.status === 'fulfilled' && linkData.value && linkData.value.base_url) {
-    const link = linkData.value;
+  if (linkData && linkData.base_url) {
+    const link = linkData;
     const url = new URL(link.base_url);
     if (link.source_code) url.searchParams.set('utm_source', link.source_code);
     if (link.medium_code) url.searchParams.set('utm_medium', link.medium_code);
