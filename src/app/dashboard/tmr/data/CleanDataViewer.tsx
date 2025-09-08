@@ -10,7 +10,8 @@ type Submission = {
   entityName: string | null;
   utmCampaign: string | null;
   utmCampaignName: string | null;
-  responses: { [key: string]: string };
+  // Prefer array format with value_label available
+  responses: { field_name: string; field_label: string; value: string; value_label?: string | null }[] | { [key: string]: string };
   timestamp: string;
   duplicated: boolean;
 };
@@ -98,25 +99,21 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
 
   function findFieldValue(sub: Submission, keys: string[]): string {
     const lower = keys.map(k => k.toLowerCase());
-    
-    // Handle both array and object response formats
+    // Prefer array format with value_label
     if (Array.isArray(sub.responses)) {
-      // Array format: [{ field_name: string, value: string }]
-      for (const response of sub.responses) {
-        if (response.field_name && lower.some(k => response.field_name.toLowerCase().includes(k))) {
-          return (response.value || "").trim();
+      for (const r of sub.responses) {
+        if (r.field_name && lower.some(k => r.field_name.toLowerCase().includes(k))) {
+          return ((r as any).value_label ?? r.value ?? '').toString().trim();
         }
       }
     } else if (sub.responses && typeof sub.responses === 'object') {
-      // Object format: { [field_name]: value }
       for (const [fieldName, value] of Object.entries(sub.responses)) {
         if (lower.some(k => fieldName.toLowerCase().includes(k))) {
-          return (value || "").trim();
+          return (value || '').toString().trim();
         }
       }
     }
-    
-    return "";
+    return '';
   }
 
   // Preview sidebar state
@@ -138,7 +135,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   async function loadCleanData() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/forms/${formId}/submissions?unlimited=true`);
+      const res = await fetch(`/api/forms/${formId}/submissions/clean?unlimited=true`);
       if (res.ok) {
         const data = await res.json();
         setSubmissions(Array.isArray(data.items) ? data.items : []);
@@ -264,13 +261,21 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       // Legacy search term filter (for backward compatibility)
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
+        let responsesText = '';
+        if (Array.isArray(submission.responses)) {
+          responsesText = submission.responses
+            .map((r: any) => (r.value_label ?? r.value ?? '').toString().toLowerCase())
+            .join(' ');
+        } else if (submission.responses && typeof submission.responses === 'object') {
+          responsesText = Object.values(submission.responses)
+            .map(v => (v ?? '').toString().toLowerCase())
+            .join(' ');
+        }
         const matchesSearch = (
           submission.formCode?.toLowerCase().includes(searchLower) ||
           submission.entityName?.toLowerCase().includes(searchLower) ||
           submission.utmCampaign?.toLowerCase().includes(searchLower) ||
-          Object.values(submission.responses).some(value => 
-            value?.toLowerCase().includes(searchLower)
-          )
+          responsesText.includes(searchLower)
         );
         if (!matchesSearch) return false;
       }
@@ -311,9 +316,17 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
         aVal = a.utmCampaign;
         bVal = b.utmCampaign;
       } else {
-        // Sort by form field response
-        aVal = a.responses[sortField];
-        bVal = b.responses[sortField];
+        // Sort by form field response (prefer value_label)
+        const mapA = Array.isArray(a.responses)
+          ? new Map((a.responses as any[]).map((r: any) => [r.field_name, r]))
+          : new Map(Object.entries(a.responses as any).map(([k, v]: any) => [k, { field_name: k, value: v, value_label: v }]));
+        const mapB = Array.isArray(b.responses)
+          ? new Map((b.responses as any[]).map((r: any) => [r.field_name, r]))
+          : new Map(Object.entries(b.responses as any).map(([k, v]: any) => [k, { field_name: k, value: v, value_label: v }]));
+        const ra: any = mapA.get(sortField);
+        const rb: any = mapB.get(sortField);
+        aVal = (ra?.value_label ?? ra?.value ?? '').toString();
+        bVal = (rb?.value_label ?? rb?.value ?? '').toString();
       }
       
       if (aVal === null || aVal === undefined) return 1;
@@ -449,7 +462,15 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
     const headers = ['Date', 'Entity', 'UTM Campaign', ...formFields.sort((a,b)=>a.sort_order-b.sort_order).map(f => f.field_label || f.field_name)];
     const csvRows: string[][] = filteredSubmissions.map(sub => {
       const base = [new Date(sub.timestamp).toLocaleString(), sub.entityName || '', sub.utmCampaignName || sub.utmCampaign || ''];
-      const rest = formFields.sort((a,b)=>a.sort_order-b.sort_order).map(f => String(sub.responses[f.field_name] ?? ''));
+      const map = Array.isArray(sub.responses)
+        ? new Map(sub.responses.map((r: any) => [r.field_name, r]))
+        : new Map(Object.entries(sub.responses as any).map(([k,v]: any) => [k, { field_name: k, value: v, value_label: v }]));
+      const rest = formFields
+        .sort((a,b)=>a.sort_order-b.sort_order)
+        .map(f => {
+          const r: any = map.get(f.field_name);
+          return (r?.value_label ?? r?.value ?? '').toString();
+        });
       return [...base, ...rest];
     });
     const csv = [headers.join(','), ...csvRows.map(row => row.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(','))].join('\n');
@@ -771,9 +792,9 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                       let raw = '';
                       if (Array.isArray(submission.responses)) {
                         const response = submission.responses.find((r: any) => r.field_name === field.field_name);
-                        raw = response ? String(response.value || '') : '';
+                        raw = response ? String((response as any).value_label ?? response.value ?? '') : '';
                       } else if (submission.responses && typeof submission.responses === 'object') {
-                        raw = String(submission.responses[field.field_name] || '');
+                        raw = String((submission.responses as any)[field.field_name] || '');
                       }
                       
                       const cellKey = `${submission.id}:${field.field_name}`;

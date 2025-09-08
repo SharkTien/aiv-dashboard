@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import SubmissionsViewer from "@/app/dashboard/forms/[id]/submissions/SubmissionsViewer";
 import CleanDataViewer from "./CleanDataViewer";
-import ManualAllocateViewer from "./ManualAllocateViewer";
+import ManualAllocateViewerWithRequests from "./ManualAllocateViewerWithRequests";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import Link from "next/link";
 
@@ -212,7 +212,7 @@ export default function Page() {
           ) : activeTab === 'clean' ? (
             <CleanDataViewer formId={selectedFormId} />
           ) : (
-            <ManualAllocateViewer formId={selectedFormId} />
+            <ManualAllocateViewerWithRequests formId={selectedFormId} />
           )
         ) : (
           <div className="text-sm text-gray-600 dark:text-gray-300">Select a form to view submissions.</div>

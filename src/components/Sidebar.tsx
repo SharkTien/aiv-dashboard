@@ -373,16 +373,9 @@ function NotificationNavItem({
     }
   };
 
-  const handleMouseEnter = () => {
-    if (!isCollapsed) {
-      setShowPreview(true);
-      loadRecentNotifications();
-    }
-  };
+  const handleMouseEnter = () => {};
 
-  const handleMouseLeave = () => {
-    setShowPreview(false);
-  };
+  const handleMouseLeave = () => {};
 
   // Handle click outside
   useEffect(() => {
@@ -415,8 +408,6 @@ function NotificationNavItem({
     <div className="relative" ref={previewRef}>
       <Link 
         href="/dashboard/notifications"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
         className={`rounded-lg w-full ${isCollapsed ? 'px-2 py-3 justify-center' : 'px-3 py-2'} hover:bg-black/5 dark:hover:bg-white/10 inline-flex items-center gap-2 text-gray-700 dark:text-gray-200 transition-colors relative ${
           isActive ? 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300' : ''
         }`}
@@ -435,70 +426,7 @@ function NotificationNavItem({
       </Link>
 
       {/* Notification Preview Popup */}
-      {showPreview && !isCollapsed && (
-        <div className="fixed bottom-4 right-4 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Recent Notifications</h3>
-            {unreadCount > 0 && (
-              <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-1 rounded-full">
-                {unreadCount} new
-              </span>
-            )}
-          </div>
-          
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {previewLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-sky-500 border-t-transparent"></div>
-              </div>
-            ) : recentNotifications.length === 0 ? (
-              <div className="text-center py-6 text-sm text-gray-500 dark:text-gray-400">
-                No notifications
-              </div>
-            ) : (
-              recentNotifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-2 rounded text-xs border cursor-pointer transition-colors ${
-                    notification.is_read
-                      ? 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600'
-                      : 'bg-sky-50 dark:bg-sky-900/20 border-sky-200 dark:border-sky-700'
-                  }`}
-                  onClick={() => !notification.is_read && markAsRead(notification.id)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1">
-                        <p className="font-medium text-gray-900 dark:text-white truncate text-xs">
-                          {notification.title}
-                        </p>
-                        {!notification.is_read && (
-                          <span className="inline-block w-1.5 h-1.5 bg-sky-500 rounded-full flex-shrink-0"></span>
-                        )}
-                      </div>
-                      <p className="text-gray-600 dark:text-gray-300 mt-0.5 text-xs line-clamp-2">
-                        {notification.message}
-                      </p>
-                      <p className="text-gray-500 dark:text-gray-400 mt-0.5 text-xs">
-                        {new Date(notification.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          
-          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
-            <Link 
-              href="/dashboard/notifications"
-              className="text-xs text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 transition-colors"
-            >
-              View all notifications →
-            </Link>
-          </div>
-        </div>
-      )}
+      {/* Notification preview disabled per request */}
     </div>
   );
 }

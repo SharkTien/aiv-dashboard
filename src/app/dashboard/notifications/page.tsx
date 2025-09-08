@@ -53,7 +53,7 @@ export default function NotificationsPage() {
 
   async function loadUser() {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await fetch('/api/auth/me', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
@@ -78,7 +78,7 @@ export default function NotificationsPage() {
 
   async function loadNotifications() {
     try {
-      const res = await fetch('/api/notifications?limit=50');
+      const res = await fetch('/api/notifications?limit=50', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.items || []);
@@ -90,7 +90,7 @@ export default function NotificationsPage() {
 
   async function loadAllocationRequests() {
     try {
-      const res = await fetch('/api/allocation-requests?limit=50');
+      const res = await fetch('/api/allocation-requests?limit=50', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setAllocationRequests(data.items || []);
@@ -103,7 +103,8 @@ export default function NotificationsPage() {
   async function markAsRead(notificationId: number) {
     try {
       await fetch(`/api/notifications/${notificationId}`, {
-        method: 'PUT'
+        method: 'PUT',
+        cache: 'no-store'
       });
       setNotifications(prev => 
         prev.map(n => n.id === notificationId ? { ...n, is_read: true, read_at: new Date().toISOString() } : n)
@@ -123,7 +124,8 @@ export default function NotificationsPage() {
       const res = await fetch(`/api/allocation-requests/${requestId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, admin_notes: adminNotes })
+        body: JSON.stringify({ action, admin_notes: adminNotes }),
+        cache: 'no-store'
       });
 
       if (res.ok) {
