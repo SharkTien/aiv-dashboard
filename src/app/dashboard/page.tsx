@@ -47,25 +47,17 @@ export default function DashboardHome() {
 
   // Determine user's program access based on role - same logic as Sidebar
   const getUserPrograms = () => {
-    if (!user) return []; // No user loaded yet
-    
+    if (!user) return [];
     const isAdmin = user?.role === "admin";
     if (isAdmin) return ["oGV", "TMR"]; // Admins see both
-    
-    // For lead and member roles, determine program based on entity or user data
-    const entityId = parseInt(user?.entity_id?.toString() || "0");
-    
-    // Check user.program if it exists
-    if (user?.program) {
-      return [user.program];
-    }
-    
-    // Fallback logic based on entity_id (same as Sidebar)
-    if (entityId % 2 === 0) {
-      return ["oGV"];
-    } else {
-      return ["TMR"];
-    }
+
+    // Prefer explicit program on user, normalized
+    const rawProgram = (user?.program ?? "").toString().trim().toUpperCase();
+    if (rawProgram.includes("TMR")) return ["TMR"];
+    if (rawProgram.includes("OGV")) return ["oGV"];
+
+    // If program is not specified, don't guess incorrectly
+    return [];
   };
 
   const userPrograms = getUserPrograms();

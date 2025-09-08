@@ -52,37 +52,14 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
   // Determine user's program access based on role
   const getUserPrograms = () => {
     if (isAdmin) return ["oGV", "TMR"]; // Admins see both
-    
-    // For lead and member roles, determine program based on entity or user data
-    // You can implement specific logic here based on your requirements
-    
-    // Option 1: Use entity_id patterns (if certain entity IDs belong to oGV/TMR)
-    // Option 2: Use user.program field if available
-    // Option 3: Use entity names or other identifiers
-    
-    // TEMPORARY DEMO LOGIC - Replace with your actual business logic:
-    // - Even entity_ids (2, 4, 6, etc.) = oGV users
-    // - Odd entity_ids (1, 3, 5, etc.) = TMR users
-    // 
-    // RECOMMENDED APPROACHES:
-    // 1. Add a 'program' field to user table in database
-    // 2. Create entity-program mapping table
-    // 3. Use entity naming conventions (e.g., entities with "OGV" or "TMR" in name)
-    // 4. Use separate user role types like "ogv_lead", "tmr_member", etc.
-    
-    const entityId = parseInt(user?.entity_id?.toString() || "0");
-    
-    // You can also check user.program if it exists
-    if (user?.program) {
-      return [user.program];
-    }
-    
-    // Fallback logic based on entity_id (replace with your actual logic)
-    if (entityId % 2 === 0) {
-      return ["oGV"];
-    } else {
-      return ["TMR"];
-    }
+
+    // Prefer explicit program on user, normalized
+    const rawProgram = (user?.program ?? "").toString().trim().toUpperCase();
+    if (rawProgram.includes("TMR")) return ["TMR"];
+    if (rawProgram.includes("OGV")) return ["oGV"];
+
+    // If program is not specified, don't guess incorrectly
+    return [];
   };
 
   const userPrograms = getUserPrograms();
