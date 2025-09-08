@@ -61,9 +61,16 @@ interface UTMInsights {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658'];
 
+type HeatmapResponse = {
+  dates: string[];
+  byMedium: Array<{ medium_name: string; medium_code: string; totals: number; byDate: Record<string, number> }>;
+  bySource: Array<{ source_name: string; source_code: string; totals: number; byDate: Record<string, number> }>;
+  timeOfDay?: { hours: number[]; rows: Array<{ hour: number; totals: number; byDate: Record<string, number> }> };
+};
+
 export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsProps) {
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<{ links: UTMLink[]; insights: UTMInsights } | null>(null);
+  const [data, setData] = useState<{ links: UTMLink[]; insights: UTMInsights; heatmaps?: HeatmapResponse; emtTopLinks?: Array<{ id: number; utm_name: string; entity_name: string; campaign_name: string; source_name: string; medium_name: string; clicks: number }> } | null>(null);
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() - 30);
@@ -171,6 +178,8 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
   }
 
   const { links, insights } = data;
+  const heatmaps: HeatmapResponse | undefined = (data as any).heatmaps;
+  const emtTopLinks = (data as any).emtTopLinks as Array<any> | undefined;
 
   // Prepare chart data (union of all dates across links)
   let dailyClicksData: Array<{ date: string; clicks: number }> = [];
@@ -290,6 +299,37 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         </ResponsiveContainer>
       </div>
 
+      {/* Daily Click Heatmaps by Medium and Source */}
+      {heatmaps && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {/* Medium Heatmap */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 overflow-x-auto">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Daily Clicks by Medium</h3>
+            <HeatmapTable
+              rows={heatmaps.byMedium.map(r => ({ label: r.medium_name || r.medium_code, code: r.medium_code, totals: r.totals, byDate: r.byDate }))}
+              dates={heatmaps.dates}
+            />
+          </div>
+
+          {/* Source Heatmap */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 overflow-x-auto">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Daily Clicks by Source</h3>
+            <HeatmapTable
+              rows={heatmaps.bySource.map(r => ({ label: r.source_name || r.source_code, code: r.source_code, totals: r.totals, byDate: r.byDate }))}
+              dates={heatmaps.dates}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Time-of-Day Heatmap */}
+      {heatmaps?.timeOfDay && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 overflow-x-auto">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Clicks by Hour of Day</h3>
+          <TimeOfDayHeatmap rows={heatmaps.timeOfDay.rows} dates={heatmaps.dates} />
+        </div>
+      )}
+
       {/* Performance Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Medium Performance */}
@@ -356,6 +396,39 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
               </div>
             ))}
           </div>
+        </div>
+
+        {/* EMT National Top 5 (visible to all) */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 lg:col-span-3">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Top 5 EMT National UTM Links</h3>
+          {emtTopLinks && emtTopLinks.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th className="px-4 py-3 text-left">UTM Name</th>
+                    <th className="px-4 py-3 text-left">Campaign</th>
+                    <th className="px-4 py-3 text-left">Source</th>
+                    <th className="px-4 py-3 text-left">Medium</th>
+                    <th className="px-4 py-3 text-right">Clicks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {emtTopLinks.map((row) => (
+                    <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{row.utm_name || 'Unnamed'}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{row.campaign_name}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{row.source_name}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{row.medium_name}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900 dark:text-white">{row.clicks}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No national EMT data in selected period.</p>
+          )}
         </div>
       </div>
 
@@ -519,4 +592,109 @@ function getTrendColor(trend: string): string {
     default:
       return 'text-gray-600 dark:text-gray-400';
   }
+}
+
+// Generic heatmap table used for Medium/Source daily click matrices
+function HeatmapTable({
+  rows,
+  dates
+}: {
+  rows: Array<{ label: string; code: string; totals: number; byDate: Record<string, number> }>;
+  dates: string[];
+}) {
+  // Determine global max for color scaling
+  const maxVal = Math.max(
+    1,
+    ...rows.flatMap(r => dates.map(d => r.byDate[d] || 0))
+  );
+
+  const bgFor = (value: number) => {
+    const ratio = Math.min(1, value / maxVal);
+    const alpha = ratio === 0 ? 0 : 0.15 + 0.75 * ratio; // keep low values visible
+    return { backgroundColor: `rgba(16, 185, 129, ${alpha.toFixed(3)})` }; // emerald-500-ish
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs md:text-sm border-collapse">
+        <thead>
+          <tr>
+            <th className="sticky left-0 z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 text-left font-semibold">{`TYPE`}</th>
+            {dates.map(d => (
+              <th key={d} className="px-2 py-2 text-center text-gray-700 dark:text-gray-200 whitespace-nowrap">
+                {new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </th>
+            ))}
+            <th className="px-3 py-2 text-center font-semibold">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.code} className="border-t border-gray-200 dark:border-gray-700">
+              <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 py-2 font-medium">{r.label}</td>
+              {dates.map(date => {
+                const v = r.byDate[date] || 0;
+                return (
+                  <td key={`${r.code}-${date}`} className="text-center px-2 py-1" style={bgFor(v)}>
+                    {v}
+                  </td>
+                );
+              })}
+              <td className="px-3 py-2 text-center font-semibold">{r.totals}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TimeOfDayHeatmap({
+  rows,
+  dates
+}: {
+  rows: Array<{ hour: number; totals: number; byDate: Record<string, number> }>;
+  dates: string[];
+}) {
+  const maxVal = Math.max(1, ...rows.flatMap(r => dates.map(d => r.byDate[d] || 0)));
+  const bgFor = (v: number) => {
+    const ratio = Math.min(1, v / maxVal);
+    const alpha = ratio === 0 ? 0 : 0.12 + 0.78 * ratio;
+    return { backgroundColor: `rgba(59, 130, 246, ${alpha.toFixed(3)})` }; // blue scale
+  };
+  const fmtHour = (h: number) => `${h.toString().padStart(2, '0')}:00`;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs md:text-sm border-collapse">
+        <thead>
+          <tr>
+            <th className="sticky left-0 z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 text-left font-semibold">HOUR</th>
+            {dates.map(d => (
+              <th key={d} className="px-2 py-2 text-center text-gray-700 dark:text-gray-200 whitespace-nowrap">
+                {new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </th>
+            ))}
+            <th className="px-3 py-2 text-center font-semibold">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.hour} className="border-t border-gray-200 dark:border-gray-700">
+              <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 py-2 font-medium">{fmtHour(r.hour)}</td>
+              {dates.map(date => {
+                const v = r.byDate[date] || 0;
+                return (
+                  <td key={`${r.hour}-${date}`} className="text-center px-2 py-1" style={bgFor(v)}>
+                    {v}
+                  </td>
+                );
+              })}
+              <td className="px-3 py-2 text-center font-semibold">{r.totals}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }

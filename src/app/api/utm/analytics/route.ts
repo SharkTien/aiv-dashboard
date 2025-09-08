@@ -164,6 +164,183 @@ export async function GET(req: NextRequest) {
 
     // Aggregate data for insights
     const insights = generateUTMInsights(analyticsData);
+
+    // Always compute Top 5 national EMT links (visible to all users)
+    let emtTopLinks: any[] = [];
+    try {
+      const [emtRows] = await pool.query(
+        `SELECT 
+           ul.id,
+           ul.utm_name,
+           e.name       AS entity_name,
+           uc.name      AS campaign_name,
+           us.name      AS source_name,
+           um.name      AS medium_name,
+           COUNT(*)     AS clicks
+         FROM click_logs cl
+         JOIN utm_links ul     ON cl.utm_link_id = ul.id
+         JOIN entity e         ON ul.entity_id   = e.entity_id
+         JOIN utm_campaigns uc ON ul.campaign_id = uc.id
+         JOIN utm_sources  us  ON ul.source_id   = us.id
+         JOIN utm_mediums  um  ON ul.medium_id   = um.id
+         WHERE DATE(cl.clicked_at) >= ?
+           AND DATE(cl.clicked_at) <= ?
+           AND (e.name LIKE 'EMT%' OR e.name LIKE '%National%')
+         GROUP BY ul.id
+         ORDER BY clicks DESC
+         LIMIT 5`,
+        [startDate, endDate]
+      );
+      emtTopLinks = Array.isArray(emtRows) ? emtRows : [];
+    } catch {}
+
+    // Build daily aggregations for heatmaps by medium and by source
+    // Build date axis using local YYYY-MM-DD to avoid timezone drift
+    const allDatesSet = new Set<string>();
+    const toLocalYMD = (dt: Date) => {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+    {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      for (
+        let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        d <= end;
+        d.setDate(d.getDate() + 1)
+      ) {
+        allDatesSet.add(toLocalYMD(d));
+      }
+    }
+    const coerceToYMD = (value: any): string => {
+      if (value instanceof Date) return toLocalYMD(value);
+      if (typeof value === 'number') return toLocalYMD(new Date(value));
+      if (typeof value === 'string') {
+        // Accept ISO or 'YYYY-MM-DD ...'
+        if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) return toLocalYMD(parsed);
+        return value;
+      }
+      try {
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) return toLocalYMD(parsed);
+      } catch {}
+      return String(value ?? '');
+    };
+    const ensureDate = (date: any) => {
+      const ymd = coerceToYMD(date);
+      if (ymd && !allDatesSet.has(ymd)) allDatesSet.add(ymd);
+    };
+    const allDates: string[] = Array.from(allDatesSet).sort((a, b) => String(a).localeCompare(String(b)));
+
+    const dailyByMediumMap = new Map<string, { medium_name: string; medium_code: string; totals: number; byDate: Record<string, number> }>();
+    const dailyBySourceMap = new Map<string, { source_name: string; source_code: string; totals: number; byDate: Record<string, number> }>();
+
+    analyticsData.forEach((link: any) => {
+      const mKey = link.medium_code || link.medium_name || 'unknown';
+      const sKey = link.source_code || link.source_name || 'unknown';
+
+      if (!dailyByMediumMap.has(mKey)) {
+        const base: Record<string, number> = Object.fromEntries(Array.from(allDatesSet).map(d => [d, 0]));
+        dailyByMediumMap.set(mKey, {
+          medium_name: link.medium_name || mKey,
+          medium_code: link.medium_code || mKey,
+          totals: 0,
+          byDate: base
+        });
+      }
+      if (!dailyBySourceMap.has(sKey)) {
+        const base: Record<string, number> = Object.fromEntries(Array.from(allDatesSet).map(d => [d, 0]));
+        dailyBySourceMap.set(sKey, {
+          source_name: link.source_name || sKey,
+          source_code: link.source_code || sKey,
+          totals: 0,
+          byDate: base
+        });
+      }
+
+      const mediumRow = dailyByMediumMap.get(mKey)!;
+      const sourceRow = dailyBySourceMap.get(sKey)!;
+
+      (link.clicksByDate || []).forEach((it: any) => {
+        const date = coerceToYMD(it.date);
+        const val = Number(it.clicks || 0);
+        if (date) {
+          // Ensure date exists in axis/maps
+          ensureDate(date);
+          if (mediumRow.byDate[date] === undefined) mediumRow.byDate[date] = 0;
+          if (sourceRow.byDate[date] === undefined) sourceRow.byDate[date] = 0;
+          mediumRow.byDate[date] += val;
+          sourceRow.byDate[date] += val;
+        }
+        mediumRow.totals += val;
+        sourceRow.totals += val;
+      });
+    });
+
+    // Finalize ordered dates
+    const orderedDates: string[] = Array.from(allDatesSet).sort((a, b) => String(a).localeCompare(String(b)));
+    // Normalize rows to include any dynamically added dates
+    const normalizeRowDates = (row: { byDate: Record<string, number> }) => {
+      orderedDates.forEach(d => {
+        if (row.byDate[d] === undefined) row.byDate[d] = 0;
+      });
+    };
+    dailyByMediumMap.forEach(r => normalizeRowDates(r));
+    dailyBySourceMap.forEach(r => normalizeRowDates(r));
+
+    const dailyByMedium = Array.from(dailyByMediumMap.values()).sort((a, b) => b.totals - a.totals);
+    const dailyBySource = Array.from(dailyBySourceMap.values()).sort((a, b) => b.totals - a.totals);
+
+    // Build time-of-day heatmap (hours x dates) aggregated across all selected links
+    const linkIdsForQuery = linksArray.map((l: any) => l.id).filter((id: any) => typeof id === 'number');
+    let timeRows: { hour: number; totals: number; byDate: Record<string, number> }[] = [];
+    if (linkIdsForQuery.length > 0) {
+      const placeholders = linkIdsForQuery.map(() => '?').join(',');
+      const [timeData] = await pool.query(
+        `SELECT DATE(clicked_at) as date, HOUR(clicked_at) as hour, COUNT(*) as clicks
+         FROM click_logs
+         WHERE utm_link_id IN (${placeholders})
+           AND DATE(clicked_at) >= ?
+           AND DATE(clicked_at) <= ?
+         GROUP BY DATE(clicked_at), HOUR(clicked_at)
+         ORDER BY date ASC, hour ASC`,
+        [...linkIdsForQuery, startDate, endDate]
+      );
+
+      // Initialize rows for 24 hours
+      const baseDates: Record<string, number> = Object.fromEntries(orderedDates.map(d => [d, 0]));
+      const hourMap = new Map<number, { hour: number; totals: number; byDate: Record<string, number> }>();
+      for (let h = 0; h < 24; h++) {
+        hourMap.set(h, { hour: h, totals: 0, byDate: { ...baseDates } });
+      }
+
+      const arrayData = Array.isArray(timeData) ? timeData : [];
+      arrayData.forEach((row: any) => {
+        const hr = Number(row.hour);
+        const date = coerceToYMD(row.date as any);
+        const clicks = Number(row.clicks || 0);
+        // Ensure date is part of axis
+        ensureDate(date);
+        const rowRef = hourMap.get(hr);
+        if (rowRef) {
+          if (rowRef.byDate[date] === undefined) rowRef.byDate[date] = 0;
+          rowRef.byDate[date] += clicks;
+          rowRef.totals += clicks;
+        }
+      });
+
+      timeRows = Array.from(hourMap.values()).sort((a, b) => a.hour - b.hour);
+    } else {
+      // No links: return empty rows
+      const baseDates: Record<string, number> = Object.fromEntries(orderedDates.map(d => [d, 0]));
+      for (let h = 0; h < 24; h++) {
+        timeRows.push({ hour: h, totals: 0, byDate: { ...baseDates } });
+      }
+    }
     
     // (debug logs removed)
 
@@ -172,7 +349,17 @@ export async function GET(req: NextRequest) {
       data: {
         links: analyticsData,
         insights,
-        period: { startDate, endDate }
+        period: { startDate, endDate },
+        heatmaps: {
+          dates: orderedDates,
+          byMedium: dailyByMedium,
+          bySource: dailyBySource,
+          timeOfDay: {
+            hours: Array.from({ length: 24 }, (_, i) => i),
+            rows: timeRows
+          }
+        },
+        emtTopLinks
       }
     });
 
