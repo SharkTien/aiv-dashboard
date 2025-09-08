@@ -6,6 +6,7 @@ export type SessionUser = {
   role: "admin" | "lead" | "member";
   name: string;
   entity_id: number | string;
+  program?: "oGV" | "TMR" | "both"; // Add program field for filtering
 };
 
 export async function getCurrentUser(): Promise<SessionUser | null> {

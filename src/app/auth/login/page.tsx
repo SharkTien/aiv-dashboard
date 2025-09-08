@@ -89,7 +89,7 @@ export default function LoginPage() {
             </div>
             <h2 className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">Welcome back</h2>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-              Sign in with your AIESEC account
+              Sign in with your Tracking System account - Provided by EMT
             </p>
             <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
               <div className="grid gap-2">  
@@ -152,7 +152,7 @@ export default function LoginPage() {
             </form>
           </div>
           <p className="mt-6 text-center text-xs text-gray-500 dark:text-gray-400">
-            © {new Date().getFullYear()} AIESEC. All rights reserved.
+            © {new Date().getFullYear()} AIESEC. All rights reserved. Product by H.V.Tien.
           </p>
         </div>
       </div>

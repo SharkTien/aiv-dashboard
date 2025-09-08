@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import UTMAnalytics from "@/components/UTMAnalytics";
 
 interface Form {
   id: number;
@@ -215,6 +216,13 @@ export default function AnalyticsPage() {
             ))}
           </select>
         </div>
+      </div>
+
+      {/* UTM Clicks Analytics (Short.io) */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">UTM Clicks</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Click tracking and UTM effectiveness (Short.io).</p>
+        <UTMAnalytics formType="TMR" selectedFormId={selectedForm} />
       </div>
 
       {loading && (

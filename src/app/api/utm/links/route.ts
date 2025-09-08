@@ -15,6 +15,19 @@ export async function GET(req: NextRequest) {
   const pool = getDbPool();
   
   try {
+    // First, let's check total UTM links in database (raw count)
+    const [totalUtmLinks] = await pool.query('SELECT COUNT(*) as total FROM utm_links');
+    
+    // Check how many have valid JOINs
+    const [validJoins] = await pool.query(`
+      SELECT COUNT(*) as total FROM utm_links ul
+      JOIN entity e ON ul.entity_id = e.entity_id
+      JOIN utm_campaigns uc ON ul.campaign_id = uc.id
+      JOIN forms f ON uc.form_id = f.id
+      JOIN utm_sources us ON ul.source_id = us.id
+      JOIN utm_mediums um ON ul.medium_id = um.id
+    `);
+    
     let query = `
       SELECT 
         ul.id,
@@ -23,7 +36,10 @@ export async function GET(req: NextRequest) {
         ul.source_id,
         ul.medium_id,
         ul.utm_name,
+        ul.base_url,
         ul.shortened_url,
+        ul.tracking_link,
+        ul.tracking_short_url,
         ul.created_at,
         e.name as entity_name,
         uc.code as campaign_code,
@@ -62,8 +78,10 @@ export async function GET(req: NextRequest) {
     query += " ORDER BY ul.created_at DESC LIMIT ? OFFSET ?";
     params.push(limit, offset);
 
+    
     const [rows] = await pool.query(query, params);
     const links = Array.isArray(rows) ? rows : [];
+    
 
     // Get base URLs from config and add to each link
     const [baseUrlRows] = await pool.query(
@@ -77,8 +95,14 @@ export async function GET(req: NextRequest) {
       TMR: "https://www.aiesec.vn/join-aiesec-fall-2025"
     };
     
-    // Add base_url to each link based on form_type
+    // Use base_url from utm_links if available, otherwise fall back to config
     const linksWithBaseUrl = links.map((link: any) => {
+      // If link already has base_url saved, use that (snapshot)
+      if (link.base_url) {
+        return link;
+      }
+      
+      // Otherwise fall back to current config (for legacy links)
       const hubType = link.form_type === 'TMR' ? 'TMR' : 'oGV';
       const configUrl = baseUrls.find((url: any) => url.hub_type === hubType)?.base_url;
       return {
@@ -108,8 +132,10 @@ export async function GET(req: NextRequest) {
       countQuery += " WHERE " + countWhere.join(" AND ");
     }
 
+    
     const [countRows] = await pool.query(countQuery, countParams);
     const total = Array.isArray(countRows) && countRows.length > 0 ? (countRows[0] as any).total : 0;
+    
     
     const totalPages = Math.ceil(total / limit);
     
@@ -162,15 +188,74 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Insert UTM link (without base_url - will be determined from config when needed)
+    // Get base_url from utm_base_urls based on campaign type first
+    const [campaignRows] = await pool.query(`
+      SELECT f.type 
+      FROM utm_campaigns uc 
+      JOIN forms f ON uc.form_id = f.id 
+      WHERE uc.id = ?
+    `, [campaign_id]);
+    
+    const campaignData = Array.isArray(campaignRows) && campaignRows.length > 0 ? campaignRows[0] as any : null;
+    const hubType = campaignData?.type === 'TMR' ? 'TMR' : 'oGV';
+    
+    // Get current base_url from config
+    const [baseUrlRows] = await pool.query(
+      "SELECT base_url FROM utm_base_urls WHERE hub_type = ?",
+      [hubType]
+    );
+    
+    const defaultUrls = {
+      oGV: "https://www.aiesec.vn/globalvolunteer/home",
+      TMR: "https://www.aiesec.vn/join-aiesec-fall-2025"
+    };
+    
+    const configUrl = Array.isArray(baseUrlRows) && baseUrlRows.length > 0 ? (baseUrlRows[0] as any).base_url : null;
+    const snapshotBaseUrl = configUrl || defaultUrls[hubType as keyof typeof defaultUrls];
+    
+    
+    // Insert UTM link WITH base_url snapshot
     const [result] = await pool.query(
-      "INSERT INTO utm_links (entity_id, campaign_id, source_id, medium_id, utm_name) VALUES (?, ?, ?, ?, ?)",
-      [entity_id, campaign_id, source_id, medium_id, utm_name || null]
+      "INSERT INTO utm_links (entity_id, campaign_id, source_id, medium_id, utm_name, base_url) VALUES (?, ?, ?, ?, ?, ?)",
+      [entity_id, campaign_id, source_id, medium_id, utm_name || null, snapshotBaseUrl]
     );
     
     const linkId = (result as any).insertId;
     
-    // Get the created link with all details
+    // Generate tracking link
+    const trackingLink = generateTrackingLink(linkId, snapshotBaseUrl);
+    
+    // Update UTM link with tracking_link
+    await pool.query(
+      "UPDATE utm_links SET tracking_link = ? WHERE id = ?",
+      [trackingLink, linkId]
+    );
+    
+    // Auto-shorten the tracking link
+    try {
+      const baseUrl = process.env.BACKEND_HOST || process.env.NEXT_PUBLIC_APP_URL || 'https://aiv-dashboard-ten.vercel.app';
+      const shortResponse = await fetch(`${baseUrl}/api/url-shortener`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          url: trackingLink,
+          alias: `utm-${linkId}`
+        })
+      });
+      
+      if (shortResponse.ok) {
+        const shortData = await shortResponse.json();
+        await pool.query(
+          "UPDATE utm_links SET tracking_short_url = ? WHERE id = ?",
+          [shortData.shortenedUrl, linkId]
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to auto-shorten tracking link:', error);
+      // Continue without shortened URL
+    }
+    
+    // Get the created link with all details including base_url
     const [linkRows] = await pool.query(`
       SELECT 
         ul.id,
@@ -179,7 +264,10 @@ export async function POST(req: NextRequest) {
         ul.source_id,
         ul.medium_id,
         ul.utm_name,
+        ul.base_url,
         ul.shortened_url,
+        ul.tracking_link,
+        ul.tracking_short_url,
         ul.created_at,
         e.name as entity_name,
         uc.code as campaign_code,
@@ -187,16 +275,25 @@ export async function POST(req: NextRequest) {
         us.code as source_code,
         us.name as source_name,
         um.code as medium_code,
-        um.name as medium_name
+        um.name as medium_name,
+        f.type as form_type
       FROM utm_links ul
       JOIN entity e ON ul.entity_id = e.entity_id
       JOIN utm_campaigns uc ON ul.campaign_id = uc.id
+      JOIN forms f ON uc.form_id = f.id
       JOIN utm_sources us ON ul.source_id = us.id
       JOIN utm_mediums um ON ul.medium_id = um.id
       WHERE ul.id = ?
     `, [linkId]);
     
-    const createdLink = Array.isArray(linkRows) && linkRows.length > 0 ? linkRows[0] : null;
+    const createdLinkRaw = Array.isArray(linkRows) && linkRows.length > 0 ? linkRows[0] : null;
+    
+    if (!createdLinkRaw) {
+      return NextResponse.json({ error: "Failed to retrieve created link" }, { status: 500 });
+    }
+
+    // Link already has base_url from the snapshot we saved
+    const createdLink = createdLinkRaw;
     
     return NextResponse.json({ 
       success: true, 
@@ -237,4 +334,11 @@ export async function DELETE(req: NextRequest) {
     console.error("Error deleting UTM link:", error);
     return NextResponse.json({ error: "Failed to delete UTM link" }, { status: 500 });
   }
+}
+
+// Helper function to generate tracking link
+function generateTrackingLink(utmLinkId: number, originalUrl: string): string {
+  const baseUrl = process.env.BACKEND_HOST || process.env.NEXT_PUBLIC_APP_URL || 'https://aiv-dashboard-ten.vercel.app';
+  const trackingUrl = `${baseUrl}/api/utm/track?id=${utmLinkId}&url=${encodeURIComponent(originalUrl)}`;
+  return trackingUrl;
 }

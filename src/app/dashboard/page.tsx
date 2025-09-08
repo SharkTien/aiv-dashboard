@@ -42,18 +42,54 @@ export default function DashboardHome() {
   });
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+
+  // Determine user's program access based on role - same logic as Sidebar
+  const getUserPrograms = () => {
+    if (!user) return []; // No user loaded yet
+    
+    const isAdmin = user?.role === "admin";
+    if (isAdmin) return ["oGV", "TMR"]; // Admins see both
+    
+    // For lead and member roles, determine program based on entity or user data
+    const entityId = parseInt(user?.entity_id?.toString() || "0");
+    
+    // Check user.program if it exists
+    if (user?.program) {
+      return [user.program];
+    }
+    
+    // Fallback logic based on entity_id (same as Sidebar)
+    if (entityId % 2 === 0) {
+      return ["oGV"];
+    } else {
+      return ["TMR"];
+    }
+  };
+
+  const userPrograms = getUserPrograms();
+  const canSeeOGV = userPrograms.includes("oGV");
+  const canSeeTMR = userPrograms.includes("TMR");
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
     loadUser();
     loadStats();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      loadNotifications();
+    }
+  }, [user]);
+
   const loadUser = async () => {
     try {
       const response = await fetch('/api/auth/me');
       const result = await response.json();
-      if (result.success) {
-        setUser(result.data);
+      if (result.user) {
+        setUser(result.user);
       }
     } catch (error) {
       console.error('Error loading user:', error);
@@ -75,6 +111,22 @@ export default function DashboardHome() {
     }
   };
 
+  const loadNotifications = async () => {
+    try {
+      setNotificationsLoading(true);
+      const response = await fetch('/api/notifications?limit=5');
+      const result = await response.json();
+      
+      if (result.success) {
+        setNotifications(result.items || []);
+      }
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
   return (
     <div className="relative min-h-screen">
       {/* Loading-like intro layer */}
@@ -90,40 +142,99 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <FormTypeCard 
-            title="oGV Forms" 
-            totalForms={loading ? "..." : stats.ogv.totalForms.toLocaleString()}
-            totalSubmissions={loading ? "..." : stats.ogv.totalSubmissions.toLocaleString()}
-            highestPhase={stats.ogv.highestPhase}
-            logo="/gv.png"
-            href="/dashboard/ogv-hub"
-          />
-          <FormTypeCard 
-            title="TMR Forms" 
-            totalForms={loading ? "..." : stats.tmr.totalForms.toLocaleString()}
-            totalSubmissions={loading ? "..." : stats.tmr.totalSubmissions.toLocaleString()}
-            highestPhase={stats.tmr.highestPhase}
-            logo="/tmr.webp"
-            href="/dashboard/tmr-hub"
-          />
+        {/* Stats Cards with Notifications - Role-based filtering */}
+        <div className="mt-8 mb-8">
+          {/* Case 1: Both oGV and TMR visible - 3 column layout */}
+          {canSeeOGV && canSeeTMR && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <FormTypeCard 
+                title="oGV Forms" 
+                totalForms={loading ? "..." : stats.ogv.totalForms.toLocaleString()}
+                totalSubmissions={loading ? "..." : stats.ogv.totalSubmissions.toLocaleString()}
+                highestPhase={stats.ogv.highestPhase}
+                logo="/gv.png"
+                href="/dashboard/ogv-hub"
+              />
+              <FormTypeCard 
+                title="TMR Forms" 
+                totalForms={loading ? "..." : stats.tmr.totalForms.toLocaleString()}
+                totalSubmissions={loading ? "..." : stats.tmr.totalSubmissions.toLocaleString()}
+                highestPhase={stats.tmr.highestPhase}
+                logo="/tmr.webp"
+                href="/dashboard/tmr-hub"
+              />
+              <NotificationsCard 
+                notifications={notifications} 
+                loading={notificationsLoading}
+              />
+            </div>
+          )}
+          
+          {/* Case 2: Only oGV visible - 2 column layout */}
+          {canSeeOGV && !canSeeTMR && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <FormTypeCard 
+                title="oGV Forms" 
+                totalForms={loading ? "..." : stats.ogv.totalForms.toLocaleString()}
+                totalSubmissions={loading ? "..." : stats.ogv.totalSubmissions.toLocaleString()}
+                highestPhase={stats.ogv.highestPhase}
+                logo="/gv.png"
+                href="/dashboard/ogv-hub"
+              />
+              <NotificationsCard 
+                notifications={notifications} 
+                loading={notificationsLoading}
+              />
+            </div>
+          )}
+          
+          {/* Case 3: Only TMR visible - 2 column layout */}
+          {!canSeeOGV && canSeeTMR && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <FormTypeCard 
+                title="TMR Forms" 
+                totalForms={loading ? "..." : stats.tmr.totalForms.toLocaleString()}
+                totalSubmissions={loading ? "..." : stats.tmr.totalSubmissions.toLocaleString()}
+                highestPhase={stats.tmr.highestPhase}
+                logo="/tmr.webp"
+                href="/dashboard/tmr-hub"
+              />
+              <NotificationsCard 
+                notifications={notifications} 
+                loading={notificationsLoading}
+              />
+            </div>
+          )}
+          
+          {/* Case 4: No forms visible (edge case) - Just notifications */}
+          {!canSeeOGV && !canSeeTMR && (
+            <div className="grid grid-cols-1 gap-6">
+              <NotificationsCard 
+                notifications={notifications} 
+                loading={notificationsLoading}
+              />
+            </div>
+          )}
         </div>
 
 
 
-        {/* Quick Actions */}
+        {/* Quick Actions - Role-based filtering */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          <Card 
-            title="oGV Hub Dashboard" 
-            subtitle="Modern dashboard for global volunteer management" 
-            href="/dashboard/ogv-hub"
-            featured={true}
-          />
-          <Card title="TMR Hub Dashboard" subtitle="Manage TMR programs and data" href="/dashboard/tmr-hub" />
+          {canSeeOGV && (
+            <Card 
+              title="oGV Hub Dashboard" 
+              subtitle="Modern dashboard for global volunteer management" 
+              href="/dashboard/ogv-hub"
+              featured={true}
+            />
+          )}
+          {canSeeTMR && (
+            <Card title="TMR Hub Dashboard" subtitle="Manage TMR programs and data" href="/dashboard/tmr-hub" />
+          )}
           
           {/* Admin-only cards */}
-          {user?.role === 'admin' && (
+          {isAdmin && (
             <>
               <Card title="Forms Manager" subtitle="Create and manage forms" href="/dashboard/forms" />
               <Card title="Users" subtitle="Manage users and permissions" href="/dashboard/users" />
@@ -164,6 +275,75 @@ function Card({ title, subtitle, href, featured }: { title: string; subtitle: st
   }
 
   return cardContent;
+}
+
+function NotificationsCard({ notifications, loading }: { notifications: any[]; loading: boolean }) {
+  const cardContent = (
+    <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur rounded-2xl p-6 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white/80 dark:hover:bg-gray-800/80 transition-all duration-300 h-full">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-sky-100 dark:bg-sky-900/30 rounded-lg flex items-center justify-center">
+            <svg className="w-4 h-4 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Notifications</h3>
+        </div>
+      </div>
+      
+      <div className="space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-6 w-6 border-2 border-sky-500 border-t-transparent"></div>
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-gray-500 dark:text-gray-400">No notifications</p>
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {notifications.map((notification, index) => (
+              <div key={notification.id} className="p-3 rounded-lg bg-gray-50/50 dark:bg-gray-700/50 border border-gray-200/50 dark:border-gray-600/50">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {notification.title}
+                      </p>
+                      {!notification.is_read && (
+                        <span className="inline-block w-2 h-2 bg-sky-500 rounded-full flex-shrink-0"></span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 line-clamp-2">
+                      {notification.message}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {new Date(notification.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      
+      <div className="mt-4 pt-4 border-t border-gray-200/50 dark:border-gray-600/50">
+        <div className="text-center">
+          <span className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 transition-colors">
+            View All Notifications →
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <Link href="/dashboard/notifications" className="block hover:scale-105 transition-transform duration-300">
+      {cardContent}
+    </Link>
+  );
 }
 
 function FormTypeCard({ 

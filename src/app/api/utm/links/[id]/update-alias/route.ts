@@ -102,7 +102,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           const shortIoId = (linkRows[0] as any).short_io_id;
           
           if (shortIoId) {
-            console.log(`Deleting old Short.io link with ID: ${shortIoId}`);
             
             // Delete the old link using short_io_id
             const deleteResponse = await fetch(`https://api.short.io/links/${shortIoId}`, {
@@ -113,7 +112,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             });
             
             if (deleteResponse.ok) {
-              console.log(`Successfully deleted old Short.io link: ${shortIoId}`);
             } else {
               const errorData = await deleteResponse.json();
               console.warn(`Failed to delete old Short.io link ${shortIoId}:`, errorData);

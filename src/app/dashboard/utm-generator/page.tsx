@@ -41,8 +41,10 @@ type UTMLink = {
   source_id: number;
   medium_id: number;
   utm_name: string | null;
-  base_url?: string; // Optional - will be added from config when needed
+  base_url?: string; // Dynamically added from config during response
   shortened_url: string | null;
+  tracking_link: string | null;
+  tracking_short_url: string | null;
   created_at: string;
   entity_name: string;
   campaign_code: string;
@@ -51,6 +53,7 @@ type UTMLink = {
   source_name: string;
   medium_code: string;
   medium_name: string;
+  form_type: string; // 'oGV' | 'TMR' | 'EWA'
 };
 
 type Pagination = {
@@ -81,6 +84,8 @@ export default function UTMGeneratorPage() {
   const [selectedEntity, setSelectedEntity] = useState<number | "">("");
   const [selectedSource, setSelectedSource] = useState<number | "">("");
   const [selectedMedium, setSelectedMedium] = useState<number | "">("");
+  const [selectedMediums, setSelectedMediums] = useState<number[]>([]); // Multiple mediums for bulk mode
+  const [isBulkMode, setIsBulkMode] = useState(false); // Toggle between single and bulk mode
   const [selectedForm, setSelectedForm] = useState<number | "all">("all");
   const [utmName, setUtmName] = useState("");
   const [selectedMediumData, setSelectedMediumData] = useState<UTMMedium | null>(null);
@@ -185,7 +190,7 @@ export default function UTMGeneratorPage() {
     if (activeTab === 'links') {
       void loadLinks(1);
     }
-  }, [activeTab]);
+  }, [activeTab, searchParams]); // Added searchParams dependency to reload when hub type changes
 
   // Reload sources and mediums when switching to create tab to ensure data is available
   useEffect(() => {
@@ -339,12 +344,16 @@ export default function UTMGeneratorPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       const typeParam = searchParams.get('type');
+      console.log('Loading UTM links for hub type:', typeParam || 'default (oGV)');
       if (typeParam && (typeParam === 'TMR' || typeParam === 'oGV' || typeParam === 'EWA')) {
         params.set('type', typeParam);
       }
       const res = await fetch(`/api/utm/links?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
+        console.log('UTM Links API Response:', data);
+        console.log('Total found:', data.pagination?.total);
+        console.log('Links returned:', data.items?.length);
         setLinks(Array.isArray(data.items) ? data.items : []);
         setPagination(data.pagination || null);
       }
@@ -647,7 +656,9 @@ export default function UTMGeneratorPage() {
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Medium</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Name</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Generated URL</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Tracking Link</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Shortened Link</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Tracking Short URL</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Actions</th>
                     </tr>
                   </thead>
@@ -666,6 +677,19 @@ export default function UTMGeneratorPage() {
                         >
                           {utmUrl}
                         </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm">
+                        {link.tracking_link ? (
+                          <div 
+                            className="max-w-xs truncate text-purple-600 dark:text-purple-400 cursor-pointer hover:underline"
+                            onClick={() => copyToClipboard(link.tracking_link!)}
+                            title="Click to copy tracking link"
+                          >
+                            {link.tracking_link}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500 text-xs">Not generated</span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-sm">
                         {(() => {
@@ -735,6 +759,19 @@ export default function UTMGeneratorPage() {
                         })()}
                       </td>
                       <td className="py-3 px-4 text-sm">
+                        {link.tracking_short_url ? (
+                          <div 
+                            className="max-w-xs truncate text-orange-600 dark:text-orange-400 cursor-pointer hover:underline"
+                            onClick={() => copyToClipboard(link.tracking_short_url!)}
+                            title="Click to copy tracking short URL"
+                          >
+                            {link.tracking_short_url}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500 text-xs">Not shortened</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-sm">
                         <button onClick={() => copyToClipboard(utmUrl)} className="px-3 py-1 text-xs rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-medium transition-colors">Copy URL</button>
                       </td>
                     </tr>
@@ -754,6 +791,10 @@ export default function UTMGeneratorPage() {
               {pagination && (
                 <div className="text-sm text-gray-500 dark:text-gray-400">
                   Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
+                  {/* Debug info */}
+                  <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    Debug: Page {pagination.page}, Limit {pagination.limit}, Total Pages {pagination.totalPages}
+                  </div>
                 </div>
               )}
             </div>
@@ -766,13 +807,16 @@ export default function UTMGeneratorPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200/50 dark:border-gray-600/50">
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Type</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Entity</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Campaign</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Source</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Medium</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Name</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Generated URL</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Tracking Link</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Shortened Link</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Tracking Short URL</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Created</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Actions</th>
                     </tr>
@@ -784,6 +828,17 @@ export default function UTMGeneratorPage() {
                       const isShortening = shorteningUrls.has(link.id);
                       return (
                         <tr key={link.id} className="border-b border-gray-200/50 dark:border-gray-600/50 hover:bg-gray-50/50 dark:hover:bg-gray-600/50">
+                          <td className="py-3 px-4 text-sm">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              link.form_type === 'TMR' 
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                : link.form_type === 'oGV'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                            }`}>
+                              {link.form_type || 'N/A'}
+                            </span>
+                          </td>
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.entity_name}</td>
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.campaign_name}</td>
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.source_name}</td>
@@ -797,6 +852,19 @@ export default function UTMGeneratorPage() {
                             >
                               {utmUrl}
                             </div>
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            {link.tracking_link ? (
+                              <div 
+                                className="max-w-xs truncate text-purple-600 dark:text-purple-400 cursor-pointer hover:underline"
+                                onClick={() => copyToClipboard(link.tracking_link!)}
+                                title="Click to copy tracking link"
+                              >
+                                {link.tracking_link}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 dark:text-gray-500 text-xs">Not generated</span>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-sm">
                             {shortenedUrl ? (
@@ -858,6 +926,19 @@ export default function UTMGeneratorPage() {
                               >
                                 {isShortening ? 'Shortening...' : 'Shorten'}
                               </button>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            {link.tracking_short_url ? (
+                              <div 
+                                className="max-w-xs truncate text-orange-600 dark:text-orange-400 cursor-pointer hover:underline"
+                                onClick={() => copyToClipboard(link.tracking_short_url!)}
+                                title="Click to copy tracking short URL"
+                              >
+                                {link.tracking_short_url}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 dark:text-gray-500 text-xs">Not shortened</span>
                             )}
                           </td>
                           <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{new Date(link.created_at).toLocaleDateString()}</td>
@@ -927,6 +1008,21 @@ export default function UTMGeneratorPage() {
                                   >
                                     Copy Original URL
                                   </button>
+                                  {link.tracking_link && (
+                                    <button
+                                      onClick={() => {
+                                        copyToClipboard(link.tracking_link!);
+                                        // Close menu after action
+                                        const menu = document.getElementById(`menu-${link.id}`);
+                                        if (menu) {
+                                          menu.classList.add('hidden');
+                                        }
+                                      }}
+                                      className="block w-full text-left px-4 py-2 text-sm text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                                    >
+                                      Copy Tracking Link
+                                    </button>
+                                  )}
                                   {shortenedUrl && (
                                     <button
                                       onClick={() => {
@@ -940,6 +1036,21 @@ export default function UTMGeneratorPage() {
                                       className="block w-full text-left px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
                                     >
                                       Copy Shortened URL
+                                    </button>
+                                  )}
+                                  {link.tracking_short_url && (
+                                    <button
+                                      onClick={() => {
+                                        copyToClipboard(link.tracking_short_url!);
+                                        // Close menu after action
+                                        const menu = document.getElementById(`menu-${link.id}`);
+                                        if (menu) {
+                                          menu.classList.add('hidden');
+                                        }
+                                      }}
+                                      className="block w-full text-left px-4 py-2 text-sm text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+                                    >
+                                      Copy Tracking Short URL
                                     </button>
                                   )}
                                   <button
@@ -1039,13 +1150,6 @@ export default function UTMGeneratorPage() {
               </tbody>
             </table>
           </div>
-          {role !== 'admin' && (
-            <div className="mt-8">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">My UTM Links</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Go to UTM Management to view and manage all links for your LC.</p>
-              <a href="/dashboard/utm-manage" className="inline-block mt-3 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm">Open UTM Management</a>
-            </div>
-          )}
         </div>
       </div>
 
