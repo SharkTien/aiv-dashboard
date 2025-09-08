@@ -869,9 +869,6 @@ export default function UTMGeneratorPage() {
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Source</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Medium</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Name</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Generated URL</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Tracking Link</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Shortened Link</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Tracking Short URL</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Created</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Actions</th>
@@ -900,90 +897,6 @@ export default function UTMGeneratorPage() {
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.source_name}</td>
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.medium_name}</td>
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.utm_name || '-'}</td>
-                          <td className="py-3 px-4 text-sm">
-                            <div 
-                              className="max-w-xs truncate text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
-                              onClick={() => copyToClipboard(utmUrl)}
-                              title="Click to copy"
-                            >
-                              {utmUrl}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 text-sm">
-                            {link.tracking_link ? (
-                              <div 
-                                className="max-w-xs truncate text-purple-600 dark:text-purple-400 cursor-pointer hover:underline"
-                                onClick={() => copyToClipboard(link.tracking_link!)}
-                                title="Click to copy tracking link"
-                              >
-                                {link.tracking_link}
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 dark:text-gray-500 text-xs">Not generated</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-sm">
-                            {shortenedUrl ? (
-                              editingAlias === link.id ? (
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="text"
-                                    value={aliasInput}
-                                    onChange={(e) => setAliasInput(e.target.value)}
-                                    placeholder="Enter alias"
-                                    className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                    onKeyPress={(e) => {
-                                      if (e.key === 'Enter') {
-                                        handleUpdateAlias(link.id);
-                                      }
-                                    }}
-                                  />
-                                  <button
-                                    onClick={() => handleUpdateAlias(link.id)}
-                                    disabled={updatingAlias.has(link.id)}
-                                    className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                                  >
-                                    {updatingAlias.has(link.id) && <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>}
-                                    {updatingAlias.has(link.id) ? 'Saving...' : 'Save'}
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setEditingAlias(null);
-                                      setAliasInput('');
-                                    }}
-                                    className="px-2 py-1 text-xs rounded bg-gray-500 text-white hover:bg-gray-600"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <div 
-                                    className="max-w-xs truncate text-green-600 dark:text-green-400 cursor-pointer hover:underline"
-                                    onClick={() => copyToClipboard(shortenedUrl)}
-                                    title="Click to copy"
-                                  >
-                                    {shortenedUrl}
-                                  </div>
-                                  <button
-                                    onClick={() => startEditAlias(link.id, shortenedUrl)}
-                                    className="px-1 py-1 text-xs rounded bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
-                                    title="Edit alias"
-                                  >
-                                    ✏️
-                                  </button>
-                                </div>
-                              )
-                            ) : (
-                              <button
-                                onClick={() => shortenUrl(link.id, utmUrl)}
-                                disabled={isShortening}
-                                className="px-2 py-1 text-xs rounded-lg bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {isShortening ? 'Shortening...' : 'Shorten'}
-                              </button>
-                            )}
-                          </td>
                           <td className="py-3 px-4 text-sm">
                             {link.tracking_short_url ? (
                               <div 
