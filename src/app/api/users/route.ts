@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     params.push(Number(cursor));
   }
   const [rows] = await pool.query(
-    `SELECT user_id, entity_id, email, name, role, status, created_at
+    `SELECT user_id, entity_id, email, name, role, status, program, created_at
      FROM user ${where}
      ORDER BY user_id DESC
      LIMIT ?`,

@@ -44,7 +44,9 @@ export default function UsersList() {
   useEffect(() => {
     fetch('/api/entities').then(r => r.json()).then(data => {
       // Filter out national entities and organic (only show local entities)
-      const localEntities = Array.isArray(data.items) ? data.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
+      const raw = Array.isArray(data.items) ? data.items.filter((e: any) => e.type === 'local' && e.name.toLowerCase() !== 'organic') : [];
+      // Normalize to { id, name } so option keys are stable
+      const localEntities = raw.map((e: any) => ({ id: e.entity_id, name: e.name }));
       setEntities(localEntities);
     }).catch(() => setEntities([]));
   }, []);
@@ -117,6 +119,7 @@ export default function UsersList() {
 
 function UserActions({ user, onChanged, onEdit }: { user: User; onChanged: () => void; onEdit: () => void }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function doDelete() {
@@ -145,8 +148,18 @@ function UserActions({ user, onChanged, onEdit }: { user: User; onChanged: () =>
 
   function openEdit() { onEdit(); }
 
+  // close dropdown when clicking outside
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [open]);
+
   return (
-    <div className="relative inline-block text-left">
+    <div className="relative inline-block text-left" ref={ref}>
       <button onClick={() => setOpen((v) => !v)} className="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10">⋯</button>
       {open && (
         <div className="absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black/10 dark:ring-white/10 z-10">

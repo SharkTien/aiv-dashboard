@@ -2,7 +2,7 @@
 import ThemeToggle from "@/components/ThemeToggle";
 import { useEffect, useMemo, useState } from "react";
 
-type Me = { sub: number; name: string; email: string; role: "admin" | "lead" | "member"; entity_id: number };
+type Me = { sub: number; name: string; email: string; role: "admin" | "lead" | "member"; entity_id: number; program?: string };
 
 export default function Page() {
   const [me, setMe] = useState<Me | null>(null);
@@ -119,6 +119,10 @@ export default function Page() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Role</label>
                       <input value={role.charAt(0).toUpperCase() + role.slice(1)} disabled className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-gray-100 dark:bg-gray-700/50 text-slate-900 dark:text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Program</label>
+                      <input value={me.program || '-'} disabled className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-gray-100 dark:bg-gray-700/50 text-slate-900 dark:text-white" />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Entity</label>

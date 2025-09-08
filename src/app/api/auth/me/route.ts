@@ -8,7 +8,7 @@ export async function GET(_req: NextRequest) {
   try {
     const pool = getDbPool();
     const [rows] = await pool.query(
-      "SELECT user_id as sub, email, name, role, entity_id FROM user WHERE user_id = ?",
+      "SELECT user_id as sub, email, name, role, entity_id, program FROM user WHERE user_id = ?",
       [user.sub]
     );
     const dbUser = Array.isArray(rows) && rows.length ? rows[0] : null;

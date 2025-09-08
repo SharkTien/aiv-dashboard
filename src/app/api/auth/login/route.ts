@@ -22,11 +22,11 @@ export async function POST(req: NextRequest) {
     }
 
     const [rows] = await pool.query(
-      `SELECT user_id, entity_id, name, password AS password_hash, role, status FROM user WHERE email = ? LIMIT 1`,
+      `SELECT user_id, entity_id, name, password AS password_hash, role, status, program FROM user WHERE email = ? LIMIT 1`,
       [email]
     );
 
-    const list = Array.isArray(rows) ? (rows as Array<{ user_id: number; entity_id: number; name: string; password_hash: string; role: string; status: number }>) : [];
+    const list = Array.isArray(rows) ? (rows as Array<{ user_id: number; entity_id: number; name: string; password_hash: string; role: string; status: number; program?: string }>) : [];
     const user = list.length ? list[0] : null;
     if (!user) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     const token = jwt.sign(
-      { sub: user.user_id, role: user.role, name: user.name, entity_id: user.entity_id },
+      { sub: user.user_id, role: user.role, name: user.name, entity_id: user.entity_id, program: user.program },
       process.env.JWT_SECRET || "dev-secret",
       { expiresIn: "7d" }
     );
