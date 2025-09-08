@@ -57,7 +57,6 @@ interface UTMInsights {
   totalLinks: number;
   totalClicks: number;
   totalUniqueClicks: number;
-  averageClicksPerLink: number;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658'];
@@ -71,25 +70,10 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
     return date.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [selectedEntity, setSelectedEntity] = useState<string>('');
-  const [entities, setEntities] = useState<Array<{ entity_id: number; name: string }>>([]);
-
   useEffect(() => {
-    loadEntities();
     loadAnalytics();
-  }, [startDate, endDate, selectedEntity, selectedFormId]);
+  }, [startDate, endDate, selectedFormId]);
 
-  const loadEntities = async () => {
-    try {
-      const response = await fetch('/api/entities');
-      const result = await response.json();
-      if (result.success) {
-        setEntities(result.items || []);
-      }
-    } catch (error) {
-      console.error('Error loading entities:', error);
-    }
-  };
 
 
   const loadAnalytics = async () => {
@@ -101,10 +85,6 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         start_date: startDate,
         end_date: endDate
       });
-      
-      if (selectedEntity) {
-        params.append('entity_id', selectedEntity);
-      }
       
       if (selectedFormId) {
         params.append('form_id', selectedFormId.toString());
@@ -194,23 +174,6 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-            Entity
-          </label>
-          <select
-            value={selectedEntity}
-            onChange={(e) => setSelectedEntity(e.target.value)}
-            className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
-          >
-            <option value="">All Entities</option>
-            {entities.map((entity) => (
-              <option key={entity.entity_id} value={entity.entity_id}>
-                {entity.name}
-              </option>
-            ))}
-          </select>
-        </div>
         
 
         <button
@@ -236,8 +199,10 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
           <p className="text-2xl font-bold text-gray-900 dark:text-white">{insights.totalUniqueClicks}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Avg Clicks/Link</h3>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{insights.averageClicksPerLink}</p>
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Conversion Rate</h3>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">
+            {insights.totalClicks > 0 ? ((insights.totalUniqueClicks / insights.totalClicks) * 100).toFixed(1) : 0}%
+          </p>
         </div>
       </div>
 

@@ -58,11 +58,8 @@ export async function GET(req: NextRequest) {
 
     const params: any[] = [startDate, endDate + ' 23:59:59'];
 
-    // Filter by entity if not admin
-    if (user.role !== 'admin') {
-      query += " AND ul.entity_id = ?";
-      params.push(user.entity_id);
-    } else if (entityId) {
+    // Optional entity filter (only for admin when explicitly requested)
+    if (entityId && user.role === 'admin') {
       query += " AND ul.entity_id = ?";
       params.push(entityId);
     }
@@ -165,6 +162,17 @@ export async function GET(req: NextRequest) {
     const insights = generateUTMInsights(analyticsData);
     
     // Debug insights aggregation
+    console.log('Analytics Debug:', {
+      totalLinks: analyticsData.length,
+      totalClicks: insights.totalClicks,
+      totalUniqueClicks: insights.totalUniqueClicks,
+      sampleLinks: analyticsData.slice(0, 3).map(link => ({
+        id: link.id,
+        utm_name: link.utm_name,
+        clicks: link.clicks,
+        uniqueClicks: link.uniqueClicks
+      }))
+    });
 
     const response = NextResponse.json({
       success: true,
@@ -492,17 +500,33 @@ function calculateTrend(dailyData: any[]): 'up' | 'down' | 'stable' {
 // Get click data from database
 async function getDatabaseClickData(pool: any, utmLinkId: number, startDate: string, endDate: string) {
   try {
-    // Get total and unique clicks from utm_links table
-    const [linkData] = await pool.query(
-      `SELECT total_clicks, unique_clicks FROM utm_links WHERE id = ?`,
-      [utmLinkId]
+    // Get total and unique clicks from click_logs table
+    const [clickData] = await pool.query(
+      `SELECT 
+        COUNT(*) as totalClicks,
+        COUNT(DISTINCT session_id) as uniqueClicks
+       FROM click_logs 
+       WHERE utm_link_id = ? 
+         AND DATE(clicked_at) >= ? 
+         AND DATE(clicked_at) <= ?`,
+      [utmLinkId, startDate, endDate]
     );
     
-    const link = Array.isArray(linkData) && linkData.length > 0 ? linkData[0] : null;
-    const totalClicks = link?.total_clicks || 0;
-    const uniqueClicks = link?.unique_clicks || 0;
+    const click = Array.isArray(clickData) && clickData.length > 0 ? clickData[0] : null;
+    const totalClicks = Number(click?.totalClicks || 0);
+    const uniqueClicks = Number(click?.uniqueClicks || 0);
     
     // Debug database click data
+    if (utmLinkId === 38) {
+      console.log('Database click data for UTM link 38:', {
+        utmLinkId,
+        startDate,
+        endDate,
+        clickData,
+        totalClicks,
+        uniqueClicks
+      });
+    }
     
     // Get daily clicks breakdown
     const [dailyData] = await pool.query(
@@ -822,9 +846,6 @@ function generateUTMInsights(analyticsData: any[]) {
       .sort((a, b) => b.totalClicks - a.totalClicks),
     totalLinks: analyticsData.length,
     totalClicks: analyticsData.reduce((sum, link) => sum + (link.clicks || 0), 0),
-    totalUniqueClicks: analyticsData.reduce((sum, link) => sum + (link.uniqueClicks || 0), 0),
-    averageClicksPerLink: analyticsData.length > 0 
-      ? Math.round(analyticsData.reduce((sum, link) => sum + (link.clicks || 0), 0) / analyticsData.length)
-      : 0
+    totalUniqueClicks: analyticsData.reduce((sum, link) => sum + (link.uniqueClicks || 0), 0)
   };
 }

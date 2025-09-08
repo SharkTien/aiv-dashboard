@@ -201,7 +201,7 @@ export default function AnalyticsPage() {
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Select Form
+            Select Phase
           </label>
           <select
             value={selectedForm || ''}
@@ -211,7 +211,7 @@ export default function AnalyticsPage() {
             <option value="">Select a form...</option>
             {forms.map((form) => (
               <option key={form.id} value={form.id}>
-                {form.name} ({form.code})
+                {form.name.replace('TMR', '').replace('Submissions', '')}
               </option>
             ))}
           </select>

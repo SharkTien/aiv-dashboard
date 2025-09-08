@@ -220,19 +220,57 @@ async function insertClickLog(pool: any, data: any) {
   );
 }
 
-// Update link counters - skip for now since columns don't exist yet
+// Update link counters
 async function updateLinkCounters(pool: any, utmLinkId: number, isUnique: boolean) {
-  // TODO: Add total_clicks, unique_clicks, last_click_at columns to utm_links table
-  // For now, we just track in click_logs and can calculate counts from there
-  
-  // Verify the UTM link exists
-  const [linkCheck] = await pool.query(
-    "SELECT id FROM utm_links WHERE id = ?",
-    [utmLinkId]
-  );
-  
-  if (!Array.isArray(linkCheck) || linkCheck.length === 0) {
-    throw new Error(`UTM link with id ${utmLinkId} not found`);
+  try {
+    // First, check if the columns exist
+    const [columns] = await pool.query(`
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_NAME = 'utm_links' 
+      AND TABLE_SCHEMA = DATABASE()
+      AND COLUMN_NAME IN ('total_clicks', 'unique_clicks', 'last_click_at')
+    `);
+    
+    const existingColumns = Array.isArray(columns) ? columns.map((col: any) => col.COLUMN_NAME) : [];
+    
+    // Verify the UTM link exists
+    const [linkCheck] = await pool.query(
+      "SELECT id FROM utm_links WHERE id = ?",
+      [utmLinkId]
+    );
+    
+    if (!Array.isArray(linkCheck) || linkCheck.length === 0) {
+      throw new Error(`UTM link with id ${utmLinkId} not found`);
+    }
+    
+    // Update counters if columns exist
+    if (existingColumns.includes('total_clicks') && existingColumns.includes('unique_clicks') && existingColumns.includes('last_click_at')) {
+      // Update total clicks (always increment)
+      await pool.query(
+        "UPDATE utm_links SET total_clicks = COALESCE(total_clicks, 0) + 1 WHERE id = ?",
+        [utmLinkId]
+      );
+      
+      // Update unique clicks only if this is a unique click
+      if (isUnique) {
+        await pool.query(
+          "UPDATE utm_links SET unique_clicks = COALESCE(unique_clicks, 0) + 1 WHERE id = ?",
+          [utmLinkId]
+        );
+      }
+      
+      // Update last click timestamp
+      await pool.query(
+        "UPDATE utm_links SET last_click_at = NOW() WHERE id = ?",
+        [utmLinkId]
+      );
+    } else {
+      // If columns don't exist, just log the click (data is still tracked in click_logs)
+      console.log(`Click tracked for UTM link ${utmLinkId}, unique: ${isUnique} (counters not updated - columns missing)`);
+    }
+  } catch (error) {
+    console.error('Error updating link counters:', error);
+    // Don't throw error to avoid breaking the redirect
   }
-  
 }
