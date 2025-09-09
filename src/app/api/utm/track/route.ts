@@ -63,21 +63,7 @@ export async function GET(req: NextRequest) {
   // Fast path: if redirecting, schedule non-blocking tracking and return immediately
   if (redirect_url) {
     ;(async () => {
-      try {
-        const pool = getDbPool();
-        const visitorInfo = await extractVisitorInfo(req);
-        const isUnique = await checkUniqueVisitor(pool, parseInt(utm_link_id), click_type, visitorInfo.session_id);
-        await insertClickLog(pool, {
-          utm_link_id: parseInt(utm_link_id),
-          click_type,
-          ...visitorInfo,
-          is_unique: isUnique
-        });
-        await upsertDailyCounters(pool, parseInt(utm_link_id), isUnique);
-        await updateLinkCounters(pool, parseInt(utm_link_id), isUnique);
-      } catch (error) {
-        console.warn('Background tracking failed:', error);
-      }
+      await trackClickWithRetry(parseInt(utm_link_id), click_type, req);
     })();
     
     // Get base_url from database instead of using redirect_url parameter
@@ -104,17 +90,7 @@ export async function GET(req: NextRequest) {
   
   // No redirect: do regular pixel tracking (legacy)
   try {
-    const pool = getDbPool();
-    const visitorInfo = await extractVisitorInfo(req);
-    const isUnique = await checkUniqueVisitor(pool, parseInt(utm_link_id), click_type, visitorInfo.session_id);
-    await insertClickLog(pool, {
-      utm_link_id: parseInt(utm_link_id),
-      click_type,
-      ...visitorInfo,
-      is_unique: isUnique
-    });
-    await upsertDailyCounters(pool, parseInt(utm_link_id), isUnique);
-    await updateLinkCounters(pool, parseInt(utm_link_id), isUnique);
+    await trackClickWithRetry(parseInt(utm_link_id), click_type, req);
   } catch (error) {
     console.error('Error tracking click (pixel):', error);
   }
@@ -274,6 +250,51 @@ async function insertClickLog(pool: any, data: any) {
       data.session_id
     ]
   );
+}
+
+// Track click with retry mechanism
+async function trackClickWithRetry(utmLinkId: number, clickType: string, req: NextRequest, maxRetries: number = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const pool = getDbPool();
+      const visitorInfo = await extractVisitorInfo(req);
+      const isUnique = await checkUniqueVisitor(pool, utmLinkId, clickType, visitorInfo.session_id);
+      await insertClickLog(pool, {
+        utm_link_id: utmLinkId,
+        click_type: clickType,
+        ...visitorInfo,
+        is_unique: isUnique
+      });
+      await upsertDailyCounters(pool, utmLinkId, isUnique);
+      await updateLinkCounters(pool, utmLinkId, isUnique);
+      
+      // Success - exit retry loop
+      return;
+    } catch (error: any) {
+      const isLastAttempt = attempt === maxRetries;
+      const isTimeoutError = error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'PROTOCOL_CONNECTION_LOST';
+      
+      if (isLastAttempt) {
+        console.warn(`Background tracking failed after ${maxRetries} attempts for UTM link ${utmLinkId}:`, {
+          error: error.message,
+          code: error.code,
+          attempt
+        });
+        return;
+      }
+      
+      if (isTimeoutError) {
+        // Wait before retry (exponential backoff)
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.warn(`Database timeout for UTM link ${utmLinkId}, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        // Non-timeout error, don't retry
+        console.warn(`Background tracking failed for UTM link ${utmLinkId} (non-retryable error):`, error.message);
+        return;
+      }
+    }
+  }
 }
 
 // Update link counters

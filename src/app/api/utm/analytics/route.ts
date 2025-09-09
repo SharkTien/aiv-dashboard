@@ -969,7 +969,7 @@ function mergeDailyClickData(dbDaily: any[], shortIoDaily: any[]) {
   
   // Convert back to array and sort by date
   return Array.from(dateMap.entries())
-    .map(([date, clicks]) => ({ date, clicks }))
+    .map(([date, clicks]) => ({ date: String(date), clicks }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
