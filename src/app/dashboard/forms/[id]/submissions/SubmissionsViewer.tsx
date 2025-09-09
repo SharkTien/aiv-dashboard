@@ -1044,28 +1044,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
         </div>
       )}
       {/* Form Info */}
-      <div className="bg-white/60 !overflow-visible dark:bg-gray-700/60 rounded-xl p-6 border border-gray-200/50 dark:border-gray-600/50 overflow-x-hidden">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{form.name}</h2>
-            <div className="flex items-center gap-3 mt-1">
-              <p className="text-sm text-gray-600 dark:text-gray-300">Code: {form.code}</p>
-              <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium">
-                {form.type}
-              </span>
-            </div>
-          </div>
-          {options?.showBack !== false && (
-            <Link
-              href={`/dashboard/forms/${formId}`}
-              className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium transition-colors"
-            >
-              Back to Form
-            </Link>
-          )}
-        </div>
-      </div>
-
+      
       {/* Excel Template */}
       {options?.showTemplate !== false && formFields.length > 0 && (
         <ExcelTemplate fields={formFields} formName={form?.name || 'Form'} />
@@ -1307,7 +1286,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
         ) : (
           <>
             <div className="relative w-full max-w-full overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:dark:bg-gray-800 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:dark:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-gray-400 [&::-webkit-scrollbar-thumb]:dark:hover:bg-gray-500">
-              <table className="min-w-max text-sm">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left bg-gray-50 dark:bg-gray-800/60">
                     <th className="px-3 py-2 text-gray-700 dark:text-gray-200 whitespace-nowrap">
