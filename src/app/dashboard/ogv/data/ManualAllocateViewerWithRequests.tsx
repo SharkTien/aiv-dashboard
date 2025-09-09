@@ -126,13 +126,13 @@ export default function ManualAllocateViewerWithRequests({ formId }: ManualAlloc
     }
   };
 
-  // Filter submissions based on search term (uni and other--uni fields)
+  // Filter submissions based on search term (uni and other--uni/otheruni fields)
   const filteredSubmissions = useMemo(() => {
     if (!searchTerm.trim()) return submissions;
 
     return submissions.filter(submission => {
       return submission.responses.some(response => 
-        (response.field_name === 'uni' || response.field_name === 'other--uni') && (
+        (response.field_name === 'uni' || response.field_name === 'other--uni' || response.field_name === 'otheruni') && (
           response.value?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           response.value_label?.toLowerCase().includes(searchTerm.toLowerCase())
         )
@@ -413,18 +413,18 @@ export default function ManualAllocateViewerWithRequests({ formId }: ManualAlloc
                   <td className="px-6 py-4">
                     <div className="space-y-1">
                       {submission.responses
-                        .filter(response => response.field_name === 'uni' || response.field_name === 'other--uni')
+                        .filter(response => response.field_name === 'uni' || response.field_name === 'other--uni' || response.field_name === 'otheruni')
                         .map((response, index) => (
                         <div key={index} className="text-sm">
                           <span className="font-medium text-gray-700 dark:text-gray-300">
-                            {response.field_name === 'other--uni' ? 'Other University' : 'University'}:
+                            {response.field_name === 'other--uni' || response.field_name === 'otheruni' ? 'Other University' : 'University'}:
                           </span>{' '}
                           <span className="text-gray-600 dark:text-gray-400">
                             {response.value_label || response.value}
                           </span>
                         </div>
                       ))}
-                      {submission.responses.filter(r => r.field_name === 'uni' || r.field_name === 'other--uni').length === 0 && (
+                      {submission.responses.filter(r => r.field_name === 'uni' || r.field_name === 'other--uni' || r.field_name === 'otheruni').length === 0 && (
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           No university field
                         </div>

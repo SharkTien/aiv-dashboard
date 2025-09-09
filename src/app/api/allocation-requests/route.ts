@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Number(searchParams.get("limit") || 20), 100);
   const offset = (page - 1) * limit;
   const status = searchParams.get("status") || "";
+  const formType = searchParams.get("form_type") || ""; // oGV or TMR
 
   const pool = getDbPool();
 
@@ -34,13 +35,22 @@ export async function GET(request: NextRequest) {
       params.push(status);
     }
 
+    if (formType && ['oGV', 'TMR'].includes(formType)) {
+      conditions.push("f.type = ?");
+      params.push(formType);
+    }
+
     if (conditions.length > 0) {
       whereClause = "WHERE " + conditions.join(" AND ");
     }
 
     // Get total count
     const [countResult] = await pool.query(
-      `SELECT COUNT(*) as total FROM allocation_requests ar ${whereClause}`,
+      `SELECT COUNT(*) as total 
+       FROM allocation_requests ar
+       LEFT JOIN form_submissions fs ON ar.submission_id = fs.id
+       LEFT JOIN forms f ON fs.form_id = f.id
+       ${whereClause}`,
       params
     );
     const total = Array.isArray(countResult) && countResult.length > 0 ? (countResult[0] as any).total : 0;
@@ -61,7 +71,8 @@ export async function GET(request: NextRequest) {
         e.name as requested_entity_name,
         fs.timestamp as submission_timestamp,
         f.name as form_name,
-        f.code as form_code
+        f.code as form_code,
+        f.type as form_type
       FROM allocation_requests ar
       LEFT JOIN user u ON ar.requested_by = u.user_id
       LEFT JOIN entity e ON ar.requested_entity_id = e.entity_id
@@ -73,11 +84,41 @@ export async function GET(request: NextRequest) {
       [...params, limit, offset]
     );
 
+    // Get submission responses for each request
+    const requestsWithResponses = await Promise.all(
+      (requests as any[]).map(async (request) => {
+        const [responses] = await pool.query(
+          `SELECT 
+            ff.field_name, 
+            fr.value,
+            CASE 
+              WHEN ff.field_name = 'uni' AND fr.value = 'other--uni-2' THEN 'other--uni-2'
+              WHEN ff.field_name = 'uni' AND um.uni_name IS NOT NULL THEN um.uni_name
+              WHEN ff.field_name = 'other--uni' THEN fr.value
+              WHEN ff.field_name = 'otheruni' THEN fr.value
+              ELSE fr.value
+            END AS value_label
+           FROM form_responses fr
+           LEFT JOIN form_fields ff ON fr.field_id = ff.id
+           LEFT JOIN uni_mapping um
+             ON ff.field_name = 'uni'
+            AND fr.value = um.uni_id
+           WHERE fr.submission_id = ?`,
+          [request.submission_id]
+        );
+        
+        return {
+          ...request,
+          responses: responses || []
+        };
+      })
+    );
+
     const totalPages = Math.ceil(total / limit);
 
     const response = NextResponse.json({
       success: true,
-      items: requests,
+      items: requestsWithResponses,
       pagination: {
         page,
         limit,

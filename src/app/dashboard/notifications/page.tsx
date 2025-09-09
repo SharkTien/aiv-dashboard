@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import LoadingOverlay from "@/components/LoadingOverlay";
 
 type TabType = 'notifications' | 'allocation-requests';
+type AllocationTabType = 'ogv' | 'tmr';
 
 type Notification = {
   id: number;
@@ -31,13 +32,21 @@ type AllocationRequest = {
   submission_timestamp: string;
   form_name: string;
   form_code: string;
+  form_type: string;
+  responses: Array<{
+    field_name: string;
+    value: string;
+    value_label?: string;
+  }>;
 };
 
 export default function NotificationsPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('notifications');
+  const [allocationTab, setAllocationTab] = useState<AllocationTabType>('ogv');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [allocationRequests, setAllocationRequests] = useState<AllocationRequest[]>([]);
+  const [allAllocationRequests, setAllAllocationRequests] = useState<AllocationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
@@ -49,7 +58,7 @@ export default function NotificationsPage() {
     if (user) {
       loadData();
     }
-  }, [user, activeTab]);
+  }, [user, activeTab, allocationTab]);
 
   async function loadUser() {
     try {
@@ -69,7 +78,8 @@ export default function NotificationsPage() {
       if (activeTab === 'notifications') {
         await loadNotifications();
       } else if (activeTab === 'allocation-requests' && user?.role === 'admin') {
-        await loadAllocationRequests();
+        await loadAllAllocationRequests(); // Load all requests for count
+        await loadAllocationRequests(); // Load filtered requests
       }
     } finally {
       setLoading(false);
@@ -90,13 +100,26 @@ export default function NotificationsPage() {
 
   async function loadAllocationRequests() {
     try {
-      const res = await fetch('/api/allocation-requests?limit=50', { cache: 'no-store' });
+      const formType = allocationTab === 'ogv' ? 'oGV' : 'TMR';
+      const res = await fetch(`/api/allocation-requests?limit=50&form_type=${formType}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setAllocationRequests(data.items || []);
       }
     } catch (error) {
       console.error('Error loading allocation requests:', error);
+    }
+  }
+
+  async function loadAllAllocationRequests() {
+    try {
+      const res = await fetch('/api/allocation-requests?limit=100', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setAllAllocationRequests(data.items || []);
+      }
+    } catch (error) {
+      console.error('Error loading all allocation requests:', error);
     }
   }
 
@@ -129,7 +152,8 @@ export default function NotificationsPage() {
       });
 
       if (res.ok) {
-        await loadAllocationRequests();
+        await loadAllAllocationRequests(); // Refresh all requests for count
+        await loadAllocationRequests(); // Refresh filtered requests
         await loadNotifications(); // Refresh notifications
         
         // Refresh notification count in sidebar
@@ -252,9 +276,37 @@ export default function NotificationsPage() {
 
             {activeTab === 'allocation-requests' && user.role === 'admin' && (
               <div className="space-y-4">
+                {/* Allocation Requests Sub-tabs */}
+                <div className="border-b border-gray-200 dark:border-gray-700">
+                  <nav className="-mb-px flex space-x-8">
+                    <button
+                      onClick={() => setAllocationTab('ogv')}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                        allocationTab === 'ogv'
+                          ? 'border-sky-500 text-sky-600 dark:text-sky-400'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                      }`}
+                    >
+                      oGV ({allAllocationRequests.filter(r => r.form_type === 'oGV').length})
+                    </button>
+                    <button
+                      onClick={() => setAllocationTab('tmr')}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                        allocationTab === 'tmr'
+                          ? 'border-sky-500 text-sky-600 dark:text-sky-400'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                      }`}
+                    >
+                      TMR ({allAllocationRequests.filter(r => r.form_type === 'TMR').length})
+                    </button>
+                  </nav>
+                </div>
+
                 {allocationRequests.length === 0 ? (
                   <div className="text-center py-12">
-                    <p className="text-gray-500 dark:text-gray-400">No allocation requests found.</p>
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No {allocationTab === 'ogv' ? 'oGV' : 'TMR'} allocation requests found.
+                    </p>
                   </div>
                 ) : (
                   allocationRequests.map((request) => (
@@ -301,7 +353,7 @@ function AllocationRequestCard({
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <h3 className="font-medium text-gray-900 dark:text-white">
-              Allocation Request #{request.id}
+              Allocation Request
             </h3>
             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
               request.status === 'pending' 
@@ -316,9 +368,9 @@ function AllocationRequestCard({
           
           <div className="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-300">
             <p><strong>Requester:</strong> {request.requester_name} ({request.requester_email})</p>
-            <p><strong>Submission:</strong> #{request.submission_id} from {request.form_name}</p>
-            <p><strong>Requested Entity:</strong> {request.requested_entity_name}</p>
-            <p><strong>Submitted:</strong> {new Date(request.created_at).toLocaleString()}</p>
+            <p><strong>Submission & Phases:</strong> {request.responses.find(r => r.field_name === 'form-code')?.value} {request.form_name.replace('Submissions','')}</p>
+            <p><strong>Requested LC to be allocated:</strong> {request.requested_entity_name}</p>
+            <p>{new Date(request.created_at).toLocaleString()}</p>
           </div>
 
           {request.admin_notes && (
@@ -338,12 +390,24 @@ function AllocationRequestCard({
 
           {showDetails && (
             <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded">
-              <p className="text-sm text-gray-600 dark:text-gray-300">
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                 <strong>Submission Timestamp:</strong> {new Date(request.submission_timestamp).toLocaleString()}
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                <strong>Form Code:</strong> {request.form_code}
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Form Responses:</p>
+                {request.responses
+                  .filter(response => 
+                    response.field_name !== 'uni' && 
+                    response.field_name !== 'other--uni' &&
+                    response.field_name !== 'otheruni' &&
+                    !response.field_name.toLowerCase().includes('long')
+                  )
+                  .map((response, index) => (
+                    <div key={index} className="text-sm text-gray-600 dark:text-gray-300">
+                      <strong>{response.field_name}:</strong> {response.value_label || response.value}
+                    </div>
+                  ))}
+              </div>
             </div>
           )}
 

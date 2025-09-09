@@ -107,7 +107,7 @@ export default function ManualAllocateViewerWithRequests({ formId }: ManualAlloc
     if (!searchTerm.trim()) return submissions;
     const q = searchTerm.toLowerCase();
     return submissions.filter(submission =>
-      submission.responses.some(r => (r.field_name === 'uni' || r.field_name === 'other--uni') && ((r.value_label || r.value || '').toLowerCase().includes(q)))
+      submission.responses.some(r => (r.field_name === 'uni' || r.field_name === 'other--uni' || r.field_name === 'otheruni') && ((r.value_label || r.value || '').toLowerCase().includes(q)))
     );
   }, [submissions, searchTerm]);
 
@@ -275,13 +275,13 @@ export default function ManualAllocateViewerWithRequests({ formId }: ManualAlloc
                       </td>
                       <td className="px-6 py-4">
                         <div className="space-y-1">
-                          {submission.responses.filter(r => r.field_name === 'uni' || r.field_name === 'other--uni').map((r, idx) => (
+                          {submission.responses.filter(r => r.field_name === 'uni' || r.field_name === 'other--uni' || r.field_name === 'otheruni').map((r, idx) => (
                             <div key={idx} className="text-sm">
-                              <span className="font-medium text-gray-700 dark:text-gray-300">{r.field_name === 'other--uni' ? 'Other University' : 'University'}:</span>{' '}
+                              <span className="font-medium text-gray-700 dark:text-gray-300">{r.field_name === 'other--uni' || r.field_name === 'otheruni' ? 'Other University' : 'University'}:</span>{' '}
                               <span className="text-gray-600 dark:text-gray-400">{r.value_label || r.value}</span>
                             </div>
                           ))}
-                          {submission.responses.filter(r => r.field_name === 'uni' || r.field_name === 'other--uni').length === 0 && (
+                          {submission.responses.filter(r => r.field_name === 'uni' || r.field_name === 'other--uni' || r.field_name === 'otheruni').length === 0 && (
                             <div className="text-xs text-gray-500 dark:text-gray-400">No university field</div>
                           )}
                         </div>

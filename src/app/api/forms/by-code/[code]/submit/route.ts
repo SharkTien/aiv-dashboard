@@ -176,6 +176,13 @@ export async function POST(
         }
       }
 
+      // Handle otheruni field from Webflow - preserve the value as-is for manual allocation
+      if (key === "otheruni" && saveValue != null && saveValue !== "") {
+        // Keep the original value for otheruni field
+        // This field is used for manual allocation and should not be converted
+        saveValue = String(saveValue).trim();
+      }
+
       // Debug logging for uni field
       if (key === "uni") {
       }
