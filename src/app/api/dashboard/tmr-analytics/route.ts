@@ -30,12 +30,26 @@ export async function GET(request: NextRequest) {
       queryParams.push(uni);
     }
 
-    // Get total sign ups (no filters applied)
-    const [totalSignUpsResult] = await pool.query(`
+    // Get total sign ups (with entity filter if provided)
+    let totalSignUpsQuery = `
       SELECT COUNT(*) as total
       FROM form_submissions fs
       WHERE fs.form_id = ? AND fs.duplicated = FALSE
-    `, [formId]);
+    `;
+    let totalSignUpsParams = [formId];
+    
+    if (entity) {
+      // If entity is a number (entity_id), use it directly, otherwise treat as entity name
+      if (!isNaN(Number(entity))) {
+        totalSignUpsQuery += ' AND fs.entity_id = ?';
+        totalSignUpsParams.push(Number(entity));
+      } else {
+        totalSignUpsQuery += ' AND fs.entity_id IN (SELECT entity_id FROM entity WHERE name = ?)';
+        totalSignUpsParams.push(entity);
+      }
+    }
+    
+    const [totalSignUpsResult] = await pool.query(totalSignUpsQuery, totalSignUpsParams);
 
     const totalSignUps = Array.isArray(totalSignUpsResult) && totalSignUpsResult.length > 0 
       ? (totalSignUpsResult[0] as any).total : 0;

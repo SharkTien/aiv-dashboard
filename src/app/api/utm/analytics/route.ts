@@ -4,7 +4,9 @@ import { getDbPool } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
   const startDate = searchParams.get("start_date") || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -21,9 +23,36 @@ export async function GET(req: NextRequest) {
   const formId = searchParams.get("form_id");
   const formType = searchParams.get("form_type"); // oGV/TMR/EWA
 
+
+  // Validate date parameters
+  const startDateObj = new Date(startDate);
+  const endDateObj = new Date(endDate);
+  
+  if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
+    return NextResponse.json(
+      { success: false, error: 'Invalid date format. Use YYYY-MM-DD format.' },
+      { status: 400 }
+    );
+  }
+  
+  if (startDateObj > endDateObj) {
+    return NextResponse.json(
+      { success: false, error: 'Start date cannot be after end date.' },
+      { status: 400 }
+    );
+  }
+
   const pool = getDbPool();
 
   try {
+    // Test database connection first
+    try {
+      await pool.query("SELECT 1");
+    } catch (dbError) {
+      console.error('Database connection test failed:', dbError);
+      throw new Error(`Database connection failed: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`);
+    }
+
     // Get all UTM links with database tracking data
     let query = `
       SELECT 
@@ -121,44 +150,58 @@ export async function GET(req: NextRequest) {
 
     query += " ORDER BY ul.created_at DESC";
 
-
     const [links] = await pool.query(query, params);
     const linksArray = Array.isArray(links) ? links : [];
 
     // Combine database tracking with Short.io data
     const analyticsData = await Promise.all(
       linksArray.map(async (link: any) => {
-        // Get database click analytics
-        const dbClickData = await getDatabaseClickData(pool, link.id, startDate, endDate);
-        
-        // Get Short.io data if shortened URL exists
-        let shortIoData = null;
-        if (link.shortened_url) {
-          const shortUrlId = extractShortUrlId(link.shortened_url);
-          shortIoData = await getShortIoClickData(shortUrlId, startDate, endDate);
+        try {
+          // Get database click analytics
+          const dbClickData = await getDatabaseClickData(pool, link.id, startDate, endDate);
+          
+          // Get Short.io data if shortened URL exists
+          let shortIoData = null;
+          if (link.shortened_url) {
+            const shortUrlId = extractShortUrlId(link.shortened_url);
+            shortIoData = await getShortIoClickData(shortUrlId, startDate, endDate);
+          }
+          
+          // Combine database and Short.io data
+          const combinedData = combineTrackingData(dbClickData, shortIoData);
+          
+          return {
+            ...link,
+            clicks: combinedData.totalClicks,
+            uniqueClicks: combinedData.uniqueClicks,
+            clicksByDate: combinedData.clicksByDate,
+            clicksByCountry: combinedData.clicksByCountry,
+            clicksByReferrer: combinedData.clicksByReferrer,
+            clicksByDevice: combinedData.clicksByDevice,
+            effectivenessScore: combinedData.effectivenessScore,
+            conversionRate: combinedData.conversionRate,
+            avgDailyClicks: combinedData.avgDailyClicks,
+            peakDay: combinedData.peakDay,
+            trendDirection: combinedData.trendDirection
+          };
+        } catch (linkError) {
+          console.error(`Error processing link ${link.id}:`, linkError);
+          // Return basic link data without analytics if processing fails
+          return {
+            ...link,
+            clicks: 0,
+            uniqueClicks: 0,
+            clicksByDate: [],
+            clicksByCountry: [],
+            clicksByReferrer: [],
+            clicksByDevice: [],
+            effectivenessScore: 0,
+            conversionRate: 0,
+            avgDailyClicks: 0,
+            peakDay: '',
+            trendDirection: 'stable'
+          };
         }
-        
-        // Combine database and Short.io data
-        const combinedData = combineTrackingData(dbClickData, shortIoData);
-        
-        // Debug tracking data for form-filtered links
-        if (formId) {
-        }
-        
-        return {
-          ...link,
-          clicks: combinedData.totalClicks,
-          uniqueClicks: combinedData.uniqueClicks,
-          clicksByDate: combinedData.clicksByDate,
-          clicksByCountry: combinedData.clicksByCountry,
-          clicksByReferrer: combinedData.clicksByReferrer,
-          clicksByDevice: combinedData.clicksByDevice,
-          effectivenessScore: combinedData.effectivenessScore,
-          conversionRate: combinedData.conversionRate,
-          avgDailyClicks: combinedData.avgDailyClicks,
-          peakDay: combinedData.peakDay,
-          trendDirection: combinedData.trendDirection
-        };
       })
     );
 
@@ -369,9 +412,34 @@ export async function GET(req: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching UTM analytics:', error);
+    
+    // Provide more specific error information for debugging
+    let errorMessage = 'Failed to fetch UTM analytics';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      
+      // Handle specific database errors
+      if (error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        errorMessage = 'Database connection failed';
+        statusCode = 503;
+      } else if (error.message.includes('Access denied')) {
+        errorMessage = 'Database access denied';
+        statusCode = 503;
+      } else if (error.message.includes('Unknown column') || error.message.includes('Table')) {
+        errorMessage = 'Database schema error';
+        statusCode = 500;
+      }
+    }
+    
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch UTM analytics' },
-      { status: 500 }
+      { 
+        success: false, 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? error : undefined
+      },
+      { status: statusCode }
     );
   }
 }

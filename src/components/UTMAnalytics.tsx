@@ -262,25 +262,24 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         </button>
       </div>
 
-      {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Links</h3>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{insights.totalLinks}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Clicks</h3>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{insights.totalClicks}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Unique Clicks</h3>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{insights.totalUniqueClicks}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Conversion Rate</h3>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">
-            {insights.totalClicks > 0 ? ((insights.totalUniqueClicks / insights.totalClicks) * 100).toFixed(1) : 0}%
-          </p>
+      {/* Overview Stats - UTM Clicks Summary */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+        <h3 className="text-md font-medium text-gray-900 dark:text-white mb-3">UTM Click Summary</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+          <div className="text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Total Clicks</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{insights.totalClicks}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Unique Clicks</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{insights.totalUniqueClicks}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Click Rate</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white">
+              {insights.totalClicks > 0 ? ((insights.totalUniqueClicks / insights.totalClicks) * 100).toFixed(1) : 0}%
+            </p>
+          </div>
         </div>
       </div>
 

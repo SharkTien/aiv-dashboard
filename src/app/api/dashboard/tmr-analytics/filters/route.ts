@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     // Get universities from form responses - if entity is specified, filter by entity
     let universitiesQuery = `
-      SELECT DISTINCT fr.value as uni_name
+      SELECT DISTINCT COALESCE(um.uni_name, fr.value) as uni_name
       FROM form_submissions fs
       LEFT JOIN form_responses fr ON fs.id = fr.submission_id
       LEFT JOIN form_fields ff ON fr.field_id = ff.id
@@ -42,8 +42,14 @@ export async function GET(request: NextRequest) {
     let queryParams: any[] = [formId];
     
     if (entity) {
-      universitiesQuery += ` AND fs.entity_id = (SELECT entity_id FROM entity WHERE name = ?)`;
-      queryParams.push(entity);
+      // If entity is a number (entity_id), use it directly, otherwise treat as entity name
+      if (!isNaN(Number(entity))) {
+        universitiesQuery += ` AND fs.entity_id = ?`;
+        queryParams.push(Number(entity));
+      } else {
+        universitiesQuery += ` AND fs.entity_id = (SELECT entity_id FROM entity WHERE name = ?)`;
+        queryParams.push(entity);
+      }
     }
     
     universitiesQuery += ` ORDER BY COALESCE(um.uni_name, fr.value)`;

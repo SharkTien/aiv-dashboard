@@ -11,6 +11,7 @@ interface Form {
 
 interface AnalyticsData {
   totalSignUps: number;
+  userSignUps: number;
   dailySignUps: Array<{
     date: string;
     local: string;
@@ -66,6 +67,7 @@ export default function AnalyticsPage() {
   const [filteredUniversities, setFilteredUniversities] = useState<string[]>([]);
   const [filteredUniDistribution, setFilteredUniDistribution] = useState<AnalyticsData['uniDistribution']>([]);
   const [loadingUniDistribution, setLoadingUniDistribution] = useState(false);
+  const [activeTab, setActiveTab] = useState<'clicks' | 'forms'>('clicks');
 
   useEffect(() => {
     loadForms();
@@ -262,12 +264,12 @@ export default function AnalyticsPage() {
                   </svg>
                 </div>
                 <div className="ml-4 flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Channels</p>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Your Sign Ups</p>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-                    {analyticsData.channelBreakdown.length}
+                    {analyticsData.userSignUps.toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Number of locals with sign ups
+                    Your entity's submissions for this form
                   </p>
                 </div>
               </div>
