@@ -397,9 +397,6 @@ function AllocationRequestCard({
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Form Responses:</p>
                 {request.responses
                   .filter(response => 
-                    response.field_name !== 'uni' && 
-                    response.field_name !== 'other--uni' &&
-                    response.field_name !== 'otheruni' &&
                     !response.field_name.toLowerCase().includes('long')
                   )
                   .map((response, index) => (
