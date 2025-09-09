@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
 
   // Fast path: if redirecting, schedule non-blocking tracking and return immediately
   if (redirect_url) {
+    // Schedule background tracking (non-blocking)
     ;(async () => {
       try {
         const pool = getDbPool();
@@ -79,6 +80,8 @@ export async function GET(req: NextRequest) {
         console.warn('Background tracking failed:', error);
       }
     })();
+    
+    // Redirect to origin_url (which now includes UTM parameters)
     return NextResponse.redirect(decodeURIComponent(redirect_url));
   }
   

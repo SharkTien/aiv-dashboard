@@ -229,8 +229,27 @@ export async function POST(req: NextRequest) {
     
     const linkId = (result as any).insertId;
     
-    // Generate tracking link
-    const trackingLink = generateTrackingLink(linkId, snapshotBaseUrl);
+    // Get UTM parameters for origin_url generation
+    const [utmParams] = await pool.query(`
+      SELECT 
+        uc.code as campaign_code,
+        us.code as source_code,
+        um.code as medium_code,
+        ul.utm_name
+      FROM utm_links ul
+      JOIN utm_campaigns uc ON ul.campaign_id = uc.id
+      JOIN utm_sources us ON ul.source_id = us.id
+      JOIN utm_mediums um ON ul.medium_id = um.id
+      WHERE ul.id = ?
+    `, [linkId]);
+    
+    const utmData = Array.isArray(utmParams) && utmParams.length > 0 ? utmParams[0] as any : null;
+    
+    // Generate origin_url with UTM parameters
+    const originUrl = generateOriginUrl(snapshotBaseUrl, utmData);
+    
+    // Generate tracking link with origin_url
+    const trackingLink = generateTrackingLink(linkId, originUrl);
     
     // Update UTM link with tracking_link
     await pool.query(
@@ -354,6 +373,25 @@ export async function DELETE(req: NextRequest) {
     console.error("Error deleting UTM link:", error);
     return NextResponse.json({ error: "Failed to delete UTM link" }, { status: 500 });
   }
+}
+
+// Helper function to generate origin URL with UTM parameters
+function generateOriginUrl(baseUrl: string, utmData: any): string {
+  if (!utmData) return baseUrl;
+  
+  const url = new URL(baseUrl);
+  
+  // Add UTM parameters
+  url.searchParams.set('utm_campaign', utmData.campaign_code || '');
+  url.searchParams.set('utm_source', utmData.source_code || '');
+  url.searchParams.set('utm_medium', utmData.medium_code || '');
+  
+  // Add utm_content if utm_name exists
+  if (utmData.utm_name) {
+    url.searchParams.set('utm_content', utmData.utm_name);
+  }
+  
+  return url.toString();
 }
 
 // Helper function to generate tracking link
