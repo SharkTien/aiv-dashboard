@@ -99,19 +99,33 @@ export async function GET(req: NextRequest) {
       TMR: "https://www.aiesec.vn/join-aiesec-fall-2025"
     };
     
-    // Use base_url from utm_links if available, otherwise fall back to config
+    // Use base_url from utm_links if available, otherwise fall back to config with UTM params
     const linksWithBaseUrl = links.map((link: any) => {
       // If link already has base_url saved, use that (snapshot)
       if (link.base_url) {
         return link;
       }
       
-      // Otherwise fall back to current config (for legacy links)
+      // Otherwise fall back to current config (for legacy links) and add UTM params
       const hubType = link.form_type === 'TMR' ? 'TMR' : 'oGV';
       const configUrl = baseUrls.find((url: any) => url.hub_type === hubType)?.base_url;
+      const baseUrl = configUrl || defaultUrls[hubType as keyof typeof defaultUrls];
+      
+      // Build UTM parameters for legacy links
+      const utmParams = new URLSearchParams();
+      utmParams.set('campaign_id', link.campaign_code || '');
+      utmParams.set('source_id', link.source_code || '');
+      utmParams.set('medium_id', link.medium_code || '');
+      if (link.utm_name && link.utm_name.trim() !== '') {
+        utmParams.set('utm_name', link.utm_name.trim());
+      }
+      
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      const fullBaseUrl = `${baseUrl}${separator}${utmParams.toString()}`;
+      
       return {
         ...link,
-        base_url: configUrl || defaultUrls[hubType as keyof typeof defaultUrls]
+        base_url: fullBaseUrl
       };
     });
 
@@ -218,7 +232,38 @@ export async function POST(req: NextRequest) {
     };
     
     const configUrl = Array.isArray(baseUrlRows) && baseUrlRows.length > 0 ? (baseUrlRows[0] as any).base_url : null;
-    const snapshotBaseUrl = configUrl || defaultUrls[hubType as keyof typeof defaultUrls];
+    const baseUrl = configUrl || defaultUrls[hubType as keyof typeof defaultUrls];
+    
+    // Get UTM codes for parameters
+    const [campaignCodeRows] = await pool.query(
+      "SELECT code FROM utm_campaigns WHERE id = ?",
+      [campaign_id]
+    );
+    const [sourceCodeRows] = await pool.query(
+      "SELECT code FROM utm_sources WHERE id = ?",
+      [source_id]
+    );
+    const [mediumCodeRows] = await pool.query(
+      "SELECT code FROM utm_mediums WHERE id = ?",
+      [medium_id]
+    );
+    
+    const campaignCode = Array.isArray(campaignCodeRows) && campaignCodeRows.length > 0 ? (campaignCodeRows[0] as any).code : '';
+    const sourceCode = Array.isArray(sourceCodeRows) && sourceCodeRows.length > 0 ? (sourceCodeRows[0] as any).code : '';
+    const mediumCode = Array.isArray(mediumCodeRows) && mediumCodeRows.length > 0 ? (mediumCodeRows[0] as any).code : '';
+    
+    // Build UTM parameters
+    const utmParams = new URLSearchParams();
+    utmParams.set('campaign_id', campaignCode);
+    utmParams.set('source_id', sourceCode);
+    utmParams.set('medium_id', mediumCode);
+    if (utm_name && utm_name.trim() !== '') {
+      utmParams.set('utm_name', utm_name.trim());
+    }
+    
+    // Append UTM parameters to base_url
+    const separator = baseUrl.includes('?') ? '&' : '?';
+    const snapshotBaseUrl = `${baseUrl}${separator}${utmParams.toString()}`;
     
     
     // Insert UTM link WITH base_url snapshot
@@ -229,27 +274,8 @@ export async function POST(req: NextRequest) {
     
     const linkId = (result as any).insertId;
     
-    // Get UTM parameters for origin_url generation
-    const [utmParams] = await pool.query(`
-      SELECT 
-        uc.code as campaign_code,
-        us.code as source_code,
-        um.code as medium_code,
-        ul.utm_name
-      FROM utm_links ul
-      JOIN utm_campaigns uc ON ul.campaign_id = uc.id
-      JOIN utm_sources us ON ul.source_id = us.id
-      JOIN utm_mediums um ON ul.medium_id = um.id
-      WHERE ul.id = ?
-    `, [linkId]);
-    
-    const utmData = Array.isArray(utmParams) && utmParams.length > 0 ? utmParams[0] as any : null;
-    
-    // Generate origin_url with UTM parameters
-    const originUrl = generateOriginUrl(snapshotBaseUrl, utmData);
-    
-    // Generate tracking link with origin_url
-    const trackingLink = generateTrackingLink(linkId, originUrl);
+    // Generate tracking link
+    const trackingLink = generateTrackingLink(linkId, snapshotBaseUrl);
     
     // Update UTM link with tracking_link
     await pool.query(
@@ -373,25 +399,6 @@ export async function DELETE(req: NextRequest) {
     console.error("Error deleting UTM link:", error);
     return NextResponse.json({ error: "Failed to delete UTM link" }, { status: 500 });
   }
-}
-
-// Helper function to generate origin URL with UTM parameters
-function generateOriginUrl(baseUrl: string, utmData: any): string {
-  if (!utmData) return baseUrl;
-  
-  const url = new URL(baseUrl);
-  
-  // Add UTM parameters
-  url.searchParams.set('utm_campaign', utmData.campaign_code || '');
-  url.searchParams.set('utm_source', utmData.source_code || '');
-  url.searchParams.set('utm_medium', utmData.medium_code || '');
-  
-  // Add utm_content if utm_name exists
-  if (utmData.utm_name) {
-    url.searchParams.set('utm_content', utmData.utm_name);
-  }
-  
-  return url.toString();
 }
 
 // Helper function to generate tracking link

@@ -218,6 +218,19 @@ async function createUTMLink(pool: any, params: any): Promise<number> {
   // 2. Handle proper validation and error checking
   // 3. Generate shortened URL if needed
   
+  // Build UTM parameters for the base_url
+  const utmParams = new URLSearchParams();
+  utmParams.set('campaign_id', params.utm_campaign || '');
+  utmParams.set('source_id', params.utm_source || '');
+  utmParams.set('medium_id', params.utm_medium || '');
+  if (params.utm_name && params.utm_name.trim() !== '') {
+    utmParams.set('utm_name', params.utm_name.trim());
+  }
+  
+  // Append UTM parameters to base_url
+  const separator = params.base_url.includes('?') ? '&' : '?';
+  const fullBaseUrl = `${params.base_url}${separator}${utmParams.toString()}`;
+  
   const [result] = await pool.query(
     `INSERT INTO utm_links (
       entity_id, campaign_id, source_id, medium_id,
@@ -227,7 +240,7 @@ async function createUTMLink(pool: any, params: any): Promise<number> {
     [
       params.entity_id,
       params.utm_name || '',
-      params.base_url
+      fullBaseUrl
     ]
   );
   

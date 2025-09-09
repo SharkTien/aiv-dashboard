@@ -62,7 +62,6 @@ export async function GET(req: NextRequest) {
 
   // Fast path: if redirecting, schedule non-blocking tracking and return immediately
   if (redirect_url) {
-    // Schedule background tracking (non-blocking)
     ;(async () => {
       try {
         const pool = getDbPool();
@@ -81,7 +80,25 @@ export async function GET(req: NextRequest) {
       }
     })();
     
-    // Redirect to origin_url (which now includes UTM parameters)
+    // Get base_url from database instead of using redirect_url parameter
+    try {
+      const pool = getDbPool();
+      const [rows] = await pool.query(
+        "SELECT base_url FROM utm_links WHERE id = ? LIMIT 1",
+        [parseInt(utm_link_id)]
+      );
+      
+      if (Array.isArray(rows) && rows.length > 0) {
+        const link = rows[0] as any;
+        if (link.base_url) {
+          return NextResponse.redirect(link.base_url);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to get base_url from database:', error);
+    }
+    
+    // Fallback to original redirect_url if database lookup fails
     return NextResponse.redirect(decodeURIComponent(redirect_url));
   }
   
