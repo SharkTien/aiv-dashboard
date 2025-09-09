@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       FROM form_submissions fs
       WHERE fs.form_id = ? AND fs.duplicated = FALSE
     `;
-    let totalSignUpsParams = [formId];
+    let totalSignUpsParams: (string | number)[] = [formId];
     
     if (entity) {
       // If entity is a number (entity_id), use it directly, otherwise treat as entity name
