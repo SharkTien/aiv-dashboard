@@ -28,6 +28,7 @@ export async function GET(
         CASE 
           WHEN fr.value = 'other--uni-2' THEN 'other--uni-2'
           WHEN um.uni_name IS NOT NULL THEN um.uni_name
+          WHEN NOT EXISTS (SELECT 1 FROM uni_mapping WHERE uni_id = fr.value) THEN fr.value
           ELSE fr.value
         END AS value_label
        FROM form_submissions fs

@@ -167,9 +167,9 @@ export async function POST(
               saveValue = String(uniList[0].uni_id);
               uniIdFromPayload = uniList[0].uni_id;
             } else {
-              // No matching uni_name found, save as "other--uni-2"
+              // No matching uni_name found, save the original university name
               const originalValue = saveValue;
-              saveValue = "other--uni-2";
+              saveValue = String(originalValue).trim();
               uniIdFromPayload = null;
             }
           }

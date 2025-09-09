@@ -91,13 +91,14 @@ export async function GET(request: NextRequest) {
           `SELECT 
             ff.field_name, 
             fr.value,
-            CASE 
-              WHEN ff.field_name = 'uni' AND fr.value = 'other--uni-2' THEN 'other--uni-2'
-              WHEN ff.field_name = 'uni' AND um.uni_name IS NOT NULL THEN um.uni_name
-              WHEN ff.field_name = 'other--uni' THEN fr.value
-              WHEN ff.field_name = 'otheruni' THEN fr.value
-              ELSE fr.value
-            END AS value_label
+             CASE 
+               WHEN ff.field_name = 'uni' AND fr.value = 'other--uni-2' THEN 'other--uni-2'
+               WHEN ff.field_name = 'uni' AND um.uni_name IS NOT NULL THEN um.uni_name
+               WHEN ff.field_name = 'uni' AND NOT EXISTS (SELECT 1 FROM uni_mapping WHERE uni_id = fr.value) THEN fr.value
+               WHEN ff.field_name = 'other--uni' THEN fr.value
+               WHEN ff.field_name = 'otheruni' THEN fr.value
+               ELSE fr.value
+             END AS value_label
            FROM form_responses fr
            LEFT JOIN form_fields ff ON fr.field_id = ff.id
            LEFT JOIN uni_mapping um

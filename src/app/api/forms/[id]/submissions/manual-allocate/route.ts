@@ -30,8 +30,9 @@ export async function GET(
         ff.field_name,
         fr.value,
         CASE 
-          WHEN ff.field_name = 'uni' AND fr.value != 'other--uni-2' THEN um.uni_name
           WHEN ff.field_name = 'uni' AND fr.value = 'other--uni-2' THEN 'other--uni-2'
+          WHEN ff.field_name = 'uni' AND um.uni_name IS NOT NULL THEN um.uni_name
+          WHEN ff.field_name = 'uni' AND NOT EXISTS (SELECT 1 FROM uni_mapping WHERE uni_id = fr.value) THEN fr.value
           ELSE fr.value
         END as value_label
       FROM form_submissions fs
