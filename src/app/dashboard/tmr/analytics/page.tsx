@@ -65,10 +65,12 @@ export default function AnalyticsPage() {
   const [entities, setEntities] = useState<string[]>([]);
   const [universities, setUniversities] = useState<string[]>([]);
   const [filteredUniversities, setFilteredUniversities] = useState<string[]>([]);
+  const [uniSearch, setUniSearch] = useState<string>("");
   const [filteredUniDistribution, setFilteredUniDistribution] = useState<AnalyticsData['uniDistribution']>([]);
   const [loadingUniDistribution, setLoadingUniDistribution] = useState(false);
   const [activeTab, setActiveTab] = useState<'clicks' | 'forms'>('clicks');
   const [user, setUser] = useState<any>(null);
+  const [myEntityName, setMyEntityName] = useState<string>("");
   const [userSignUps, setUserSignUps] = useState<number>(0);
 
   useEffect(() => {
@@ -77,37 +79,36 @@ export default function AnalyticsPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedForm && user) {
-      loadUserSignUps();
-      // Auto-set entity filter for non-admin users
-      if (user.role !== 'admin' && user.entity_id) {
-        // Find entity name by entity_id
-        const entityName = entities.find(entity => {
-          // This assumes entities array contains entity names
-          // You might need to adjust this based on your data structure
-          return entity === user.entity_id || entity.includes(user.entity_id);
-        });
-        if (entityName) {
-          setSelectedEntity(entityName);
-        }
-        // Load filtered universities for non-admin users
-        loadFilteredUniversities();
-      }
+    if (!selectedForm || !user) return;
+    if (user.role !== 'admin' && !myEntityName) return;
+    loadUserSignUps();
+    if (user.role !== 'admin' && myEntityName) {
+      setSelectedEntity(myEntityName);
+      loadFilteredUniversities();
     }
-  }, [selectedForm, user, entities]);
+  }, [selectedForm, user, myEntityName]);
 
   useEffect(() => {
-    if (selectedForm) {
-      loadAnalyticsData();
-      loadFilters();
-    }
-  }, [selectedForm]);
+    if (!selectedForm) return;
+    if (user && user.role !== 'admin' && !myEntityName) return;
+    loadAnalyticsData();
+    loadFilters();
+  }, [selectedForm, user, myEntityName]);
 
   useEffect(() => {
-    if (selectedForm) {
-      loadFilteredUniDistribution();
-    }
-  }, [selectedEntity, selectedUni]);
+    if (!selectedForm) return;
+    if (user && user.role !== 'admin' && !myEntityName) return;
+    loadFilteredUniDistribution();
+  }, [selectedEntity, selectedUni, user, myEntityName]);
+
+  // Non-admin: ensure first load fetches filtered data immediately when entity is ready
+  useEffect(() => {
+    if (!selectedForm) return;
+    if (!user || user.role === 'admin') return;
+    if (!myEntityName) return;
+    loadFilteredUniversities();
+    loadFilteredUniDistribution();
+  }, [selectedForm, user, myEntityName]);
 
   useEffect(() => {
     if (selectedEntity) {
@@ -118,19 +119,37 @@ export default function AnalyticsPage() {
     }
   }, [selectedEntity, universities, user]);
 
-  const loadUser = async () => {
-    try {
-      const response = await fetch('/api/auth/me');
-      const result = await response.json();
-      
-      if (result.user) {
-        setUser(result.user);
-      }
-    } catch (error) {
-      console.error('Error loading user:', error);
-    }
-  };
+  const displayedUniversities = (uniSearch.trim()
+    ? filteredUniversities.filter(u => String(u || '').toLowerCase().includes(uniSearch.toLowerCase()))
+    : filteredUniversities);
 
+    const loadUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me');
+        const result = await response.json();
+        
+        if (result.user) {
+          setUser(result.user);
+          try {
+            if (result.user.role !== 'admin' && result.user.entity_id) {
+              const entsRes = await fetch('/api/entities', { cache: 'no-store' });
+              if (entsRes.ok) {
+                const ents = await entsRes.json();
+                const items = Array.isArray(ents.items) ? ents.items : [];
+                const match = items.find((e: any) => e?.entity_id === result.user.entity_id);
+                if (match?.name) {
+                  setMyEntityName(match.name);
+                  setSelectedEntity(match.name);
+                }
+              }
+            }
+          } catch {}
+        }
+      } catch (error) {
+        console.error('Error loading user:', error);
+      }
+    };
+  
   const loadUserSignUps = async () => {
     if (!selectedForm || !user) return;
     
@@ -166,7 +185,11 @@ export default function AnalyticsPage() {
     if (!selectedForm) return;
 
     try {
-      const response = await fetch(`/api/dashboard/tmr-analytics/filters?formId=${selectedForm}`);
+      const baseUrl = `/api/dashboard/tmr-analytics/filters?formId=${selectedForm}`;
+      const url = user && user.role !== 'admin' && myEntityName
+        ? `${baseUrl}&entity=${encodeURIComponent(myEntityName)}`
+        : baseUrl;
+      const response = await fetch(url);
       const result = await response.json();
 
       if (result.success) {
@@ -180,12 +203,16 @@ export default function AnalyticsPage() {
   };
 
   const loadFilteredUniversities = async () => {
-    if (!selectedForm || !selectedEntity) return;
+    if (!selectedForm) return;
 
     try {
-      // For non-admin users, use entity_id directly
-      const entityParam = user && user.role !== 'admin' ? user.entity_id : selectedEntity;
-      const response = await fetch(`/api/dashboard/tmr-analytics/filters?formId=${selectedForm}&entity=${entityParam}`);
+      // For non-admin users, force use their entity name regardless of selectedEntity UI
+      const entityParam = user && user.role !== 'admin' ? (myEntityName || '') : selectedEntity;
+      if (!entityParam) {
+        setFilteredUniversities(universities);
+        return;
+      }
+      const response = await fetch(`/api/dashboard/tmr-analytics/filters?formId=${selectedForm}&entity=${encodeURIComponent(entityParam)}`);
       const result = await response.json();
 
       if (result.success) {
@@ -206,7 +233,11 @@ export default function AnalyticsPage() {
 
       if (result.success) {
         setAnalyticsData(result.data);
-        setFilteredUniDistribution(result.data.uniDistribution);
+        if (!user || user.role === 'admin') {
+          setFilteredUniDistribution(result.data.uniDistribution);
+        } else {
+          setFilteredUniDistribution([]);
+        }
       }
     } catch (error) {
       console.error('Error loading analytics data:', error);
@@ -220,11 +251,12 @@ export default function AnalyticsPage() {
 
     try {
       setLoadingUniDistribution(true);
-      const params = new URLSearchParams({
-        formId: selectedForm.toString()
-      });
-
-      if (selectedEntity) params.append('entity', selectedEntity);
+      const params = new URLSearchParams({ formId: selectedForm.toString() });
+      if (user && user.role !== 'admin' && myEntityName) {
+        params.append('entity', myEntityName);
+      } else if (selectedEntity) {
+        params.append('entity', selectedEntity);
+      }
       if (selectedUni) params.append('uni', selectedUni);
 
       const response = await fetch(`/api/dashboard/tmr-analytics/uni-distribution?${params}`);
@@ -445,7 +477,7 @@ export default function AnalyticsPage() {
                           className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                         >
                           <option value="">All</option>
-                          {filteredUniversities.map((uni) => (
+                          {displayedUniversities.map((uni) => (
                             <option key={uni} value={uni}>
                               {uni}
                             </option>
@@ -631,7 +663,7 @@ function UTMBreakdownTable({ data }: { data: AnalyticsData['utmBreakdown'] }) {
           </tr>
         </thead>
         <tbody>
-          {data.slice(0, 10).map((item, index) => (
+          {data.slice(0, 10).filter(item => item.utm_campaign !== "No campaign").map((item, index) => (
             <tr key={index} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
               <td 
                 className="py-2 text-gray-900 dark:text-white truncate max-w-32 cursor-help"
@@ -720,7 +752,7 @@ function PieChart({ data }: { data: AnalyticsData['uniDistribution'] }) {
       <div className="absolute inset-0 flex items-center justify-center text-center">
         <div className="px-3 py-2 animate-bounce" style={{ animationDelay: '1s', animationDuration: '2s' }}>
           <div className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-            {data.reduce((sum, item) => sum + item.signUps, 0).toLocaleString()}
+          {Number(data.reduce((sum, item) => sum + (item?.signUps || 0), 0)).toLocaleString()}
           </div>
           <div className="text-xs text-gray-600 dark:text-gray-400">Total Sign Ups</div>
         </div>

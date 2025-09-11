@@ -65,26 +65,51 @@ export default function AnalyticsPage() {
   const [entities, setEntities] = useState<string[]>([]);
   const [universities, setUniversities] = useState<string[]>([]);
   const [filteredUniversities, setFilteredUniversities] = useState<string[]>([]);
+  const [uniSearch, setUniSearch] = useState<string>("");
   const [filteredUniDistribution, setFilteredUniDistribution] = useState<AnalyticsData['uniDistribution']>([]);
   const [loadingUniDistribution, setLoadingUniDistribution] = useState(false);
   const [activeTab, setActiveTab] = useState<'clicks' | 'forms'>('clicks');
 
+  const [user, setUser] = useState<any>(null);
+  const [userSignUps, setUserSignUps] = useState<number>(0);
+  const [myEntityName, setMyEntityName] = useState<string>("");
+
   useEffect(() => {
     loadForms();
+    loadUser();
   }, []);
 
   useEffect(() => {
-    if (selectedForm) {
-      loadAnalyticsData();
-      loadFilters();
+    if (!selectedForm || !user) return;
+    if (user.role !== 'admin' && !myEntityName) return;
+    loadUserSignUps();
+    if (user.role !== 'admin' && myEntityName) {
+      setSelectedEntity(myEntityName);
+      loadFilteredUniversities();
     }
-  }, [selectedForm]);
+  }, [selectedForm, user, myEntityName]);
 
   useEffect(() => {
-    if (selectedForm) {
-      loadFilteredUniDistribution();
-    }
-  }, [selectedEntity, selectedUni]);
+    if (!selectedForm) return;
+    if (user && user.role !== 'admin' && !myEntityName) return;
+    loadAnalyticsData();
+    loadFilters();
+  }, [selectedForm, user, myEntityName]);
+
+  useEffect(() => {
+    if (!selectedForm) return;
+    if (user && user.role !== 'admin' && !myEntityName) return;
+    loadFilteredUniDistribution();
+  }, [selectedEntity, selectedUni, user, myEntityName]);
+
+  // Non-admin: when myEntityName becomes available, fetch both lists and distribution immediately
+  useEffect(() => {
+    if (!selectedForm) return;
+    if (!user || user.role === 'admin') return;
+    if (!myEntityName) return;
+    loadFilteredUniversities();
+    loadFilteredUniDistribution();
+  }, [selectedForm, user, myEntityName]);
 
   useEffect(() => {
     if (selectedEntity) {
@@ -93,8 +118,56 @@ export default function AnalyticsPage() {
     } else {
       setFilteredUniversities(universities);
     }
-  }, [selectedEntity, universities]);
+  }, [selectedEntity, universities, user]);
 
+  // Client-side search filtering for universities
+  const displayedUniversities = (uniSearch.trim()
+    ? filteredUniversities.filter(u => String(u || '').toLowerCase().includes(uniSearch.toLowerCase()))
+    : filteredUniversities);
+
+  
+  const loadUser = async () => {
+    try {
+      const response = await fetch('/api/auth/me');
+      const result = await response.json();
+      
+      if (result.user) {
+        setUser(result.user);
+        try {
+          if (result.user.role !== 'admin' && result.user.entity_id) {
+            const entsRes = await fetch('/api/entities', { cache: 'no-store' });
+            if (entsRes.ok) {
+              const ents = await entsRes.json();
+              const items = Array.isArray(ents.items) ? ents.items : [];
+              const match = items.find((e: any) => e?.entity_id === result.user.entity_id);
+              if (match?.name) {
+                setMyEntityName(match.name);
+                setSelectedEntity(match.name);
+              }
+            }
+          }
+        } catch {}
+      }
+    } catch (error) {
+      console.error('Error loading user:', error);
+    }
+  };
+
+  const loadUserSignUps = async () => {
+    if (!selectedForm || !user) return;
+    
+    try {
+      const response = await fetch(`/api/dashboard/ogv-analytics?formId=${selectedForm}&entity=${user.entity_id}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setUserSignUps(result.data.totalSignUps);
+      }
+    } catch (error) {
+      console.error('Error loading user sign ups:', error);
+    }
+  };
+  
   const loadForms = async () => {
     try {
       const response = await fetch('/api/dashboard/ogv-forms');
@@ -115,7 +188,11 @@ export default function AnalyticsPage() {
     if (!selectedForm) return;
     
     try {
-      const response = await fetch(`/api/dashboard/ogv-analytics/filters?formId=${selectedForm}`);
+      const baseUrl = `/api/dashboard/ogv-analytics/filters?formId=${selectedForm}`;
+      const url = user && user.role !== 'admin' && myEntityName
+        ? `${baseUrl}&entity=${encodeURIComponent(myEntityName)}`
+        : baseUrl;
+      const response = await fetch(url);
       const result = await response.json();
       
       if (result.success) {
@@ -129,10 +206,15 @@ export default function AnalyticsPage() {
   };
 
   const loadFilteredUniversities = async () => {
-    if (!selectedForm || !selectedEntity) return;
+    if (!selectedForm) return;
     
     try {
-      const response = await fetch(`/api/dashboard/ogv-analytics/filters?formId=${selectedForm}&entity=${selectedEntity}`);
+      const entityParam = user && user.role !== 'admin' ? (myEntityName || '') : selectedEntity;
+      if (!entityParam) {
+        setFilteredUniversities(universities);
+        return;
+      }
+      const response = await fetch(`/api/dashboard/ogv-analytics/filters?formId=${selectedForm}&entity=${encodeURIComponent(entityParam)}`);
       const result = await response.json();
       
       if (result.success) {
@@ -153,7 +235,12 @@ export default function AnalyticsPage() {
       
       if (result.success) {
         setAnalyticsData(result.data);
-        setFilteredUniDistribution(result.data.uniDistribution);
+        // For admin, default to all; for non-admin, wait for filtered call
+        if (!user || user.role === 'admin') {
+          setFilteredUniDistribution(result.data.uniDistribution);
+        } else {
+          setFilteredUniDistribution([]);
+        }
       }
     } catch (error) {
       console.error('Error loading analytics data:', error);
@@ -167,11 +254,12 @@ export default function AnalyticsPage() {
     
     try {
       setLoadingUniDistribution(true);
-      const params = new URLSearchParams({
-        formId: selectedForm.toString()
-      });
-      
-      if (selectedEntity) params.append('entity', selectedEntity);
+      const params = new URLSearchParams({ formId: selectedForm.toString() });
+      if (user && user.role !== 'admin' && myEntityName) {
+        params.append('entity', myEntityName);
+      } else if (selectedEntity) {
+        params.append('entity', selectedEntity);
+      }
       if (selectedUni) params.append('uni', selectedUni);
       
       const response = await fetch(`/api/dashboard/ogv-analytics/uni-distribution?${params}`);
@@ -219,203 +307,229 @@ export default function AnalyticsPage() {
           </select>
         </div>
       </div>
+ {/* Tab Navigation */}
+ <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <nav className="-mb-px flex space-x-8 px-6" aria-label="Tabs">
+            <button
+              onClick={() => setActiveTab('clicks')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'clicks'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Click Tracking
+            </button>
+            <button
+              onClick={() => setActiveTab('forms')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'forms'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Form Tracking
+            </button>
+          </nav>
+        </div>
 
-      {/* UTM Clicks Analytics (Short.io) */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">UTM Clicks</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Click tracking and UTM effectiveness (Short.io).</p>
-        <UTMAnalytics formType="oGV" selectedFormId={selectedForm} />
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === 'clicks' && (
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">UTM Clicks</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Click tracking and UTM effectiveness</p>
+              <UTMAnalytics formType="TMR" selectedFormId={selectedForm} />
+            </div>
+          )}
+
+          {activeTab === 'forms' && (
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Form Submissions Analytics</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Form submissions tracking and analysis</p>
+
+              {loading && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              )}
+
+              {analyticsData && !loading && (
+                <div className="space-y-6">
+                  {/* Overview Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                      <div className="flex items-center">
+                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                          <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                        </div>
+                        <div className="ml-4 flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Sign Ups</p>
+                          <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
+                            {analyticsData.totalSignUps.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Total submissions for this campaign
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+
+                       {/* Your Sign Ups Card - Only show for non-admin users */}
+                       {user && user?.role !== 'admin' && (
+                         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                         <div className="flex items-center">
+                           <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                             <svg className="w-6 h-6 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                             </svg>
+                           </div>
+                           <div className="ml-4 flex-1 min-w-0">
+                             <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Your Total Sign Ups</p>
+                             <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
+                               {userSignUps.toLocaleString()}
+                             </p>
+                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                               Your entity's submissions for this form
+                             </p>
+                           </div>
+                         </div>
+                       </div>
+                       )}
+                   </div>
+ 
+                   {/* Daily Sign Ups Table */}
+                  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        Daily Sign Ups by Local ({selectedFormName.replace('TMR', '').replace('Submissions', '')})
+                      </h2>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Daily sign ups by local for all submissions. Green cells indicate days with sign ups.
+                      </p>
+                    </div>
+                    <div className="overflow-x-auto overflow-y-auto thin-scrollbar">
+                      <DailySignUpsTable data={analyticsData.dailySignUps} />
+                    </div>
+                  </div>
+
+                  {/* Channel Breakdown */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                        Local ranking
+                      </h3>
+                      <ChannelBreakdownChart data={analyticsData.channelBreakdown} />
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                        UTM Campaign Performance
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        Top 10 most effective UTM campaigns. Shows campaign, source, medium and corresponding sign ups.
+                      </p>
+                      <UTMBreakdownTable data={analyticsData.utmBreakdown} />
+                    </div>
+                  </div>
+
+                  {/* University Distribution */}
+                  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      University Distribution
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                      Distribution of sign ups by university. Shows percentage breakdown of submissions from each university.
+                    </p>
+
+                    {/* Filters for University Distribution */}
+                    <div className="flex flex-wrap gap-3 mb-4">
+                      {/* Only show entity filter for admin users */}
+                      {user && user.role === 'admin' && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                            Entity:
+                          </label>
+                          <select
+                            value={selectedEntity}
+                            onChange={(e) => setSelectedEntity(e.target.value)}
+                            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">All</option>
+                            {entities.map((entity) => (
+                              <option key={entity} value={entity}>
+                                {entity}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                          University:
+                        </label>
+                        <select
+                          value={selectedUni}
+                          onChange={(e) => setSelectedUni(e.target.value)}
+                          className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">All</option>
+                          {displayedUniversities.map((uni) => (
+                            <option key={uni} value={uni}>
+                              {uni}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {loadingUniDistribution ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                        <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Loading university data...</span>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                          <PieChart data={filteredUniDistribution} />
+                        </div>
+                        <div>
+                          <UniversityList data={filteredUniDistribution} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Academic Analytics */}
+                  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      Academic Analytics
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                      Analysis of academic background including major distribution and university year breakdown.
+                    </p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">Major Distribution</h4>
+                        <MajorChart data={analyticsData.majorDistribution} />
+                      </div>
+                      <div>
+                        <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">University Year Distribution</h4>
+                        <UniversityYearChart data={analyticsData.universityYearDistribution} />
+                      </div>
+                    </div>
+                  </div>
+                </div>  
+              )}
+            </div>
+          )}
+        </div>
       </div>
-
-      {loading && (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        </div>
-      )}
-
-      {analyticsData && !loading && (
-        <div className="space-y-6">
-          {/* Overview Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                  <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <div className="ml-4 flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Sign Ups</p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
-                    {analyticsData.totalSignUps.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Total submissions excluding duplicates
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                  <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <div className="ml-4 flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Your Sign Ups</p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-                    {analyticsData.userSignUps.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Your entity's submissions for this form
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                  <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-                <div className="ml-4 flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">UTM Campaigns</p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-                    {analyticsData.utmBreakdown.length}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Number of active UTM campaigns
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Daily Sign Ups Table */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Daily Sign Ups by Local ({selectedFormName.replace('oGV', '').replace('Submissions', '')}) 
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Daily sign ups by local for all submissions. Green cells indicate days with sign ups.
-              </p>
-            </div>
-            <div className="overflow-x-auto overflow-y-auto thin-scrollbar">
-              <DailySignUpsTable data={analyticsData.dailySignUps} />
-            </div>
-          </div>
-
-          {/* Channel Breakdown */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Local ranking
-              </h3>
-              <ChannelBreakdownChart data={analyticsData.channelBreakdown} />
-            </div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                UTM Campaign Performance
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Top 10 most effective UTM campaigns. Shows campaign, source, medium and corresponding sign ups.
-              </p>
-              <UTMBreakdownTable data={analyticsData.utmBreakdown} />
-            </div>
-          </div>
-
-          {/* University Distribution */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              University Distribution
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Distribution of sign ups by university. Shows percentage breakdown of submissions from each university.
-            </p>
-            
-            {/* Filters for University Distribution */}
-            <div className="flex flex-wrap gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  Entity:
-                </label>
-                <select
-                  value={selectedEntity}
-                  onChange={(e) => setSelectedEntity(e.target.value)}
-                  className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">All</option>
-                  {entities.map((entity) => (
-                    <option key={entity} value={entity}>
-                      {entity}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  University:
-                </label>
-                <select
-                  value={selectedUni}
-                  onChange={(e) => setSelectedUni(e.target.value)}
-                  className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">All</option>
-                  {filteredUniversities.map((uni) => (
-                    <option key={uni} value={uni}>
-                      {uni}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            {loadingUniDistribution ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Loading university data...</span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                  <PieChart data={filteredUniDistribution} />
-                </div>
-                <div>
-                  <UniversityList data={filteredUniDistribution} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Academic Analytics */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              Academic Analytics
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Analysis of academic background including major distribution and university year breakdown.
-            </p>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div>
-                <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">Major Distribution</h4>
-                <MajorChart data={analyticsData.majorDistribution} />
-              </div>
-              <div>
-                <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">University Year Distribution</h4>
-                <UniversityYearChart data={analyticsData.universityYearDistribution} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -526,10 +640,10 @@ function ChannelBreakdownChart({ data }: { data: AnalyticsData['channelBreakdown
             </div>
           </div>
           <div className="w-16 text-sm text-gray-900 dark:text-white text-right">
-            {item.signUps.toLocaleString()}
+            {Number(item?.signUps || 0).toLocaleString()}
           </div>
           <div className="w-12 text-sm text-gray-500 dark:text-gray-400 text-right">
-            {item.percentage.toFixed(1)}%
+            {Number(item?.percentage || 0).toFixed(1)}%
           </div>
         </div>
       ))}
@@ -551,28 +665,28 @@ function UTMBreakdownTable({ data }: { data: AnalyticsData['utmBreakdown'] }) {
           </tr>
         </thead>
         <tbody>
-          {data.slice(0, 10).map((item, index) => (
+          {data.slice(0, 10).filter(item => item.utm_campaign !== "No campaign").map((item, index) => (
             <tr key={index} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
               <td 
                 className="py-2 text-gray-900 dark:text-white truncate max-w-32 cursor-help"
-                title={item.utm_campaign}
+                title={item?.utm_campaign || ''}
               >
-                {item.utm_campaign}
+                {item?.utm_campaign || ''}
               </td>
               <td 
                 className="py-2 text-gray-600 dark:text-gray-400 truncate max-w-32 cursor-help"
-                title={item.utm_source}
+                title={item?.utm_source || ''}
               >
-                {item.utm_source}
+                {item?.utm_source || ''}
               </td>
               <td 
                 className="py-2 text-gray-600 dark:text-gray-400 truncate max-w-32 cursor-help"
-                title={item.utm_medium}
+                title={item?.utm_medium || ''}
               >
-                {item.utm_medium}
+                {item?.utm_medium || ''}
               </td>
               <td className="py-2 text-right font-medium text-gray-900 dark:text-white">
-                {item.signUps.toLocaleString()}
+                {Number(item?.signUps || 0).toLocaleString()}
               </td>
             </tr>
           ))}
@@ -640,7 +754,7 @@ function PieChart({ data }: { data: AnalyticsData['uniDistribution'] }) {
       <div className="absolute inset-0 flex items-center justify-center text-center">
         <div className="px-3 py-2 animate-bounce" style={{ animationDelay: '1s', animationDuration: '2s' }}>
           <div className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-            {data.reduce((sum, item) => sum + item.signUps, 0).toLocaleString()}
+            {Number(data.reduce((sum, item) => sum + (item?.signUps || 0), 0)).toLocaleString()}
           </div>
           <div className="text-xs text-gray-600 dark:text-gray-400">Total Sign Ups</div>
         </div>
@@ -682,7 +796,7 @@ function UniversityList({ data }: { data: AnalyticsData['uniDistribution'] }) {
               {item.uni_name}
             </div>
             <div className="text-xs text-gray-500 dark:text-gray-400">
-              {item.percentage.toFixed(1)}% • {item.signUps.toLocaleString()} sign ups
+              {Number(item?.percentage || 0).toFixed(1)}% • {Number(item?.signUps || 0).toLocaleString()} sign ups
             </div>
           </div>
         </div>
@@ -833,7 +947,7 @@ function UniversityYearChart({ data }: { data: AnalyticsData['universityYearDist
           <div className="w-4 h-4 bg-blue-500 dark:bg-blue-600/80 border border-gray-200 dark:border-gray-600 rounded"></div>
           <span className="text-gray-500 dark:text-gray-400">High</span>
         </div>
-        <span className="text-gray-500 dark:text-gray-400">Max: {maxValue.toLocaleString()}</span>
+        <span className="text-gray-500 dark:text-gray-400">Max: {Number(maxValue || 0).toLocaleString()}</span>
       </div>
       
       <div className="overflow-x-auto">
@@ -886,12 +1000,12 @@ function UniversityYearChart({ data }: { data: AnalyticsData['universityYearDist
                       key={`${entity?.entity_name}-${year}`}
                       className={`text-center py-2 px-3 text-gray-700 dark:text-gray-300 transition-colors duration-200 ${getColorIntensity(count)}`}
                     >
-                      {count > 0 ? count.toLocaleString() : '-'}
+                      {count > 0 ? Number(count).toLocaleString() : '-'}
                     </td>
                   );
                 })}
                 <td className="text-center py-2 px-3 font-semibold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700">
-                  {entityTotal.toLocaleString()}
+                  {Number(entityTotal || 0).toLocaleString()}
                 </td>
               </tr>
             );
@@ -930,10 +1044,10 @@ function AgeGroupChart({ data }: { data: AnalyticsData['ageGroupDistribution'] }
             </div>
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            {item.percentage.toFixed(1)}%
+            {Number(item?.percentage || 0).toFixed(1)}%
           </div>
           <div className="text-sm font-medium text-gray-900 dark:text-white ml-2">
-            {item.signUps.toLocaleString()}
+            {Number(item?.signUps || 0).toLocaleString()}
           </div>
         </div>
       ))}

@@ -38,12 +38,22 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   const [loading, setLoading] = useState(true);
   // Admin detection for inline edit
   const [isAdmin, setIsAdmin] = useState(false);
+  const [allocatingId, setAllocatingId] = useState<number | null>(null);
+  const [editingEntityFor, setEditingEntityFor] = useState<number | null>(null);
+  const [allEntities, setAllEntities] = useState<Array<{ entity_id: number; name: string; type?: string }>>([]);
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/auth/me', { cache: 'no-store' });
-        const json = await res.json();
+        const [userRes, entitiesRes] = await Promise.all([
+          fetch('/api/auth/me', { cache: 'no-store' }),
+          fetch('/api/entities', { cache: 'no-store' })
+        ]);
+        const json = await userRes.json();
         setIsAdmin(json?.user?.role === 'admin');
+        if (entitiesRes.ok) {
+          const ed = await entitiesRes.json();
+          setAllEntities(Array.isArray(ed.items) ? ed.items : []);
+        }
       } catch {}
     })();
   }, []);
@@ -593,6 +603,33 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
 
   const goToPreviousPage = () => goToPage(currentPage - 1);
   const goToNextPage = () => goToPage(currentPage + 1);
+
+  const localEntityOptions = useMemo(() => {
+    return allEntities
+      .filter((e: any) => (e.type === 'local') && (String(e.name || '').toLowerCase() !== 'organic'))
+      .map((e: any) => ({ id: e.entity_id, name: e.name }));
+  }, [allEntities]);
+
+  const handleAllocateEntity = async (submissionId: number, entityId: number) => {
+    try {
+      setAllocatingId(submissionId);
+      const res = await fetch(`/api/forms/${formId}/submissions/${submissionId}/allocate-entity`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_id: entityId })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Allocate failed');
+        return;
+      }
+      const newName = localEntityOptions.find(e => e.id === entityId)?.name || '';
+      setSubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, entityId, entityName: newName } : s));
+      setEditingEntityFor(null);
+    } finally {
+      setAllocatingId(null);
+    }
+  };
 
   const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1341,12 +1378,31 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
                         </td>
                         {options?.showEntity !== false && (
                           <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                            {sub.entityName ? (
-                              <span className="text-blue-600 dark:text-blue-400 font-medium">
-                                {sub.entityName}
-                              </span>
+                            {editingEntityFor === sub.id && isAdmin ? (
+                              <select
+                                autoFocus
+                                className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                onBlur={() => setEditingEntityFor(null)}
+                                onChange={(e) => {
+                                  const id = Number(e.target.value);
+                                  if (id) handleAllocateEntity(sub.id, id);
+                                }}
+                                disabled={allocatingId === sub.id}
+                                defaultValue=""
+                              >
+                                <option value="" disabled>Select local entity...</option>
+                                {localEntityOptions.map(opt => (
+                                  <option key={opt.id} value={opt.id}>{opt.name}</option>
+                                ))}
+                              </select>
                             ) : (
-                              <span className="text-gray-400">NOT FOUND</span>
+                              <span
+                                className={isAdmin ? 'cursor-pointer text-blue-600 dark:text-blue-400 font-medium' : 'text-blue-600 dark:text-blue-400 font-medium'}
+                                onDoubleClick={() => { if (isAdmin) setEditingEntityFor(sub.id); }}
+                                title={isAdmin ? 'Double-click to allocate' : undefined}
+                              >
+                                {sub.entityName || <span className="text-gray-400">Not allocated</span>}
+                              </span>
                             )}
                           </td>
                         )}

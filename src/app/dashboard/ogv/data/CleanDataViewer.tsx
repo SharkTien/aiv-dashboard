@@ -32,6 +32,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<string>("timestamp");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  // Removed inline allocation in Clean view (only Raw Data supports it)
   
   // Filter states
   const [startDate, setStartDate] = useState<string>('');
@@ -159,16 +160,12 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
 
   async function loadFilterOptions() {
     try {
-      // Load entities (UTM campaigns now come from facetOptions)
+      // Load entities (for filtering) and keep full list for admin allocation
       const entityResponse = await fetch('/api/entities');
       if (entityResponse.ok) {
         const entityData = await entityResponse.json();
         if (entityData.success) {
-          setEntities(entityData.items.map((item: any) => ({
-            value: item.name,
-            label: item.name,
-            count: 0 // We'll calculate this from submissions if needed
-          })));
+          setEntities(entityData.items.map((item: any) => ({ value: item.name, label: item.name, count: 0 })));
         }
       }
     } catch (error) {
@@ -183,6 +180,8 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       loadFilterOptions();
     }
   }, [formId]);
+
+  // No allocate handlers in Clean view
 
   // Build facet options from current submissions (same as Raw Data)
   const facetOptions = useMemo(() => {
@@ -653,7 +652,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
               return (
                 <tr key={submission.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{new Date(submission.timestamp).toLocaleDateString('en-GB')}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" title="Editable in Raw Data only">
                     <span className="block overflow-hidden text-ellipsis" title={submission.entityName || undefined}>
                       {submission.entityName || <span className="text-gray-400">Not allocated</span>}
                     </span>
