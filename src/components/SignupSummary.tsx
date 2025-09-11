@@ -43,9 +43,11 @@ interface SignupSummaryProps {
   className?: string;
   formId?: number | null;
   formType?: 'oGV' | 'TMR' | null;
+  startDate?: string;
+  endDate?: string;
 }
 
-export default function SignupSummary({ className = '', formId, formType }: SignupSummaryProps) {
+export default function SignupSummary({ className = '', formId, formType, startDate, endDate }: SignupSummaryProps) {
   const [localSummary, setLocalSummary] = useState<SummaryRow[]>([]);
   const [localTotals, setLocalTotals] = useState<SummaryRow | null>(null);
   const [nationalSummary, setNationalSummary] = useState<NationalSummary[]>([]);
@@ -124,7 +126,7 @@ export default function SignupSummary({ className = '', formId, formType }: Sign
     if (formId) {
       loadSignupData();
     }
-  }, [formId, comparePhaseFilter]);
+  }, [formId, comparePhaseFilter, startDate, endDate]);
 
   const loadAvailableForms = async () => {
     if (!formType) return;
@@ -173,6 +175,10 @@ export default function SignupSummary({ className = '', formId, formType }: Sign
       params.append('formId', formId.toString());
       if (comparePhaseFilter) {
         params.append('compare', comparePhaseFilter);
+      }
+      if (startDate && endDate) {
+        params.append('start_date', startDate);
+        params.append('end_date', endDate);
       }
       
       // Load signup summary data from ogv-stats API

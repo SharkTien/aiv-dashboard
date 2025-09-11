@@ -81,6 +81,9 @@ export default function UTMGeneratorPage() {
   const [activeLoading, setActiveLoading] = useState(true);
   // Admin-only entity filter for Available Links
   const [entityFilter, setEntityFilter] = useState<number | "">("");
+  // Bulk delete selection
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Form state
   const [selectedEntity, setSelectedEntity] = useState<number | "">("");
@@ -362,6 +365,7 @@ export default function UTMGeneratorPage() {
         console.log('Links returned:', data.items?.length);
         setLinks(Array.isArray(data.items) ? data.items : []);
         setPagination(data.pagination || null);
+        setSelectedIds([]);
       }
     } catch (e) {
       console.error('Failed to load links', e);
@@ -863,6 +867,19 @@ export default function UTMGeneratorPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200/50 dark:border-gray-600/50">
+                      <th className="py-3 px-4">
+                        <input
+                          type="checkbox"
+                          checked={links.length > 0 && links.every(l => selectedIds.includes(l.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIds(links.map(l => l.id));
+                            } else {
+                              setSelectedIds([]);
+                            }
+                          }}
+                        />
+                      </th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Type</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Entity</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Campaign</th>
@@ -881,6 +898,16 @@ export default function UTMGeneratorPage() {
                       const isShortening = shorteningUrls.has(link.id);
                       return (
                         <tr key={link.id} className="border-b border-gray-200/50 dark:border-gray-600/50 hover:bg-gray-50/50 dark:hover:bg-gray-600/50">
+                          <td className="py-3 px-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(link.id)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setSelectedIds(prev => checked ? [...prev, link.id] : prev.filter(id => id !== link.id));
+                              }}
+                            />
+                          </td>
                           <td className="py-3 px-4 text-sm">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                               link.form_type === 'TMR' 
@@ -1045,15 +1072,49 @@ export default function UTMGeneratorPage() {
                   </tbody>
                 </table>
               </div>
-              {pagination && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200/50 dark:border-gray-600/50">
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => handlePageChange(pagination.page - 1)} disabled={!pagination.hasPrev} className="px-3 py-2 text-sm rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">Previous</button>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Page {pagination.page} of {pagination.totalPages}</span>
-                    <button onClick={() => handlePageChange(pagination.page + 1)} disabled={!pagination.hasNext} className="px-3 py-2 text-sm rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">Next</button>
-                  </div>
+              <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200/50 dark:border-gray-600/50">
+                <div className="flex items-center gap-2">
+                  {selectedIds.length > 0 && (
+                    <button
+                      onClick={async () => {
+                        const count = selectedIds.length;
+                        if (!confirm(`Delete ${count} selected link(s)?`)) return;
+                        try {
+                          setBulkDeleting(true);
+                          const res = await fetch('/api/utm/links/bulk-delete', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ids: selectedIds })
+                          });
+                          const json = await res.json();
+                          if (!res.ok) {
+                            alert(json?.error || 'Bulk delete failed');
+                            return;
+                          }
+                          if (pagination) await loadLinks(pagination.page);
+                          setSelectedIds([]);
+                        } catch (e) {
+                          alert('Bulk delete failed');
+                        } finally {
+                          setBulkDeleting(false);
+                        }
+                      }}
+                      disabled={bulkDeleting}
+                      className="px-3 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white flex items-center gap-2"
+                    >
+                      {bulkDeleting && (<span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>)}
+                      {bulkDeleting ? 'Deleting…' : 'Delete Selected'}
+                    </button>
+                  )}
+                  {pagination && (
+                    <>
+                      <button onClick={() => handlePageChange(pagination.page - 1)} disabled={!pagination.hasPrev} className="px-3 py-2 text-sm rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">Previous</button>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Page {pagination.page} of {pagination.totalPages}</span>
+                      <button onClick={() => handlePageChange(pagination.page + 1)} disabled={!pagination.hasNext} className="px-3 py-2 text-sm rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">Next</button>
+                    </>
+                  )}
                 </div>
-              )}
+              </div>
             </>
           )}
         </div>
@@ -1136,7 +1197,7 @@ export default function UTMGeneratorPage() {
         </div>
       )}
 
-      <LoadingOverlay isVisible={creating} message="Creating UTM link..." />
+      <LoadingOverlay isVisible={creating || bulkDeleting} message={creating ? "Creating UTM link..." : "Deleting selected links..."} />
     </div>
   );
 }

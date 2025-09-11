@@ -47,6 +47,13 @@ export default function OGVHubDashboard() {
   const [stats, setStats] = useState<OGVStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [preset, setPreset] = useState<'this_week' | 'last_week' | 'last_7_days' | 'custom'>('last_7_days');
 
   useEffect(() => {
     loadForms();
@@ -56,7 +63,7 @@ export default function OGVHubDashboard() {
     if (selectedFormId) {
       loadStats(selectedFormId);
     }
-  }, [selectedFormId]);
+  }, [selectedFormId, startDate, endDate]);
 
   const loadForms = async () => {
     try {
@@ -82,7 +89,12 @@ export default function OGVHubDashboard() {
   const loadStats = async (formId: number) => {
     try {
       setLoadingStats(true);
-      const response = await fetch(`/api/dashboard/ogv-stats?formId=${formId}`);
+      const params = new URLSearchParams({ formId: String(formId) });
+      if (startDate && endDate) {
+        params.set('start_date', startDate);
+        params.set('end_date', endDate);
+      }
+      const response = await fetch(`/api/dashboard/ogv-stats?${params.toString()}`);
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
@@ -95,6 +107,29 @@ export default function OGVHubDashboard() {
       setLoadingStats(false);
     }
   };
+
+  useEffect(() => {
+    const setWeekRange = (offsetWeeks: number) => {
+      const now = new Date();
+      const day = now.getDay();
+      const mondayOffset = ((day + 6) % 7);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - mondayOffset - 7 * offsetWeeks);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      setStartDate(monday.toISOString().split('T')[0]);
+      setEndDate(sunday.toISOString().split('T')[0]);
+    };
+    if (preset === 'this_week') setWeekRange(0);
+    else if (preset === 'last_week') setWeekRange(1);
+    else if (preset === 'last_7_days') {
+      const d = new Date();
+      const s = new Date();
+      s.setDate(d.getDate() - 6);
+      setStartDate(s.toISOString().split('T')[0]);
+      setEndDate(d.toISOString().split('T')[0]);
+    }
+  }, [preset]);
 
   const formatNumber = (num: number) => {
     return num.toLocaleString();
@@ -126,40 +161,7 @@ export default function OGVHubDashboard() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            oGV Hub Dashboard
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            Monitor your global volunteer programs and track engagement across all initiatives
-          </p>
-        </div>
-
-        {/* Form Filter */}
-        <div className="mb-8">
-          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/50">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <SettingsIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Selected Phase</span>
-              </div>
-              <select
-                value={selectedFormId || ''}
-                onChange={(e) => setSelectedFormId(Number(e.target.value))}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-              >
-                {forms.map((form) => (
-                  <option key={form.id} value={form.id}>
-                    {form.name.replace("oGV ", "").replace("Submissions", "")}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"> 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Total Submissions */}
@@ -186,9 +188,51 @@ export default function OGVHubDashboard() {
           </div> */}
         </div>
 
+        
+        
+        {/* Form + Date Filters */}
+        <div className="mb-8">
+          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/50">
+            <div className="flex flex-wrap items-end gap-4">              
+              <div>
+                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Selected Phase</label>
+                <select
+                value={selectedFormId || ''}
+                onChange={(e) => setSelectedFormId(Number(e.target.value))}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+              >
+                {forms.map((form) => (
+                  <option key={form.id} value={form.id}>
+                    {form.name.replace("oGV ", "").replace("Submissions", "")}
+                  </option>
+                ))}
+              </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Preset</label>
+                <select value={preset} onChange={(e) => setPreset(e.target.value as any)} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                  <option value="this_week">This week (Mon-Sun)</option>
+                  <option value="last_week">Last week</option>
+                  <option value="last_7_days">Last 7 days</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Start date</label>
+                <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreset('custom'); }} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">End date</label>
+                <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset('custom'); }} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+              </div>
+              <button onClick={() => selectedFormId && loadStats(selectedFormId)} className="h-10 px-4 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-sm">Apply</button>
+            </div>
+          </div>
+        </div>
+        
         {/* Signup Summary */}
         <div className="mb-8">
-          <SignupSummary formId={selectedFormId} formType="oGV" />
+          <SignupSummary formId={selectedFormId} formType="oGV" startDate={startDate} endDate={endDate} />
         </div>
 
         {/* No Form Selected */}

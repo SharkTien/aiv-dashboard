@@ -4,23 +4,40 @@ import { getDbPool } from '@/lib/db';
 export async function GET(request: NextRequest) {
   try {
     const pool = getDbPool();
-    
-    // Get all stats in a single optimized query
-    const [statsResult] = await pool.query(`
+    const { searchParams } = new URL(request.url);
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
+
+    const haveRange = Boolean(startDate && endDate);
+
+    // Build query with optional date filter on submissions
+    let query = `
       SELECT 
         f.type,
         COUNT(DISTINCT f.id) as total_forms,
-        COUNT(DISTINCT CASE WHEN fs.duplicated = FALSE THEN fs.id END) as total_submissions,
+        SUM(CASE WHEN fs.duplicated = FALSE AND (__DATE_FILTER1__) THEN 1 ELSE 0 END) as total_submissions,
         f.id as highest_phase_id,
         f.name as highest_phase_name,
         f.code as highest_phase_code,
-        COUNT(CASE WHEN fs.duplicated = FALSE THEN fs.id END) as highest_phase_submissions
+        SUM(CASE WHEN fs.duplicated = FALSE AND (__DATE_FILTER2__) THEN 1 ELSE 0 END) as highest_phase_submissions
       FROM forms f
       LEFT JOIN form_submissions fs ON f.id = fs.form_id
       WHERE f.type IN ('oGV', 'TMR')
       GROUP BY f.type, f.id, f.name, f.code
-      ORDER BY f.type, highest_phase_submissions DESC
-    `);
+      ORDER BY f.type, highest_phase_submissions DESC`;
+
+    // Replace date filter placeholders
+    const params: any[] = [];
+    if (haveRange) {
+      const dateExpr = `DATE(fs.timestamp) BETWEEN ? AND ?`;
+      query = query.replace(/__DATE_FILTER1__/g, dateExpr).replace(/__DATE_FILTER2__/g, dateExpr);
+      // Need params twice (for both SUMs)
+      params.push(startDate, endDate, startDate, endDate);
+    } else {
+      query = query.replace(/__DATE_FILTER1__/g, '1=1').replace(/__DATE_FILTER2__/g, '1=1');
+    }
+
+    const [statsResult] = await pool.query(query, params);
 
     const rows = Array.isArray(statsResult) ? statsResult : [];
     

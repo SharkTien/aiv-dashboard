@@ -139,32 +139,28 @@ input:checked + .slider:before {
   display: none;
 }
 
-/* Hide main page scrollbar globally */
-html, body, #__next, main {
-  -ms-overflow-style: none !important; /* IE and Edge */
-  scrollbar-width: none !important;    /* Firefox */
-  overflow-x: hidden !important;
+/* Keep body scrollbar default; style internal scroll areas with a slim scrollbar */
+/* Global thin scrollbar for all scrollable containers except the main page wrappers */
+*:not(html):not(body):not(#__next):not(main) {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(100,116,139,0.6) transparent; /* Firefox */
 }
-
-/* Hide scrollbar for all elements */
-* {
-  -ms-overflow-style: none !important; /* IE and Edge */
-  scrollbar-width: none !important;    /* Firefox */
+*:not(html):not(body):not(#__next):not(main)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-
-*::-webkit-scrollbar { /* Chrome, Safari and Opera */
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
+*:not(html):not(body):not(#__next):not(main)::-webkit-scrollbar-track {
+  background: transparent;
 }
-
-html::-webkit-scrollbar, 
-body::-webkit-scrollbar, 
-#__next::-webkit-scrollbar,
-main::-webkit-scrollbar { /* Chrome, Safari and Opera */
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
+*:not(html):not(body):not(#__next):not(main)::-webkit-scrollbar-thumb {
+  background-color: rgba(100,116,139,0.45);
+  border-radius: 9999px;
+}
+.dark *:not(html):not(body):not(#__next):not(main) {
+  scrollbar-color: rgba(148,163,184,0.5) transparent;
+}
+.dark *:not(html):not(body):not(#__next):not(main)::-webkit-scrollbar-thumb {
+  background-color: rgba(148,163,184,0.5);
 }
 
 /* Custom animations for analytics */

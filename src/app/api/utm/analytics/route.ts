@@ -784,7 +784,8 @@ async function getDatabaseClickData(pool: any, utmLinkId: number, startDate: str
     const clicksByDate = Array.isArray(dailyData) 
       ? dailyData.map((row: any) => ({
           date: row.date,
-          clicks: Number(row.clicks)
+          clicks: Number(row.clicks),
+          unique: Number(row.unique_clicks || 0)
         }))
       : [];
     
@@ -950,26 +951,25 @@ function combineTrackingData(dbData: any, shortIoData: any) {
 
 // Merge daily click data from database and Short.io
 function mergeDailyClickData(dbDaily: any[], shortIoDaily: any[]) {
-  const dateMap = new Map();
-  
-  // Add database data
-  dbDaily.forEach(item => {
-    dateMap.set(item.date, item.clicks);
-  });
-  
-  // Add Short.io data (only if database doesn't have data for that date)
-  shortIoDaily.forEach(item => {
-    if (!dateMap.has(item.date)) {
-      dateMap.set(item.date, item.clicks);
-    } else {
-      // Take the higher value
-      dateMap.set(item.date, Math.max(dateMap.get(item.date), item.clicks));
-    }
-  });
-  
-  // Convert back to array and sort by date
+  // Map of date -> { clicks, unique }
+  const dateMap = new Map<string, { clicks: number; unique: number }>();
+
+  const add = (d: any) => {
+    const date = String(d.date);
+    const clicks = Number(d.clicks || 0);
+    const unique = Number((d.unique ?? d.unique_clicks) || 0);
+    const prev = dateMap.get(date) || { clicks: 0, unique: 0 };
+    // Use max for clicks to avoid double counting from two sources
+    const mergedClicks = Math.max(prev.clicks, clicks);
+    const mergedUnique = Math.max(prev.unique, unique);
+    dateMap.set(date, { clicks: mergedClicks, unique: mergedUnique });
+  };
+
+  (dbDaily || []).forEach(add);
+  (shortIoDaily || []).forEach(add);
+
   return Array.from(dateMap.entries())
-    .map(([date, clicks]) => ({ date: String(date), clicks }))
+    .map(([date, stats]) => ({ date, clicks: stats.clicks, unique: stats.unique }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 

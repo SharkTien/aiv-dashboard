@@ -44,6 +44,14 @@ export default function DashboardHome() {
   const [user, setUser] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
+  // Date filters
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6); // last 7 days default
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [preset, setPreset] = useState<'this_week' | 'last_week' | 'last_7_days' | 'custom'>('last_7_days');
 
   // Determine user's program access based on role - same logic as Sidebar
   const getUserPrograms = () => {
@@ -90,7 +98,12 @@ export default function DashboardHome() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/dashboard/home-stats');
+      const params = new URLSearchParams();
+      if (startDate && endDate) {
+        params.set('start_date', startDate);
+        params.set('end_date', endDate);
+      }
+      const response = await fetch(`/api/dashboard/home-stats?${params.toString()}`);
       const result = await response.json();
       
       if (result.success) {
@@ -102,6 +115,30 @@ export default function DashboardHome() {
       setLoading(false);
     }
   };
+
+  // Update date range when preset changes
+  useEffect(() => {
+    const setWeekRange = (offsetWeeks: number) => {
+      const now = new Date();
+      const day = now.getDay();
+      const mondayOffset = ((day + 6) % 7); // 0=Mon ... 6=Sun mapping
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - mondayOffset - 7 * offsetWeeks);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      setStartDate(monday.toISOString().split('T')[0]);
+      setEndDate(sunday.toISOString().split('T')[0]);
+    };
+    if (preset === 'this_week') setWeekRange(0);
+    else if (preset === 'last_week') setWeekRange(1);
+    else if (preset === 'last_7_days') {
+      const d = new Date();
+      const s = new Date();
+      s.setDate(d.getDate() - 6);
+      setStartDate(s.toISOString().split('T')[0]);
+      setEndDate(d.toISOString().split('T')[0]);
+    }
+  }, [preset]);
 
   const loadNotifications = async () => {
     try {
@@ -134,8 +171,31 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Stats Cards with Notifications - Role-based filtering */}
+        {/* Filters + Stats Cards with Notifications - Role-based filtering */}
         <div className="mt-8 mb-8">
+          {/* Date filters */}
+          <div className="mb-6 bg-white/70 dark:bg-gray-800/70 backdrop-blur rounded-xl p-4 ring-1 ring-black/10 dark:ring-white/10">
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Preset</label>
+                <select value={preset} onChange={(e) => setPreset(e.target.value as any)} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                  <option value="this_week">This week (Mon-Sun)</option>
+                  <option value="last_week">Last week</option>
+                  <option value="last_7_days">Last 7 days</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Start date</label>
+                <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreset('custom'); }} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">End date</label>
+                <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset('custom'); }} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+              </div>
+              <button onClick={loadStats} className="h-10 px-4 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-sm">Apply</button>
+            </div>
+          </div>
           {/* Case 1: Both oGV and TMR visible - 3 column layout */}
           {canSeeOGV && canSeeTMR && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

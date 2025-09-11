@@ -5,6 +5,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const formId = searchParams.get("formId");
   const compare = searchParams.get("compare");
+  const startDate = searchParams.get('start_date');
+  const endDate = searchParams.get('end_date');
+  const haveRange = Boolean(startDate && endDate);
 
   if (!formId) {
     return NextResponse.json({ error: "Form ID is required" }, { status: 400 });
@@ -107,7 +110,8 @@ export async function GET(request: NextRequest) {
           SELECT COUNT(*) as count
           FROM form_submissions fs
           WHERE fs.form_id = ? AND fs.entity_id = ? AND fs.duplicated = FALSE
-        `, [formId, entityId]);
+            ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+        `, haveRange ? [formId, entityId, startDate, endDate] : [formId, entityId]);
         const sus = Array.isArray(susResult) && susResult.length > 0 ? (susResult[0] as any).count : 0;
 
         // Get MSUs (submissions with active UTM campaign for this entity) - non-duplicated only
@@ -124,7 +128,8 @@ export async function GET(request: NextRequest) {
               AND ff.field_name = 'utm_campaign' 
               AND fr.value = ?
               AND fs.duplicated = FALSE
-          `, [formId, entityId, activeCampaign]);
+              ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+          `, haveRange ? [formId, entityId, activeCampaign, startDate, endDate] : [formId, entityId, activeCampaign]);
           msus = Array.isArray(msusResult) && msusResult.length > 0 ? (msusResult[0] as any).count : 0;
         }
 
@@ -141,7 +146,8 @@ export async function GET(request: NextRequest) {
               AND ff.field_name = 'utm_campaign' 
               AND fr.value = ?
               AND fs.duplicated = FALSE
-          `, [formId, activeCampaign]);
+              ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+          `, haveRange ? [formId, activeCampaign, startDate, endDate] : [formId, activeCampaign]);
           susUtmSource = Array.isArray(susUtmResult) && susUtmResult.length > 0 ? (susUtmResult[0] as any).count : 0;
         }
 
@@ -162,7 +168,8 @@ export async function GET(request: NextRequest) {
                 AND ff.field_name = 'utm_campaign' 
                 AND fr.value = ?
                 AND fs.duplicated = FALSE
-            `, [formId, entityId, emtActiveCampaign]);
+                ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+            `, haveRange ? [formId, entityId, emtActiveCampaign, startDate, endDate] : [formId, entityId, emtActiveCampaign]);
             const emtCampaignCount = Array.isArray(emtCampaignResult) && emtCampaignResult.length > 0 ? (emtCampaignResult[0] as any).count : 0;
 
             // Submissions allocated to this entity but without ANY UTM parameters (organic) - using duplicated column
@@ -180,7 +187,8 @@ export async function GET(request: NextRequest) {
                     AND fr2.value IS NOT NULL 
                     AND TRIM(fr2.value) != ''
                 )
-            `, [formId, entityId]);
+                ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+            `, haveRange ? [formId, entityId, startDate, endDate] : [formId, entityId]);
             const organicCount = Array.isArray(organicResult) && organicResult.length > 0 ? (organicResult[0] as any).count : 0;
 
             emtPlusOrganic = emtCampaignCount + organicCount;
@@ -201,7 +209,8 @@ export async function GET(request: NextRequest) {
               AND fr.value = ?
               AND fs.entity_id IS NULL
               AND fs.duplicated = FALSE
-          `, [formId, activeCampaign]);
+              ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+          `, haveRange ? [formId, activeCampaign, startDate, endDate] : [formId, activeCampaign]);
           otherSource = Array.isArray(otherSourceResult) && otherSourceResult.length > 0 ? (otherSourceResult[0] as any).count : 0;
         } else {
           // If no active campaign, no "other source" submissions
@@ -263,7 +272,8 @@ export async function GET(request: NextRequest) {
                 AND ff.field_name = 'utm_campaign' 
                 AND fr.value = ?
                 AND fs.duplicated = FALSE
-            `, [formId, emtActiveCampaign]);
+                ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+            `, haveRange ? [formId, emtActiveCampaign, startDate, endDate] : [formId, emtActiveCampaign]);
             susUtmSource = Array.isArray(emtMarketResult) && emtMarketResult.length > 0 ? (emtMarketResult[0] as any).count : 0;
 
             // Count EMT submissions with entity not found
@@ -278,7 +288,8 @@ export async function GET(request: NextRequest) {
                 AND fr.value = ?
                 AND (fs.entity_id IS NULL OR fs.entity_id = 0)
                 AND fs.duplicated = FALSE
-            `, [formId, emtActiveCampaign]);
+                ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+            `, haveRange ? [formId, emtActiveCampaign, startDate, endDate] : [formId, emtActiveCampaign]);
             const emtNotFound = Array.isArray(emtResult) && emtResult.length > 0 ? (emtResult[0] as any).count : 0;
             // SUs for EMT = all submissions with EMT campaign (any entity)
             sus = susUtmSource;
@@ -301,7 +312,8 @@ export async function GET(request: NextRequest) {
                 AND ff.field_name = 'utm_campaign' 
                 AND fr.value = ?
                 AND fs.duplicated = FALSE
-            `, [formId, estActiveCampaign]);
+                ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+            `, haveRange ? [formId, estActiveCampaign, startDate, endDate] : [formId, estActiveCampaign]);
             susUtmSource = Array.isArray(estMarketResult) && estMarketResult.length > 0 ? (estMarketResult[0] as any).count : 0;
 
             const [estCountResult] = await pool.query(`
@@ -315,7 +327,8 @@ export async function GET(request: NextRequest) {
                 AND fr.value = ?
                 AND (fs.entity_id IS NULL OR fs.entity_id = 0)
                 AND fs.duplicated = FALSE
-            `, [formId, estActiveCampaign]);
+                ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+            `, haveRange ? [formId, estActiveCampaign, startDate, endDate] : [formId, estActiveCampaign]);
             sus = Array.isArray(estCountResult) && estCountResult.length > 0 ? (estCountResult[0] as any).count : 0;
             msus = sus;
             otherSource = sus;
@@ -332,7 +345,8 @@ export async function GET(request: NextRequest) {
               AND (fs.entity_id IS NULL OR fs.entity_id = 0)
               AND (uc.form_id IS NULL OR uc.form_id <> ?)
               AND fs.duplicated = FALSE
-          `, [formId, formId, formId]);
+              ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+          `, haveRange ? [formId, formId, formId, startDate, endDate] : [formId, formId, formId]);
           const organicNotFound = Array.isArray(organicNotFoundResult) && organicNotFoundResult.length > 0 ? (organicNotFoundResult[0] as any).count : 0;
           otherSource = organicNotFound;
           msus = 0;
@@ -347,7 +361,8 @@ export async function GET(request: NextRequest) {
             WHERE fs.form_id = ? 
               AND (uc.form_id IS NULL OR uc.form_id <> ?)
               AND fs.duplicated = FALSE
-          `, [formId, formId, formId]);
+              ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+          `, haveRange ? [formId, formId, formId, startDate, endDate] : [formId, formId, formId]);
           susUtmSource = Array.isArray(organicMarketResult) && organicMarketResult.length > 0 ? (organicMarketResult[0] as any).count : 0;
           sus = susUtmSource;
         } else {
@@ -367,7 +382,8 @@ export async function GET(request: NextRequest) {
                 AND ff.field_name = 'utm_campaign' 
                 AND fr.value = ?
                 AND fs.duplicated = FALSE
-            `, [formId, entityActiveCampaign]);
+                ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+            `, haveRange ? [formId, entityActiveCampaign, startDate, endDate] : [formId, entityActiveCampaign]);
             susUtmSource = Array.isArray(entityMarketResult) && entityMarketResult.length > 0 ? (entityMarketResult[0] as any).count : 0;
 
             
@@ -382,7 +398,8 @@ export async function GET(request: NextRequest) {
                 AND fr.value = ?
                 AND (fs.entity_id IS NULL OR fs.entity_id = 0)
                 AND fs.duplicated = FALSE
-            `, [formId, entityActiveCampaign]);
+                ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+            `, haveRange ? [formId, entityActiveCampaign, startDate, endDate] : [formId, entityActiveCampaign]);
             
             sus = Array.isArray(entityResult) && entityResult.length > 0 ? (entityResult[0] as any).count : 0;
             msus = sus; // For these entities, MSUs = SUs (all submissions have UTM campaign)
