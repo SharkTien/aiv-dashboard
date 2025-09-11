@@ -360,7 +360,23 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   };
 
   const formatDateTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString();
+    if (!timestamp) return '-';
+    // If MySQL DATETIME like "YYYY-MM-DD HH:MM:SS" -> show exactly as stored (avoid TZ shift)
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(timestamp)) {
+      return timestamp;
+    }
+    // ISO with Z or T -> format in VN timezone to match phpMyAdmin view
+    try {
+      const d = new Date(timestamp);
+      if (isNaN(d.getTime())) return timestamp;
+      return d.toLocaleString('en-GB', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false, timeZone: 'Asia/Ho_Chi_Minh'
+      });
+    } catch {
+      return timestamp;
+    }
   };
 
   const formatFieldValue = (value: string, fieldType: string) => {

@@ -396,6 +396,16 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
     URL.revokeObjectURL(url);
   };
 
+  const renderTimestamp = (ts: string) => {
+    if (!ts) return <span className="text-gray-400">-</span>;
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts)) return ts;
+    try {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return ts;
+      return d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Ho_Chi_Minh' });
+    } catch { return ts; }
+  };
+
   // Open/close preview sidebar with right-click
   const handleCellContextMenu = (e: React.MouseEvent, key: string, title: string, value: string) => {
     e.preventDefault();
@@ -651,7 +661,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                   ]));
               return (
                 <tr key={submission.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{new Date(submission.timestamp).toLocaleDateString('en-GB')}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{renderTimestamp(submission.timestamp)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" title="Editable in Raw Data only">
                     <span className="block overflow-hidden text-ellipsis" title={submission.entityName || undefined}>
                       {submission.entityName || <span className="text-gray-400">Not allocated</span>}

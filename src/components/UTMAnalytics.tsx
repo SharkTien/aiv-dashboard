@@ -21,7 +21,7 @@ interface UTMLink {
   utm_name: string;
   clicks: number;
   uniqueClicks: number;
-  clicksByDate: Array<{ date: string; clicks: number }>;
+  clicksByDate: Array<{ date: string; clicks: number; unique?: number }>;
   shortened_url: string;
   created_at: string;
   conversionRate?: number;
@@ -181,20 +181,41 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
   const heatmaps: HeatmapResponse | undefined = (data as any).heatmaps;
   const emtTopLinks = (data as any).emtTopLinks as Array<any> | undefined;
 
-  // Prepare chart data (union of all dates across links)
-  let dailyClicksData: Array<{ date: string; clicks: number }> = [];
-  if (links.length > 0) {
-    const allDates = Array.from(new Set(
-      links.flatMap((l) => (l.clicksByDate || []).map((d) => d.date))
-    )).sort((a, b) => a.localeCompare(b));
+  // Prepare chart data (union of all normalized dates across links). Normalize to YYYY-MM-DD to avoid duplicate labels.
+  const normalizeDate = (v: string): string => {
+    if (!v) return v;
+    if (v.includes('T')) return new Date(v).toISOString().slice(0, 10);
+    return v.slice(0, 10);
+  };
 
-    dailyClicksData = allDates.map((dateISO) => ({
-      date: new Date(dateISO).toLocaleDateString(),
-      clicks: links.reduce((sum, link) => {
-        const dayData = link.clicksByDate?.find((d) => d.date === dateISO);
-        return sum + (dayData?.clicks || 0);
-      }, 0),
-    }));
+  let dailyClicksData: Array<{ date: string; clicks: number; unique: number }> = [];
+  if (links.length > 0) {
+    // Build per-link maps with normalized dates
+    const perLink = links.map((l) => {
+      const rows = (l.clicksByDate || []).map((d) => ({ date: normalizeDate(d.date), clicks: d.clicks, unique: (d as any).unique as number | undefined }));
+      const totalClicks = rows.reduce((s, r) => s + r.clicks, 0) || 1;
+      return { rows, totalClicks, uniqueTotal: l.uniqueClicks || 0 };
+    });
+
+    const allDates = Array.from(new Set(perLink.flatMap((p) => p.rows.map((r) => r.date)))).sort((a, b) => a.localeCompare(b));
+
+    dailyClicksData = allDates.map((dStr) => {
+      let clicks = 0;
+      let unique = 0;
+      perLink.forEach((p) => {
+        const row = p.rows.find((r) => r.date === dStr);
+        if (row) {
+          clicks += row.clicks || 0;
+          // Prefer provided unique; otherwise estimate proportionally from link's unique total
+          if (typeof row.unique === 'number') {
+            unique += row.unique;
+          } else if (p.uniqueTotal > 0 && p.totalClicks > 0) {
+            unique += Math.round((row.clicks / p.totalClicks) * p.uniqueTotal);
+          }
+        }
+      });
+      return { date: dStr, clicks, unique };
+    });
   }
 
   const pageSize = 20;
@@ -289,11 +310,12 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={dailyClicksData}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" tickFormatter={(v) => new Date(v + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} />
             <YAxis />
-            <Tooltip />
+            <Tooltip labelFormatter={(v) => new Date(String(v) + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} />
             <Legend />
             <Line type="monotone" dataKey="clicks" stroke="#0088FE" strokeWidth={2} />
+            <Line type="monotone" dataKey="unique" stroke="#00C49F" strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
       </div>
