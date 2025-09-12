@@ -253,17 +253,19 @@ export async function POST(
       
       const [duplicateRows] = await conn.query(
         `SELECT fs2.id FROM form_submissions fs2
-         WHERE fs2.form_id = ? AND fs2.duplicated = FALSE AND fs2.id != ? AND (${duplicateConditions.join(' OR ')})`,
+         WHERE fs2.form_id = ? AND fs2.id != ? AND (${duplicateConditions.join(' OR ')})`,
         [formId, submissionId, ...duplicateParams]
       );
       
       if (Array.isArray(duplicateRows) && (duplicateRows as any).length > 0) {
-        
-        // Update current submission to be marked as duplicate
-        await conn.query(
-          "UPDATE form_submissions SET duplicated = TRUE WHERE id = ?",
-          [submissionId]
-        );
+        const ids = (duplicateRows as any[]).map(r => r.id).filter((id: any) => id != null);
+        if (ids.length > 0) {
+          // Mark all older matching submissions as duplicated, keep newest (current) as not duplicated
+          await conn.query(
+            `UPDATE form_submissions SET duplicated = TRUE WHERE id IN (${ids.map(() => '?').join(',')})`,
+            ids
+          );
+        }
       }
     }
 

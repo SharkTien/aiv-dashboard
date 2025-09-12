@@ -165,10 +165,8 @@ export async function POST(
           const globalRowIndex = batchStart + rowIndex;
 
           try {
-            // Check for duplicate form code
-            let isDuplicate = false;
+            // Do not skip any rows here; we'll mark older duplicates after import (newest wins)
             let formCodeValue = "";
-
             if (formCodeField) {
               const formCodeHeader = Object.keys(columnMapping).find(header =>
                 columnMapping[header] === formCodeField
@@ -177,77 +175,8 @@ export async function POST(
                 const columnIndex = headers.indexOf(formCodeHeader);
                 if (columnIndex >= 0 && columnIndex < row.length) {
                   formCodeValue = String(row[columnIndex] || "").trim();
-                  if (formCodeValue && existingFormCodes.has(formCodeValue)) {
-                    isDuplicate = true;
-                  }
                 }
               }
-            }
-
-            // Check for duplicate email/phone before importing
-            if (!isDuplicate) {
-              const duplicateCheckValues: string[] = [];
-              
-              // Get email and phone values from current row
-              const emailField = fields.find(f => f.field_name === 'email');
-              const phoneField = fields.find(f => f.field_name === 'phone');
-              
-              if (emailField) {
-                const emailHeader = Object.keys(columnMapping).find(header =>
-                  columnMapping[header] === 'email'
-                );
-                if (emailHeader) {
-                  const columnIndex = headers.indexOf(emailHeader);
-                  if (columnIndex >= 0 && columnIndex < row.length) {
-                    const emailValue = String(row[columnIndex] || "").trim();
-                    if (emailValue) duplicateCheckValues.push(`email:${emailValue}`);
-                  }
-                }
-              }
-              
-              if (phoneField) {
-                const phoneHeader = Object.keys(columnMapping).find(header =>
-                  columnMapping[header] === 'phone'
-                );
-                if (phoneHeader) {
-                  const columnIndex = headers.indexOf(phoneHeader);
-                  if (columnIndex >= 0 && columnIndex < row.length) {
-                    const phoneValue = String(row[columnIndex] || "").trim();
-                    if (phoneValue) duplicateCheckValues.push(`phone:${phoneValue}`);
-                  }
-                }
-              }
-              
-              // Check if any of these values already exist in database
-              if (duplicateCheckValues.length > 0) {
-                for (const checkValue of duplicateCheckValues) {
-                  const [fieldName, fieldValue] = checkValue.split(':');
-                  const field = fields.find(f => f.field_name === fieldName);
-                  
-                  if (field) {
-                    const [existingRows] = await pool.query(
-                      `SELECT COUNT(*) as count 
-                       FROM form_responses fr 
-                       JOIN form_submissions fs ON fr.submission_id = fs.id 
-                       WHERE fs.form_id = ? AND fr.field_id = ? AND fr.value = ? AND fs.duplicated = FALSE`,
-                      [formId, field.id, fieldValue]
-                    );
-                    
-                    if (Array.isArray(existingRows) && existingRows.length > 0) {
-                      const count = (existingRows[0] as any).count;
-                      if (count > 0) {
-                        isDuplicate = true;
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-
-            if (isDuplicate) {
-              duplicateCount++;
-              continue;
             }
 
             // Process each valid field for this row
@@ -510,14 +439,50 @@ export async function POST(
     } catch (error) {
     }
 
-    // Note: Duplicate prevention is now handled during import process
-    // No need for post-import duplicate detection since we prevent duplicates from being imported
+    // Post-import de-duplication: mark older submissions as duplicated if a newer one shares phone or email
     let duplicateCheckCount = 0;
+    try {
+      // Mark older phone duplicates
+      const [dupPhoneResult] = await pool.query(
+        `UPDATE form_submissions fs
+         JOIN form_responses frp ON frp.submission_id = fs.id
+         JOIN form_fields ffp ON ffp.id = frp.field_id AND ffp.field_name = 'phone'
+         SET fs.duplicated = TRUE
+         WHERE fs.form_id = ? AND fs.duplicated = FALSE AND EXISTS (
+           SELECT 1 FROM form_submissions fs2
+           JOIN form_responses frp2 ON frp2.submission_id = fs2.id
+           JOIN form_fields ffp2 ON ffp2.id = frp2.field_id AND ffp2.field_name = 'phone'
+           WHERE fs2.form_id = fs.form_id AND fs2.id != fs.id AND frp2.value = frp.value AND fs2.id > fs.id
+         )`,
+        [formId]
+      );
+      const affectedPhone = (dupPhoneResult as any).affectedRows || 0;
+
+      // Mark older email duplicates
+      const [dupEmailResult] = await pool.query(
+        `UPDATE form_submissions fs
+         JOIN form_responses fre ON fre.submission_id = fs.id
+         JOIN form_fields ffe ON ffe.id = fre.field_id AND ffe.field_name = 'email'
+         SET fs.duplicated = TRUE
+         WHERE fs.form_id = ? AND fs.duplicated = FALSE AND EXISTS (
+           SELECT 1 FROM form_submissions fs2
+           JOIN form_responses fre2 ON fre2.submission_id = fs2.id
+           JOIN form_fields ffe2 ON ffe2.id = fre2.field_id AND ffe2.field_name = 'email'
+           WHERE fs2.form_id = fs.form_id AND fs2.id != fs.id AND fre2.value = fre.value AND fs2.id > fs.id
+         )`,
+        [formId]
+      );
+      const affectedEmail = (dupEmailResult as any).affectedRows || 0;
+
+      duplicateCount += affectedPhone + affectedEmail;
+      duplicateCheckCount = affectedPhone + affectedEmail;
+    } catch (e) {
+    }
 
     // Clear relevant caches after successful import
     const response = NextResponse.json({
       success: true,
-      message: `Import completed. ${successCount} submissions imported successfully, ${errorCount} failed, ${duplicateCount} duplicates skipped.`,
+      message: `Import completed. ${successCount} submissions imported successfully, ${errorCount} failed, ${duplicateCount} older duplicates marked.`,
       details: {
         totalRows: dataRows.length,
         successCount,

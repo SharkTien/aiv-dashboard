@@ -113,9 +113,9 @@ export async function GET(req: NextRequest) {
       
       // Build UTM parameters for legacy links
       const utmParams = new URLSearchParams();
-      utmParams.set('campaign_id', link.campaign_code || '');
-      utmParams.set('source_id', link.source_code || '');
-      utmParams.set('medium_id', link.medium_code || '');
+      utmParams.set('utm_campaign', link.campaign_code || '');
+      utmParams.set('utm_source', link.source_code || '');
+      utmParams.set('utm_medium', link.medium_code || '');
       if (link.utm_name && link.utm_name.trim() !== '') {
         utmParams.set('utm_name', link.utm_name.trim());
       }
@@ -254,9 +254,9 @@ export async function POST(req: NextRequest) {
     
     // Build UTM parameters
     const utmParams = new URLSearchParams();
-    utmParams.set('campaign_id', campaignCode);
-    utmParams.set('source_id', sourceCode);
-    utmParams.set('medium_id', mediumCode);
+    utmParams.set('utm_campaign', campaignCode);
+    utmParams.set('utm_source', sourceCode);
+    utmParams.set('utm_medium', mediumCode);
     if (utm_name && utm_name.trim() !== '') {
       utmParams.set('utm_name', utm_name.trim());
     }
