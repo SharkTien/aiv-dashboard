@@ -99,23 +99,17 @@ export default function ManualAllocateViewerWithRequests({ formId }: ManualAlloc
 
   // Load pending requests for lead users
   const loadPendingRequests = async () => {
-    console.log('Loading pending requests for user:', user?.sub, 'role:', user?.role);
     setLoadingRequests(true);
     try {
       const res = await fetch('/api/allocation-requests');
-      console.log('API response status:', res.status);
       if (res.ok) {
         const data = await res.json();
-        console.log('API response data:', data);
         const userRequests = data.items?.filter((req: any) => req.requested_by === user?.sub) || [];
-        console.log('Filtered user requests:', userRequests);
         const pendingSubmissionIds = new Set(
           userRequests.filter((req: any) => req.status === 'pending').map((req: any) => req.submission_id)
         );
         setPendingRequests(pendingSubmissionIds as Set<number>);
         setMyRequests(userRequests);
-        console.log('Set pending requests:', pendingSubmissionIds);
-        console.log('Set my requests:', userRequests);
       } else {
         console.error('Failed to load requests:', res.status);
       }

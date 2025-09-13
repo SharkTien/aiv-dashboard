@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
         ul.source_id,
         ul.medium_id,
         ul.utm_name,
+        ul.custom_name,
         ul.base_url,
         ul.shortened_url,
         ul.tracking_link,
@@ -113,9 +114,9 @@ export async function GET(req: NextRequest) {
       
       // Build UTM parameters for legacy links
       const utmParams = new URLSearchParams();
-      utmParams.set('utm_campaign', link.campaign_code || '');
-      utmParams.set('utm_source', link.source_code || '');
-      utmParams.set('utm_medium', link.medium_code || '');
+      utmParams.set('campaign_id', link.campaign_code || '');
+      utmParams.set('source_id', link.source_code || '');
+      utmParams.set('medium_id', link.medium_code || '');
       if (link.utm_name && link.utm_name.trim() !== '') {
         utmParams.set('utm_name', link.utm_name.trim());
       }
@@ -182,10 +183,15 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
   const body = await req.json();
-  const { entity_id, campaign_id, source_id, medium_id, utm_name, hub_type } = body || {};
+  const { entity_id, campaign_id, source_id, medium_id, utm_name, custom_name, hub_type } = body || {};
   
   if (!entity_id || !campaign_id || !source_id || !medium_id) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  // Validate custom_name length and characters
+  if (custom_name && custom_name.length > 255) {
+    return NextResponse.json({ error: "Custom name is too long (max 255 characters)" }, { status: 400 });
   }
 
   // If user is not admin, they can only create UTM links for their own entity
@@ -254,9 +260,9 @@ export async function POST(req: NextRequest) {
     
     // Build UTM parameters
     const utmParams = new URLSearchParams();
-    utmParams.set('utm_campaign', campaignCode);
-    utmParams.set('utm_source', sourceCode);
-    utmParams.set('utm_medium', mediumCode);
+    utmParams.set('campaign_id', campaignCode);
+    utmParams.set('source_id', sourceCode);
+    utmParams.set('medium_id', mediumCode);
     if (utm_name && utm_name.trim() !== '') {
       utmParams.set('utm_name', utm_name.trim());
     }
@@ -268,8 +274,8 @@ export async function POST(req: NextRequest) {
     
     // Insert UTM link WITH base_url snapshot
     const [result] = await pool.query(
-      "INSERT INTO utm_links (entity_id, campaign_id, source_id, medium_id, utm_name, base_url) VALUES (?, ?, ?, ?, ?, ?)",
-      [entity_id, campaign_id, source_id, medium_id, utm_name || null, snapshotBaseUrl]
+      "INSERT INTO utm_links (entity_id, campaign_id, source_id, medium_id, utm_name, custom_name, base_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [entity_id, campaign_id, source_id, medium_id, utm_name || null, custom_name || null, snapshotBaseUrl]
     );
     
     const linkId = (result as any).insertId;
@@ -285,25 +291,37 @@ export async function POST(req: NextRequest) {
     
     // Auto-shorten the tracking link
     try {
-      const baseUrl = process.env.BACKEND_HOST || process.env.NEXT_PUBLIC_APP_URL || 'https://aiv-dashboard-ten.vercel.app';
-      const shortResponse = await fetch(`${baseUrl}/api/url-shortener`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          url: trackingLink,
-          alias: `utm-${linkId}`
-        })
-      });
+      const shortApiKey = process.env.SHORT_IO_API_KEY;
+      const shortDomain = process.env.SHORT_IO_DOMAIN || 'aiesecvn.short.gy';
       
-      if (shortResponse.ok) {
-        const shortData = await shortResponse.json();
-        await pool.query(
-          "UPDATE utm_links SET tracking_short_url = ? WHERE id = ?",
-          [shortData.shortenedUrl, linkId]
-        );
+      if (shortApiKey) {
+        const shortResponse = await fetch('https://api.short.io/links', {
+          method: 'POST',
+          headers: {
+            'Authorization': shortApiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            originalURL: trackingLink,
+            domain: shortDomain,
+            path: `utm-${linkId}`,
+            allowDuplicates: false
+          }),
+        });
+        
+        if (shortResponse.ok) {
+          const shortData = await shortResponse.json();
+          const shortIoId = shortData.idString || shortData.id;
+          await pool.query(
+            "UPDATE utm_links SET tracking_short_url = ?, short_io_tracking_id = ? WHERE id = ?",
+            [shortData.shortURL, shortIoId, linkId]
+          );
+        } else {
+          const errorData = await shortResponse.json();
+          // Continue without shortened URL
+        }
       }
     } catch (error) {
-      // silent
       // Continue without shortened URL
     }
     
@@ -316,6 +334,7 @@ export async function POST(req: NextRequest) {
         ul.source_id,
         ul.medium_id,
         ul.utm_name,
+        ul.custom_name,
         ul.base_url,
         ul.shortened_url,
         ul.tracking_link,
@@ -357,6 +376,48 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PATCH(req: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  
+  const body = await req.json();
+  const { id, custom_name } = body || {};
+  
+  if (!id) {
+    return NextResponse.json({ error: "Missing link id" }, { status: 400 });
+  }
+
+  // Validate custom_name length and characters
+  if (custom_name && custom_name.length > 255) {
+    return NextResponse.json({ error: "Custom name is too long (max 255 characters)" }, { status: 400 });
+  }
+
+  const pool = getDbPool();
+  
+  try {
+    // Check ownership for non-admin users
+    const [rows] = await pool.query("SELECT entity_id FROM utm_links WHERE id = ?", [id]);
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return NextResponse.json({ error: "UTM link not found" }, { status: 404 });
+    }
+    const linkRow = rows[0] as any;
+    const linkEntityId = linkRow.entity_id as number;
+    if (user.role !== 'admin' && user.entity_id !== linkEntityId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    await pool.query(
+      "UPDATE utm_links SET custom_name = ? WHERE id = ?",
+      [custom_name || null, id]
+    );
+    
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error updating UTM link custom name:", error);
+    return NextResponse.json({ error: "Failed to update custom name" }, { status: 500 });
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -371,7 +432,7 @@ export async function DELETE(req: NextRequest) {
   const pool = getDbPool();
   try {
     // Check ownership for non-admin users and fetch short.io info
-    const [rows] = await pool.query("SELECT entity_id, short_io_id, tracking_short_url, shortened_url FROM utm_links WHERE id = ?", [id]);
+    const [rows] = await pool.query("SELECT entity_id, short_io_id, tracking_short_url, shortened_url, short_io_tracking_id FROM utm_links WHERE id = ?", [id]);
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json({ error: "UTM link not found" }, { status: 404 });
     }
@@ -380,13 +441,24 @@ export async function DELETE(req: NextRequest) {
     if (user.role !== 'admin' && user.entity_id !== linkEntityId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    // Try delete corresponding short.io link if configured
+    // Try delete corresponding short.io links if configured
     try {
       const apiKey = process.env.SHORT_IO_API_KEY;
       const apiBase = process.env.SHORT_IO_API_BASE || 'https://api.short.io';
+      
+      // Delete regular shortened URL
       const shortId = linkRow.short_io_id;
       if (apiKey && shortId) {
         await fetch(`${apiBase}/links/${encodeURIComponent(shortId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: apiKey },
+        });
+      }
+      
+      // Delete tracking shortened URL
+      const trackingShortId = linkRow.short_io_tracking_id;
+      if (apiKey && trackingShortId) {
+        await fetch(`${apiBase}/links/${encodeURIComponent(trackingShortId)}`, {
           method: 'DELETE',
           headers: { Authorization: apiKey },
         });

@@ -16,6 +16,7 @@ export function getDbPool() {
       waitForConnections: true,
       queueLimit: 0,
       charset: 'utf8mb4',
+      collation: 'utf8mb4_unicode_ci',
       ...(useSsl ? { ssl: { rejectUnauthorized: false } as any } : {}),
     });
     // Ensure UTF-8 for Vietnamese at session level

@@ -285,7 +285,6 @@ if (typeof window !== 'undefined') {
   // Initialize tracking when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-      console.log('UTM Tracker initialized');
     });
   }
 }

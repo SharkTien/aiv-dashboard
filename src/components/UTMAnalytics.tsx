@@ -19,6 +19,7 @@ interface UTMLink {
   medium_name: string;
   medium_code: string;
   utm_name: string;
+  custom_name: string | null;
   clicks: number;
   uniqueClicks: number;
   clicksByDate: Array<{ date: string; clicks: number; unique?: number }>;
@@ -83,6 +84,8 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
   const [entities, setEntities] = useState<Array<{ entity_id: number; name: string }>>([]);
   // Pagination state (must be declared before any conditional returns)
   const [page, setPage] = useState(1);
+  // Search state for custom_name
+  const [searchTerm, setSearchTerm] = useState<string>("");
   // Inline edit alias state for Tracking Short URL
   const [editingAliasId, setEditingAliasId] = useState<number | null>(null);
   const [aliasInput, setAliasInput] = useState<string>("");
@@ -144,16 +147,6 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
       const response = await fetch(`/api/utm/analytics?${params.toString()}`, { cache: 'no-store' });
       const result = await response.json();
       
-      // Debug form-specific analytics data
-      if (selectedFormId) {
-        console.log('Form-specific analytics result:', {
-          selectedFormId,
-          success: result.success,
-          totalLinks: result.data?.links?.length || 0,
-          totalClicks: result.data?.insights?.totalClicks || 0,
-          params: params.toString()
-        });
-      }
       
       if (result.success) {
         setData(result.data);
@@ -222,11 +215,21 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
     });
   }
 
+  // Filter links based on search term
+  const filteredLinks = links.filter(link => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      (link.custom_name && link.custom_name.toLowerCase().includes(searchLower)) ||
+      (link.utm_name && link.utm_name.toLowerCase().includes(searchLower))
+    );
+  });
+
   const pageSize = 20;
-  const totalPages = Math.max(1, Math.ceil(links.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredLinks.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const startIndex = (currentPage - 1) * pageSize;
-  const paginatedLinks = links.slice(startIndex, startIndex + pageSize);
+  const paginatedLinks = filteredLinks.slice(startIndex, startIndex + pageSize);
   const goPrev = () => setPage((p) => Math.max(1, p - 1));
   const goNext = () => setPage((p) => Math.min(totalPages, p + 1));
 
@@ -517,14 +520,38 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
       {/* Detailed Links Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white">UTM Links Performance Analytics</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Comprehensive tracking and effectiveness analysis</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">UTM Links Performance Analytics</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Comprehensive tracking and effectiveness analysis</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setPage(1); // Reset to first page when searching
+                  }}
+                  placeholder="Search custom name or UTM name..."
+                  className="w-64 px-3 py-2 pl-10 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">UTM Name</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Custom Name</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Campaign/Source/Medium</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Tracking Short URL</th>
                 <th className="px-4 py-3 text-center font-medium text-gray-500 dark:text-gray-400">Total Clicks</th>
@@ -545,6 +572,13 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {new Date(link.created_at).toLocaleDateString()}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="text-sm text-gray-900 dark:text-white">
+                      {link.custom_name || (
+                        <span className="text-gray-400 italic">No custom name</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-4">
@@ -644,7 +678,12 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         </div>
         <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 dark:border-gray-700">
           <div className="text-xs text-gray-600 dark:text-gray-300">
-            Showing {links.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + pageSize, links.length)} of {links.length}
+            Showing {filteredLinks.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + pageSize, filteredLinks.length)} of {filteredLinks.length}
+            {searchTerm && links.length !== filteredLinks.length && (
+              <span className="ml-2 text-blue-600 dark:text-blue-400">
+                (filtered from {links.length} total)
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={goPrev} disabled={currentPage === 1} className="h-9 px-3 rounded-md bg-gray-100 dark:bg-gray-700 disabled:opacity-50 text-sm">Previous</button>

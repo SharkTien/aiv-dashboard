@@ -42,11 +42,12 @@ export async function GET(request: NextRequest) {
         code,
         name,
         type,
+        is_default,
         created_at,
         updated_at
       FROM forms 
       ${whereClause}
-      ORDER BY type, name
+      ORDER BY type, is_default DESC, name
       LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -201,5 +202,56 @@ export async function DELETE(req: NextRequest) {
   } catch (error) {
     console.error("Error deleting form:", error);
     return NextResponse.json({ error: "Failed to delete form" }, { status: 500 });
+  }
+}
+
+// PATCH endpoint to set form as default
+export async function PATCH(req: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  
+  const body = await req.json();
+  const { id, is_default } = body || {};
+  
+  if (!id) {
+    return NextResponse.json({ error: "Missing form id" }, { status: 400 });
+  }
+
+  const pool = getDbPool();
+  
+  try {
+    // Start transaction
+    await pool.query('START TRANSACTION');
+    
+    // Get form type first
+    const [formRows] = await pool.query("SELECT type FROM forms WHERE id = ?", [id]);
+    if (!Array.isArray(formRows) || formRows.length === 0) {
+      await pool.query('ROLLBACK');
+      return NextResponse.json({ error: "Form not found" }, { status: 404 });
+    }
+    
+    const formType = (formRows[0] as any).type;
+    
+    if (is_default) {
+      // Remove default flag from all other forms of the same type
+      await pool.query("UPDATE forms SET is_default = FALSE WHERE type = ? AND id != ?", [formType, id]);
+    }
+    
+    // Set the specified form as default
+    await pool.query("UPDATE forms SET is_default = ? WHERE id = ?", [is_default ? 1 : 0, id]);
+    
+    // Commit transaction
+    await pool.query('COMMIT');
+    
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    // Rollback transaction on error
+    try {
+      await pool.query('ROLLBACK');
+    } catch (rollbackError) {
+    }
+    
+    console.error("Error setting form as default:", error);
+    return NextResponse.json({ error: "Failed to set form as default" }, { status: 500 });
   }
 }

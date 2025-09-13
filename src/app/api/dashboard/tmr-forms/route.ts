@@ -5,12 +5,12 @@ export async function GET(request: NextRequest) {
   try {
     const pool = getDbPool();
 
-    // Get all TMR forms
+    // Get all TMR forms ordered by default first, then by creation date (newest first)
     const [formsResult] = await pool.query(`
-      SELECT id, name, code
+      SELECT id, name, code, is_default
       FROM forms
       WHERE type = 'TMR'
-      ORDER BY created_at DESC
+      ORDER BY is_default DESC, created_at DESC
     `);
 
     const forms = Array.isArray(formsResult) ? formsResult : [];

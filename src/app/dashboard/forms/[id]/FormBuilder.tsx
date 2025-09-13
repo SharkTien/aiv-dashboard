@@ -44,6 +44,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [fieldLoading, setFieldLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'fields' | 'duplicate'>('fields');
+  const [tabLoading, setTabLoading] = useState(false);
   const [dupFieldIds, setDupFieldIds] = useState<number[]>([]);
   const [newField, setNewField] = useState({
     field_name: "",
@@ -59,6 +60,14 @@ export default function FormBuilder({ formId }: { formId: number }) {
   // Drag & Drop states
   const [draggedField, setDraggedField] = useState<number | null>(null);
   const [dragOverField, setDragOverField] = useState<number | null>(null);
+
+  const handleTabChange = (newTab: 'fields' | 'duplicate') => {
+    if (newTab !== activeTab) {
+      setTabLoading(true);
+      setActiveTab(newTab);
+      setTimeout(() => setTabLoading(false), 300);
+    }
+  };
 
   async function loadForm() {
     try {
@@ -402,11 +411,12 @@ export default function FormBuilder({ formId }: { formId: number }) {
       </div>
 
       {/* Tabs container */}
-      <div className="bg-white/60 dark:bg-gray-700/60 rounded-lg p-4 border border-gray-200/50 dark:border-gray-600/50">
+      <div className="bg-white/60 dark:bg-gray-700/60 rounded-lg p-4 border border-gray-200/50 dark:border-gray-600/50 relative">
+        {tabLoading && <LoadingOverlay isVisible={true} message="Switching tabs..." />}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <button onClick={() => setActiveTab('fields')} className={`px-3 py-1.5 text-xs rounded-md ${activeTab==='fields' ? 'bg-sky-600 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200'}`}>Fields</button>
-            <button onClick={() => setActiveTab('duplicate')} className={`px-3 py-1.5 text-xs rounded-md ${activeTab==='duplicate' ? 'bg-sky-600 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200'}`}>Duplicate Settings</button>
+            <button onClick={() => handleTabChange('fields')} className={`px-3 py-1.5 text-xs rounded-md ${activeTab==='fields' ? 'bg-sky-600 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200'}`}>Fields</button>
+            <button onClick={() => handleTabChange('duplicate')} className={`px-3 py-1.5 text-xs rounded-md ${activeTab==='duplicate' ? 'bg-sky-600 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200'}`}>Duplicate Settings</button>
           </div>
           {activeTab === 'fields' && (
             <div className="flex items-center gap-2">

@@ -22,7 +22,7 @@ export async function DELETE(req: NextRequest) {
 
   for (const id of ids) {
     try {
-      const [rows] = await pool.query("SELECT id, entity_id, short_io_id FROM utm_links WHERE id = ?", [id]);
+      const [rows] = await pool.query("SELECT id, entity_id, short_io_id, short_io_tracking_id FROM utm_links WHERE id = ?", [id]);
       if (!Array.isArray(rows) || rows.length === 0) {
         failed.push({ id, error: "not_found" });
         continue;
@@ -37,9 +37,20 @@ export async function DELETE(req: NextRequest) {
       try {
         const apiKey = process.env.SHORT_IO_API_KEY;
         const apiBase = process.env.SHORT_IO_API_BASE || 'https://api.short.io';
+        
+        // Delete regular shortened URL
         const shortId = row.short_io_id;
         if (apiKey && shortId) {
           await fetch(`${apiBase}/links/${encodeURIComponent(shortId)}`, {
+            method: 'DELETE',
+            headers: { Authorization: apiKey },
+          });
+        }
+        
+        // Delete tracking shortened URL
+        const trackingShortId = row.short_io_tracking_id;
+        if (apiKey && trackingShortId) {
+          await fetch(`${apiBase}/links/${encodeURIComponent(trackingShortId)}`, {
             method: 'DELETE',
             headers: { Authorization: apiKey },
           });

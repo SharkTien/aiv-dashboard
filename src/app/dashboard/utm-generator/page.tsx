@@ -41,6 +41,7 @@ type UTMLink = {
   source_id: number;
   medium_id: number;
   utm_name: string | null;
+  custom_name: string | null;
   base_url?: string; // Dynamically added from config during response
   shortened_url: string | null;
   tracking_link: string | null;
@@ -93,12 +94,19 @@ export default function UTMGeneratorPage() {
   const [isBulkMode, setIsBulkMode] = useState(false); // Toggle between single and bulk mode
   const [selectedForm, setSelectedForm] = useState<number | "all">("all");
   const [utmName, setUtmName] = useState("");
+  const [customName, setCustomName] = useState("");
   const [selectedMediumData, setSelectedMediumData] = useState<UTMMedium | null>(null);
   const [availableForms, setAvailableForms] = useState<Array<{ id: number; name: string; code: string }>>([]);
   const [shorteningUrls, setShorteningUrls] = useState<Set<number>>(new Set());
   const [editingAlias, setEditingAlias] = useState<number | null>(null);
   const [aliasInput, setAliasInput] = useState<string>('');
   const [updatingAlias, setUpdatingAlias] = useState<Set<number>>(new Set());
+  const [editingCustomName, setEditingCustomName] = useState<number | null>(null);
+  const [customNameInput, setCustomNameInput] = useState<string>('');
+  const [updatingCustomName, setUpdatingCustomName] = useState<Set<number>>(new Set());
+  const [editingTrackingAlias, setEditingTrackingAlias] = useState<number | null>(null);
+  const [trackingAliasInput, setTrackingAliasInput] = useState<string>('');
+  const [updatingTrackingAlias, setUpdatingTrackingAlias] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [baseUrl, setBaseUrl] = useState<string>('https://www.aiesec.vn/globalvolunteer/home');
 
@@ -155,10 +163,10 @@ export default function UTMGeneratorPage() {
     if (selectedMedium) {
       const medium = mediums.find(m => m.id === selectedMedium);
       setSelectedMediumData(medium || null);
-      if (!medium?.name_required) setUtmName("");
+      // Don't reset UTM name - let user keep their input
     } else {
       setSelectedMediumData(null);
-      setUtmName("");
+      // Don't reset UTM name when no medium is selected
     }
   }, [selectedMedium, mediums]);
 
@@ -349,7 +357,6 @@ export default function UTMGeneratorPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       const typeParam = searchParams.get('type');
-      console.log('Loading UTM links for hub type:', typeParam || 'default (oGV)');
       if (typeParam && (typeParam === 'TMR' || typeParam === 'oGV' || typeParam === 'EWA')) {
         params.set('type', typeParam);
       }
@@ -360,9 +367,6 @@ export default function UTMGeneratorPage() {
       const res = await fetch(`/api/utm/links?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        console.log('UTM Links API Response:', data);
-        console.log('Total found:', data.pagination?.total);
-        console.log('Links returned:', data.items?.length);
         setLinks(Array.isArray(data.items) ? data.items : []);
         setPagination(data.pagination || null);
         setSelectedIds([]);
@@ -397,7 +401,8 @@ export default function UTMGeneratorPage() {
           campaign_id: activeCampaign.id,
           source_id: selectedSource,
           medium_id: selectedMedium,
-          utm_name: utmName.trim() || null
+          utm_name: utmName.trim() || null,
+          custom_name: customName.trim() || null
         })
       });
 
@@ -412,6 +417,7 @@ export default function UTMGeneratorPage() {
         setSelectedSource("");
         setSelectedMedium("");
         setUtmName("");
+        setCustomName("");
         setSelectedMediumData(null);
         // Do not reload list; show only the newly created link panel
       } else {
@@ -551,6 +557,92 @@ export default function UTMGeneratorPage() {
     setEditingAlias(linkId);
   };
 
+  const startEditCustomName = (linkId: number, currentCustomName: string) => {
+    setCustomNameInput(currentCustomName || '');
+    setEditingCustomName(linkId);
+  };
+
+  const startEditTrackingAlias = (linkId: number, currentUrl: string) => {
+    // Extract current alias from tracking short URL if exists
+    const url = new URL(currentUrl);
+    const currentAlias = url.pathname.substring(1); // Remove leading slash
+    setTrackingAliasInput(currentAlias || '');
+    setEditingTrackingAlias(linkId);
+  };
+
+  const handleUpdateCustomName = async (linkId: number) => {
+    setUpdatingCustomName(prev => new Set(prev).add(linkId));
+
+    try {
+      const response = await fetch('/api/utm/links', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: linkId, custom_name: customNameInput.trim() })
+      });
+
+      if (response.ok) {
+        // Reload links to get updated data
+        if (pagination) {
+          loadLinks(pagination.page);
+        }
+        setEditingCustomName(null);
+        setCustomNameInput('');
+        showToast('Custom name updated successfully!', 'success');
+      } else {
+        const errorData = await response.json();
+        showToast(`Failed to update custom name: ${errorData.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error updating custom name:', error);
+      showToast('Failed to update custom name', 'error');
+    } finally {
+      setUpdatingCustomName(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(linkId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleUpdateTrackingAlias = async (linkId: number) => {
+    if (!trackingAliasInput.trim()) {
+      showToast('Please enter an alias', 'error');
+      return;
+    }
+
+    setUpdatingTrackingAlias(prev => new Set(prev).add(linkId));
+
+    try {
+      const response = await fetch(`/api/utm/links/${linkId}/update-alias`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias: trackingAliasInput.trim(), isTracking: true })
+      });
+
+      if (response.ok) {
+        // Reload links to get updated data
+        if (pagination) {
+          loadLinks(pagination.page);
+        }
+        setEditingTrackingAlias(null);
+        setTrackingAliasInput('');
+        showToast('Tracking alias updated successfully!', 'success');
+      } else {
+        const errorData = await response.json();
+        showToast(`Failed to update tracking alias: ${errorData.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error updating tracking alias:', error);
+      showToast('Failed to update tracking alias', 'error');
+    } finally {
+      setUpdatingTrackingAlias(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(linkId);
+        return newSet;
+      });
+    }
+  };
+
 
 
 
@@ -634,13 +726,38 @@ export default function UTMGeneratorPage() {
             </div>
           </div>
 
-          {selectedMediumData?.name_required ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">UTM Name *</label>
-              <input type="text" value={utmName} onChange={(e) => setUtmName(e.target.value)} placeholder="Enter UTM name (required for this medium)" className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" required />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+              UTM Name {selectedMediumData?.name_required ? '*' : '(Optional)'}
+            </label>
+            <input 
+              type="text" 
+              value={utmName} 
+              onChange={(e) => setUtmName(e.target.value)} 
+              placeholder={selectedMediumData?.name_required ? "Enter UTM name (required for this medium)" : "Enter UTM name (optional)"}
+              className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
+              required={selectedMediumData?.name_required || false}
+            />
+            {selectedMediumData?.description && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{selectedMediumData.description}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Custom Name (Optional)</label>
+            <input 
+              type="text" 
+              value={customName} 
+              onChange={(e) => setCustomName(e.target.value)} 
+              placeholder="Enter a custom name for this UTM link (supports Vietnamese)" 
+              maxLength={255}
+              className="w-full h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all" 
+            />
+            <div className="flex justify-between items-center mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Give this UTM link a memorable name for easier identification</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{customName.length}/255</p>
             </div>
-          ) : (<div></div>)}
+          </div>
 
           <div className="flex items-center justify-between">
             <button type="submit" disabled={creating} className="h-11 px-6 rounded-lg bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white font-medium transition-colors">{creating ? 'Creating...' : 'Create UTM Link'}</button>
@@ -667,10 +784,8 @@ export default function UTMGeneratorPage() {
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Campaign</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Source</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Medium</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Name</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Generated URL</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Tracking Link</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Shortened Link</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">UTM Name</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Custom Name</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Tracking Short URL</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Actions</th>
                     </tr>
@@ -682,104 +797,59 @@ export default function UTMGeneratorPage() {
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.source_name}</td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.medium_name}</td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.utm_name || '-'}</td>
-                      <td className="py-3 px-4 text-sm">
-                        <div 
-                          className="max-w-xs truncate text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
-                          onClick={() => copyToClipboard(utmUrl)}
-                          title="Click to copy"
-                        >
-                          {utmUrl}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-sm">
-                        {link.tracking_link ? (
-                          <div 
-                            className="max-w-xs truncate text-purple-600 dark:text-purple-400 cursor-pointer hover:underline"
-                            onClick={() => copyToClipboard(link.tracking_link!)}
-                            title="Click to copy tracking link"
-                          >
-                            {link.tracking_link}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 dark:text-gray-500 text-xs">Not generated</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-sm">
-                        {(() => {
-                          const shortenedUrl = link.shortened_url;
-                          const isShortening = shorteningUrls.has(link.id);
-                          return shortenedUrl ? (
-                            editingAlias === link.id ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={aliasInput}
-                                  onChange={(e) => setAliasInput(e.target.value)}
-                                  placeholder="Enter alias"
-                                  className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                  onKeyPress={(e) => {
-                                    if (e.key === 'Enter') {
-                                      handleUpdateAlias(link.id);
-                                    }
-                                  }}
-                                />
-                                <button
-                                  onClick={() => handleUpdateAlias(link.id)}
-                                  disabled={updatingAlias.has(link.id)}
-                                  className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                                >
-                                  {updatingAlias.has(link.id) && <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>}
-                                  {updatingAlias.has(link.id) ? 'Saving...' : 'Save'}
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setEditingAlias(null);
-                                    setAliasInput('');
-                                  }}
-                                  className="px-2 py-1 text-xs rounded bg-gray-500 text-white hover:bg-gray-600"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <div 
-                                  className="max-w-xs truncate text-green-600 dark:text-green-400 cursor-pointer hover:underline"
-                                  onClick={() => copyToClipboard(shortenedUrl)}
-                                  title="Click to copy"
-                                >
-                                  {shortenedUrl}
-                                </div>
-                                <button
-                                  onClick={() => startEditAlias(link.id, shortenedUrl)}
-                                  className="px-1 py-1 text-xs rounded bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
-                                  title="Edit alias"
-                                >
-                                  ✏️
-                                </button>
-                              </div>
-                            )
-                          ) : (
-                            <button 
-                              onClick={() => shortenUrl(link.id, utmUrl)}
-                              disabled={isShortening}
-                              className="px-2 py-1 text-xs rounded-lg bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                            >
-                              {isShortening && <div className="w-3 h-3 border border-green-700 border-t-transparent rounded-full animate-spin"></div>}
-                              {isShortening ? 'Shortening...' : 'Shorten'}
-                            </button>
-                          );
-                        })()}
-                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.custom_name || '-'}</td>
                       <td className="py-3 px-4 text-sm">
                         {link.tracking_short_url ? (
-                          <div 
-                            className="max-w-xs truncate text-orange-600 dark:text-orange-400 cursor-pointer hover:underline"
-                            onClick={() => copyToClipboard(link.tracking_short_url!)}
-                            title="Click to copy tracking short URL"
-                          >
-                            {link.tracking_short_url}
-                          </div>
+                          editingTrackingAlias === link.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={trackingAliasInput}
+                                onChange={(e) => setTrackingAliasInput(e.target.value)}
+                                placeholder="Enter tracking alias"
+                                className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleUpdateTrackingAlias(link.id);
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={() => handleUpdateTrackingAlias(link.id)}
+                                disabled={updatingTrackingAlias.has(link.id)}
+                                className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                              >
+                                {updatingTrackingAlias.has(link.id) && <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>}
+                                {updatingTrackingAlias.has(link.id) ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingTrackingAlias(null);
+                                  setTrackingAliasInput('');
+                                }}
+                                className="px-2 py-1 text-xs rounded bg-gray-500 text-white hover:bg-gray-600"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="max-w-xs truncate text-orange-600 dark:text-orange-400 cursor-pointer hover:underline"
+                                onClick={() => copyToClipboard(link.tracking_short_url!)}
+                                title="Click to copy tracking short URL"
+                              >
+                                {link.tracking_short_url}
+                              </div>
+                              <button
+                                onClick={() => startEditTrackingAlias(link.id, link.tracking_short_url!)}
+                                className="px-1 py-1 text-xs rounded bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
+                                title="Edit tracking alias"
+                              >
+                                ✏️
+                              </button>
+                            </div>
+                          )
                         ) : (
                           <button
                             onClick={async () => {
@@ -795,7 +865,7 @@ export default function UTMGeneratorPage() {
                                 });
                                 if (res.ok) {
                                   const data = await res.json();
-                                  await fetch(`/api/utm/links/${link.id}/shorten`, {
+                                  await fetch(`/api/utm/links/${link.id}/shorten-tracking`, {
                                     method: 'PUT',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ shortenedUrl: data.shortenedUrl, shortIoId: data.shortIoId || data.id })
@@ -817,7 +887,11 @@ export default function UTMGeneratorPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-sm">
-                        <button onClick={() => copyToClipboard(utmUrl)} className="px-3 py-1 text-xs rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-medium transition-colors">Copy URL</button>
+                        {link.tracking_short_url ? (
+                          <button onClick={() => copyToClipboard(link.tracking_short_url!)} className="px-3 py-1 text-xs rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-medium transition-colors">Copy Tracking Short URL</button>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500 text-xs">No tracking short URL</span>
+                        )}
                       </td>
                     </tr>
                   </tbody>
@@ -885,7 +959,8 @@ export default function UTMGeneratorPage() {
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Campaign</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Source</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Medium</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Name</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">UTM Name</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Custom Name</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Tracking Short URL</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Created</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-200">Actions</th>
@@ -925,14 +1000,104 @@ export default function UTMGeneratorPage() {
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.medium_name}</td>
                           <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{link.utm_name || '-'}</td>
                           <td className="py-3 px-4 text-sm">
-                            {link.tracking_short_url ? (
-                              <div 
-                                className="max-w-xs truncate text-orange-600 dark:text-orange-400 cursor-pointer hover:underline"
-                                onClick={() => copyToClipboard(link.tracking_short_url!)}
-                                title="Click to copy tracking short URL"
-                              >
-                                {link.tracking_short_url}
+                            {editingCustomName === link.id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={customNameInput}
+                                  onChange={(e) => setCustomNameInput(e.target.value)}
+                                  placeholder="Enter custom name (supports Vietnamese)"
+                                  maxLength={255}
+                                  className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                  onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleUpdateCustomName(link.id);
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => handleUpdateCustomName(link.id)}
+                                  disabled={updatingCustomName.has(link.id)}
+                                  className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                >
+                                  {updatingCustomName.has(link.id) && <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>}
+                                  {updatingCustomName.has(link.id) ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingCustomName(null);
+                                    setCustomNameInput('');
+                                  }}
+                                  className="px-2 py-1 text-xs rounded bg-gray-500 text-white hover:bg-gray-600"
+                                >
+                                  Cancel
+                                </button>
                               </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-900 dark:text-white">{link.custom_name || '-'}</span>
+                                <button
+                                  onClick={() => startEditCustomName(link.id, link.custom_name || '')}
+                                  className="px-1 py-1 text-xs rounded bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
+                                  title="Edit custom name"
+                                >
+                                  ✏️
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            {link.tracking_short_url ? (
+                              editingTrackingAlias === link.id ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={trackingAliasInput}
+                                    onChange={(e) => setTrackingAliasInput(e.target.value)}
+                                    placeholder="Enter tracking alias"
+                                    className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                    onKeyPress={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleUpdateTrackingAlias(link.id);
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    onClick={() => handleUpdateTrackingAlias(link.id)}
+                                    disabled={updatingTrackingAlias.has(link.id)}
+                                    className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                  >
+                                    {updatingTrackingAlias.has(link.id) && <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>}
+                                    {updatingTrackingAlias.has(link.id) ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingTrackingAlias(null);
+                                      setTrackingAliasInput('');
+                                    }}
+                                    className="px-2 py-1 text-xs rounded bg-gray-500 text-white hover:bg-gray-600"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="max-w-xs truncate text-orange-600 dark:text-orange-400 cursor-pointer hover:underline"
+                                    onClick={() => copyToClipboard(link.tracking_short_url!)}
+                                    title="Click to copy tracking short URL"
+                                  >
+                                    {link.tracking_short_url}
+                                  </div>
+                                  <button
+                                    onClick={() => startEditTrackingAlias(link.id, link.tracking_short_url!)}
+                                    className="px-1 py-1 text-xs rounded bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
+                                    title="Edit tracking alias"
+                                  >
+                                    ✏️
+                                  </button>
+                                </div>
+                              )
                             ) : (
                               <span className="text-gray-400 dark:text-gray-500 text-xs">Not shortened</span>
                             )}

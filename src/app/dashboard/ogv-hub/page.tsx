@@ -14,6 +14,7 @@ type Form = {
   id: number;
   name: string;
   code: string;
+  is_default: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -53,7 +54,7 @@ export default function OGVHubDashboard() {
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [preset, setPreset] = useState<'this_week' | 'last_week' | 'last_7_days' | 'custom'>('last_7_days');
+  const [preset, setPreset] = useState<'full_submissions' | 'this_week' | 'last_week' | 'last_7_days' | 'custom'>('full_submissions');
 
   useEffect(() => {
     loadForms();
@@ -63,7 +64,7 @@ export default function OGVHubDashboard() {
     if (selectedFormId) {
       loadStats(selectedFormId);
     }
-  }, [selectedFormId, startDate, endDate]);
+  }, [selectedFormId, startDate, endDate, preset]);
 
   const loadForms = async () => {
     try {
@@ -73,9 +74,10 @@ export default function OGVHubDashboard() {
         const result = await response.json();
         if (result.success) {
           setForms(result.data);
-          // Select the newest form by default
+          // Select the default form if available, otherwise the first form
           if (result.data.length > 0) {
-            setSelectedFormId(result.data[0].id);
+            const defaultForm = result.data.find((form: Form) => form.is_default);
+            setSelectedFormId(defaultForm ? defaultForm.id : result.data[0].id);
           }
         }
       }
@@ -90,7 +92,8 @@ export default function OGVHubDashboard() {
     try {
       setLoadingStats(true);
       const params = new URLSearchParams({ formId: String(formId) });
-      if (startDate && endDate) {
+      // Only add date filters if not using full_submissions preset
+      if (preset !== 'full_submissions' && startDate && endDate) {
         params.set('start_date', startDate);
         params.set('end_date', endDate);
       }
@@ -211,6 +214,7 @@ export default function OGVHubDashboard() {
               <div>
                 <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Preset</label>
                 <select value={preset} onChange={(e) => setPreset(e.target.value as any)} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                  <option value="full_submissions">All of this phase</option>
                   <option value="this_week">This week (Mon-Sun)</option>
                   <option value="last_week">Last week</option>
                   <option value="last_7_days">Last 7 days</option>
@@ -219,11 +223,11 @@ export default function OGVHubDashboard() {
               </div>
               <div>
                 <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Start date</label>
-                <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreset('custom'); }} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreset('custom'); }} disabled={preset === 'full_submissions'} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed" />
               </div>
               <div>
                 <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">End date</label>
-                <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset('custom'); }} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset('custom'); }} disabled={preset === 'full_submissions'} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed" />
               </div>
               <button onClick={() => selectedFormId && loadStats(selectedFormId)} className="h-10 px-4 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-sm">Apply</button>
             </div>

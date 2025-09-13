@@ -5,12 +5,12 @@ export async function GET() {
   const pool = getDbPool();
 
   try {
-    // Get all oGV forms ordered by creation date (newest first)
+    // Get all oGV forms ordered by default first, then by creation date (newest first)
     const [formsResult] = await pool.query(`
-      SELECT id, name, code, created_at, updated_at
+      SELECT id, name, code, is_default, created_at, updated_at
       FROM forms 
       WHERE type = 'oGV'
-      ORDER BY created_at DESC
+      ORDER BY is_default DESC, created_at DESC
     `);
 
     const forms = Array.isArray(formsResult) ? formsResult : [];

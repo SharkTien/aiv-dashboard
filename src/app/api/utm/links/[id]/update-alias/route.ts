@@ -12,7 +12,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Invalid link ID" }, { status: 400 });
   }
 
-  const { alias } = await req.json();
+  const { alias, isTracking } = await req.json();
   if (!alias) {
     return NextResponse.json({ error: "Alias is required" }, { status: 400 });
   }
@@ -28,7 +28,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   
   try {
     // Check ownership for non-admin users
-    const [rows] = await pool.query("SELECT entity_id, base_url FROM utm_links WHERE id = ?", [linkId]);
+    const [rows] = await pool.query("SELECT entity_id, base_url, tracking_link, tracking_short_url, short_io_id, short_io_tracking_id FROM utm_links WHERE id = ?", [linkId]);
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json({ error: "UTM link not found" }, { status: 404 });
     }
@@ -37,58 +37,81 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Generate UTM URL (we need to reconstruct the full UTM URL)
-    const [linkDetails] = await pool.query(`
-      SELECT 
-        ul.entity_id,
-        ul.campaign_id,
-        ul.source_id,
-        ul.medium_id,
-        ul.utm_name,
-        uc.code as campaign_code,
-        us.code as source_code,
-        um.code as medium_code,
-        e.name as entity_name,
-        f.type as form_type
-      FROM utm_links ul
-      JOIN utm_campaigns uc ON ul.campaign_id = uc.id
-      JOIN utm_sources us ON ul.source_id = us.id
-      JOIN utm_mediums um ON ul.medium_id = um.id
-      JOIN entity e ON ul.entity_id = e.entity_id
-      JOIN forms f ON uc.form_id = f.id
-      WHERE ul.id = ?
-    `, [linkId]);
-
-    if (!Array.isArray(linkDetails) || linkDetails.length === 0) {
-      return NextResponse.json({ error: "Link details not found" }, { status: 404 });
+    // Determine which URL to use based on isTracking flag
+    let targetUrl: string;
+    let shortUrlField: string;
+    let shortIoIdField: string;
+    
+    if (isTracking) {
+      if (!link.tracking_link) {
+        return NextResponse.json({ error: "No tracking link found" }, { status: 400 });
+      }
+      targetUrl = link.tracking_link;
+      shortUrlField = 'tracking_short_url';
+      shortIoIdField = 'short_io_tracking_id';
+    } else {
+      // For regular shortened URL, we need to reconstruct the UTM URL
+      targetUrl = ''; // Will be set below
+      shortUrlField = 'shortened_url';
+      shortIoIdField = 'short_io_id';
     }
 
-    const details = linkDetails[0] as any;
-    
-    // Get base URL from config based on form type
-    const hubType = details.form_type === 'TMR' ? 'TMR' : 'oGV';
-    const [baseUrlRows] = await pool.query(
-      `SELECT base_url FROM utm_base_urls WHERE hub_type = ?`,
-      [hubType]
-    );
-    
-    // Default URLs
-    const defaultUrls = {
-      oGV: "https://www.aiesec.vn/globalvolunteer/home",
-      TMR: "https://www.aiesec.vn/join-aiesec-fall-2025"
-    };
-    
-    const baseUrl = Array.isArray(baseUrlRows) && baseUrlRows.length > 0 
-      ? (baseUrlRows[0] as any).base_url 
-      : defaultUrls[hubType as keyof typeof defaultUrls];
-    
-    // Build UTM URL
-    const utmUrl = new URL(baseUrl);
-    utmUrl.searchParams.set('utm_source', details.source_code);
-    utmUrl.searchParams.set('utm_medium', details.medium_code);
-    utmUrl.searchParams.set('utm_campaign', details.campaign_code);
-    if (details.utm_name) {
-      utmUrl.searchParams.set('utm_name', details.utm_name);
+    // Generate UTM URL only for non-tracking URLs
+    if (!isTracking) {
+      const [linkDetails] = await pool.query(`
+        SELECT 
+          ul.entity_id,
+          ul.campaign_id,
+          ul.source_id,
+          ul.medium_id,
+          ul.utm_name,
+          uc.code as campaign_code,
+          us.code as source_code,
+          um.code as medium_code,
+          e.name as entity_name,
+          f.type as form_type
+        FROM utm_links ul
+        JOIN utm_campaigns uc ON ul.campaign_id = uc.id
+        JOIN utm_sources us ON ul.source_id = us.id
+        JOIN utm_mediums um ON ul.medium_id = um.id
+        JOIN entity e ON ul.entity_id = e.entity_id
+        JOIN forms f ON uc.form_id = f.id
+        WHERE ul.id = ?
+      `, [linkId]);
+
+      if (!Array.isArray(linkDetails) || linkDetails.length === 0) {
+        return NextResponse.json({ error: "Link details not found" }, { status: 404 });
+      }
+
+      const details = linkDetails[0] as any;
+      
+      // Get base URL from config based on form type
+      const hubType = details.form_type === 'TMR' ? 'TMR' : 'oGV';
+      const [baseUrlRows] = await pool.query(
+        `SELECT base_url FROM utm_base_urls WHERE hub_type = ?`,
+        [hubType]
+      );
+      
+      // Default URLs
+      const defaultUrls = {
+        oGV: "https://www.aiesec.vn/globalvolunteer/home",
+        TMR: "https://www.aiesec.vn/join-aiesec-fall-2025"
+      };
+      
+      const baseUrl = Array.isArray(baseUrlRows) && baseUrlRows.length > 0 
+        ? (baseUrlRows[0] as any).base_url 
+        : defaultUrls[hubType as keyof typeof defaultUrls];
+      
+      // Build UTM URL
+      const utmUrl = new URL(baseUrl);
+      utmUrl.searchParams.set('utm_source', details.source_code);
+      utmUrl.searchParams.set('utm_medium', details.medium_code);
+      utmUrl.searchParams.set('utm_campaign', details.campaign_code);
+      if (details.utm_name) {
+        utmUrl.searchParams.set('utm_name', details.utm_name);
+      }
+      
+      targetUrl = utmUrl.toString();
     }
 
     // First, try to delete the old shortened URL if it exists
@@ -96,30 +119,26 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     
     if (shortApiKey) {
       try {
-        // Get short_io_id from database
-        const [linkRows] = await pool.query("SELECT short_io_id FROM utm_links WHERE id = ?", [linkId]);
-        if (Array.isArray(linkRows) && linkRows.length > 0) {
-          const shortIoId = (linkRows[0] as any).short_io_id;
+        // Get the appropriate short_io_id based on isTracking flag
+        const shortIoId = isTracking ? link.short_io_tracking_id : link.short_io_id;
+        
+        if (shortIoId) {
+          // Delete the old link using short_io_id
+          const deleteResponse = await fetch(`https://api.short.io/links/${shortIoId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': shortApiKey,
+            },
+          });
           
-          if (shortIoId) {
-            
-            // Delete the old link using short_io_id
-            const deleteResponse = await fetch(`https://api.short.io/links/${shortIoId}`, {
-              method: 'DELETE',
-              headers: {
-                'Authorization': shortApiKey,
-              },
-            });
-            
-            if (deleteResponse.ok) {
-            } else {
-              const errorData = await deleteResponse.json();
-              // silent
-            }
+          if (deleteResponse.ok) {
+            // Successfully deleted old link
+          } else {
+            const errorData = await deleteResponse.json();
+            // Continue with creating new link even if deletion fails
           }
         }
       } catch (error) {
-        // silent
         // Continue with creating new link even if deletion fails
       }
     }
@@ -141,7 +160,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        originalURL: utmUrl.toString(),
+        originalURL: targetUrl,
         domain: shortDomain,
         path: alias,
         allowDuplicates: false
@@ -164,11 +183,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       throw new Error('Invalid response from Short.io API');
     }
 
-    // Update shortened_url and short_io_id in database
-    await pool.query(
-      "UPDATE utm_links SET shortened_url = ?, short_io_id = ? WHERE id = ?",
-      [shortData.shortURL, shortData.idString, linkId]
-    );
+    // Update the appropriate fields in database based on isTracking flag
+    if (isTracking) {
+      await pool.query(
+        "UPDATE utm_links SET tracking_short_url = ?, short_io_tracking_id = ? WHERE id = ?",
+        [shortData.shortURL, shortData.idString, linkId]
+      );
+    } else {
+      await pool.query(
+        "UPDATE utm_links SET shortened_url = ?, short_io_id = ? WHERE id = ?",
+        [shortData.shortURL, shortData.idString, linkId]
+      );
+    }
 
     return NextResponse.json({ 
       success: true, 

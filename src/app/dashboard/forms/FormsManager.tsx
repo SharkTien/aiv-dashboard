@@ -11,6 +11,7 @@ type Form = {
   code: string;
   name: string;
   type: 'oGV' | 'TMR' | 'EWA';
+  is_default: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -37,6 +38,7 @@ export default function FormsManager() {
   const [duplicatingForm, setDuplicatingForm] = useState<number | null>(null);
   const [editingForm, setEditingForm] = useState<Form | null>(null);
   const [editFormName, setEditFormName] = useState("");
+  const [settingDefault, setSettingDefault] = useState<number | null>(null);
 
   async function load(page: number = 1) {
     setLoading(true);
@@ -199,6 +201,30 @@ export default function FormsManager() {
     setEditFormName("");
   };
 
+  const handleSetAsDefault = async (formId: number, isDefault: boolean) => {
+    setSettingDefault(formId);
+    try {
+      const res = await fetch('/api/forms', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: formId, is_default: isDefault })
+      });
+
+      if (res.ok) {
+        alert(isDefault ? 'Form set as default successfully!' : 'Form default status removed successfully!');
+        load(currentPage);
+      } else {
+        const data = await res.json();
+        alert(data.error || `Failed to ${isDefault ? 'set' : 'remove'} default status`);
+      }
+    } catch (error) {
+      console.error('Error setting form as default:', error);
+      alert(`Failed to ${isDefault ? 'set' : 'remove'} default status`);
+    } finally {
+      setSettingDefault(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header with search and create */}
@@ -248,10 +274,10 @@ export default function FormsManager() {
           </div>
         </div>
       )}
-      {/* Loading Overlay for Duplicate */}
+      {/* Loading Overlay for Duplicate and Set Default */}
       <LoadingOverlay 
-        isVisible={duplicatingForm !== null} 
-        message="Duplicating form..." 
+        isVisible={duplicatingForm !== null || settingDefault !== null} 
+        message={duplicatingForm !== null ? "Duplicating form..." : "Setting form as default..."} 
       />
       {/* Modal Create Form */}
       {showCreateModal && (
@@ -430,6 +456,14 @@ export default function FormsManager() {
                           <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium">
                             {form.type}
                           </span>
+                          {form.is_default && (
+                            <>
+                              <span className="mx-2">•</span>
+                              <span className="px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-medium">
+                                Default
+                              </span>
+                            </>
+                          )}
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           Created: {new Date(form.created_at).toLocaleDateString()}
@@ -459,6 +493,17 @@ export default function FormsManager() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                           </svg>
                           Rename
+                        </div>
+                      </DropdownItem>
+                      <DropdownItem 
+                        onClick={() => handleDropdownAction(() => handleSetAsDefault(form.id, !form.is_default))}
+                        disabled={settingDefault === form.id}
+                      >
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          {form.is_default ? 'Remove as default' : 'Set as default'}
                         </div>
                       </DropdownItem>
                       <DropdownItem 
