@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 
 interface UTMAnalyticsProps {
@@ -766,6 +766,8 @@ function HeatmapTable({
   rows: Array<{ label: string; code: string; totals: number; byDate: Record<string, number> }>;
   dates: string[];
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  
   // Determine global max for color scaling
   const maxVal = Math.max(
     1,
@@ -778,8 +780,15 @@ function HeatmapTable({
     return { backgroundColor: `rgba(16, 185, 129, ${alpha.toFixed(3)})` }; // emerald-500-ish
   };
 
+  // Auto-scroll to the right when component mounts
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+    }
+  }, [dates]);
+
   return (
-    <div className="overflow-x-auto">
+    <div ref={scrollRef} className="overflow-x-auto heatmap-scroll-container">
       <table className="w-full text-xs md:text-sm border-collapse">
         <thead>
           <tr>
@@ -820,6 +829,8 @@ function TimeOfDayHeatmap({
   rows: Array<{ hour: number; totals: number; byDate: Record<string, number> }>;
   dates: string[];
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  
   const maxVal = Math.max(1, ...rows.flatMap(r => dates.map(d => r.byDate[d] || 0)));
   const bgFor = (v: number) => {
     const ratio = Math.min(1, v / maxVal);
@@ -828,8 +839,15 @@ function TimeOfDayHeatmap({
   };
   const fmtHour = (h: number) => `${h.toString().padStart(2, '0')}:00`;
 
+  // Auto-scroll to the right when component mounts
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+    }
+  }, [dates]);
+
   return (
-    <div className="overflow-x-auto">
+    <div ref={scrollRef} className="overflow-x-auto time-heatmap-scroll-container">
       <table className="w-full text-xs md:text-sm border-collapse">
         <thead>
           <tr>
