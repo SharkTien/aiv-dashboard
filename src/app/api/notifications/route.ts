@@ -11,10 +11,18 @@ export async function GET(req: NextRequest) {
   const unreadOnly = String(searchParams.get('unread_only') || '').toLowerCase() === 'true';
   const limit = Math.min(Number(searchParams.get('limit') || 20), 100);
 
-  const where = ['user_id = ?'];
-  const params: any[] = [user.sub];
-  if (unreadOnly) where.push('read_flag = 0');
-  const whereClause = `WHERE ${where.join(' AND ')}`;
+  // Include personal notifications; when not filtering unread, also include general (user_id = 0)
+  const clauses: string[] = [];
+  const params: any[] = [];
+  if (unreadOnly) {
+    clauses.push('user_id = ?');
+    params.push(user.sub);
+    clauses.push('read_flag = 0');
+  } else {
+    clauses.push('(user_id = ? OR user_id = 0)');
+    params.push(user.sub);
+  }
+  const whereClause = `WHERE ${clauses.join(' AND ')}`;
 
   const [rows] = await pool.query(
     `SELECT id, type, title, body, read_flag, created_at

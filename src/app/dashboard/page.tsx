@@ -143,12 +143,27 @@ export default function DashboardHome() {
   const loadNotifications = async () => {
     try {
       setNotificationsLoading(true);
-      const response = await fetch('/api/notifications?limit=5');
-      const result = await response.json();
-      
-      if (result.success) {
-        setNotifications(result.items || []);
-      }
+      const [resPersonal, resGeneral] = await Promise.all([
+        fetch('/api/notifications?limit=5'),
+        fetch('/api/general-notifications?limit=5', { cache: 'no-store' })
+      ]);
+      const personal = resPersonal.ok ? await resPersonal.json() : { items: [] };
+      const general = resGeneral.ok ? await resGeneral.json() : { items: [] };
+
+      const generalMapped = Array.isArray(general.items) ? general.items.map((g: any) => ({
+        id: `general-${g.id}`,
+        title: g.title,
+        message: (g.content_html || '').replace(/<[^>]+>/g, '').slice(0, 200),
+        created_at: g.created_at,
+        is_read: false
+      })) : [];
+
+      const personalItems = Array.isArray(personal.items) ? personal.items : [];
+      const merged = [...personalItems, ...generalMapped]
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5);
+
+      setNotifications(merged);
     } catch (error) {
       console.error('Error loading notifications:', error);
     } finally {

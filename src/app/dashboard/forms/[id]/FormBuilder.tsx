@@ -336,6 +336,31 @@ export default function FormBuilder({ formId }: { formId: number }) {
     }
   };
 
+  // Drop between fields: use an index-based drop zone
+  const handleDropBetween = async (e: React.DragEvent, insertIndex: number) => {
+    e.preventDefault();
+    if (draggedField == null) return;
+    try {
+      const draggedIndex = fields.findIndex(f => f.id === draggedField);
+      if (draggedIndex === -1) return;
+      const newFields = [...fields];
+      const [draggedItem] = newFields.splice(draggedIndex, 1);
+      // clamp insert index after removal
+      const idx = Math.max(0, Math.min(insertIndex, newFields.length));
+      newFields.splice(idx, 0, draggedItem);
+      const updatedFields = newFields.map((field, index) => ({ ...field, sort_order: index + 1 }));
+      const res = await fetch(`/api/forms/${formId}/fields/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fieldOrders: updatedFields.map(f => ({ id: f.id, sort_order: f.sort_order })) })
+      });
+      if (res.ok) setFields(updatedFields); else loadFields();
+    } finally {
+      setDraggedField(null);
+      setDragOverField(null);
+    }
+  };
+
   const startEditField = (field: FormField) => {
     setEditingField(field);
     setNewField({
@@ -450,31 +475,45 @@ export default function FormBuilder({ formId }: { formId: number }) {
             <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">No fields added yet. Click "Add Field" to get started.</div>
           ) : (
             <div className="space-y-2">
+              {/* Top drop zone */}
+              <div
+                className="h-3 rounded border border-transparent hover:border-sky-300"
+                onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; }}
+                onDrop={(e)=>handleDropBetween(e, 0)}
+              />
               {fields.map((field, index) => {
                 const isRequiredField = false;
                 return (
-                  <div key={field.id} draggable={!isRequiredField} onDragStart={!isRequiredField ? (e) => handleDragStart(e, field.id) : undefined} onDragOver={!isRequiredField ? (e) => handleDragOver(e, field.id) : undefined} onDragLeave={!isRequiredField ? handleDragLeave : undefined} onDrop={!isRequiredField ? (e) => handleDrop(e, field.id) : undefined} className={`flex items-center justify-between gap-3 p-3 rounded-md bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50 transition-all ${isRequiredField ? 'cursor-default' : 'cursor-move'} ${draggedField === field.id ? 'opacity-50 scale-95' : ''} ${dragOverField === field.id ? 'border-sky-400 bg-sky-50/50 dark:bg-sky-900/20' : ''}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 rounded-md bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-                        <span className="text-sky-600 dark:text-sky-400 font-semibold text-xs">{index + 1}</span>
+                  <>
+                    <div key={field.id} draggable={!isRequiredField} onDragStart={!isRequiredField ? (e) => handleDragStart(e, field.id) : undefined} onDragOver={!isRequiredField ? (e) => handleDragOver(e, field.id) : undefined} onDragLeave={!isRequiredField ? handleDragLeave : undefined} onDrop={!isRequiredField ? (e) => handleDrop(e, field.id) : undefined} className={`flex items-center justify-between gap-3 p-3 rounded-md bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50 transition-all ${isRequiredField ? 'cursor-default' : 'cursor-move'} ${draggedField === field.id ? 'opacity-50 scale-95' : ''} ${dragOverField === field.id ? 'border-sky-400 bg-sky-50/50 dark:bg-sky-900/20' : ''}`}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-md bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                          <span className="text-sky-600 dark:text-sky-400 font-semibold text-xs">{index + 1}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 text-gray-400">
+                            <svg fill="currentColor" viewBox="0 0 20 20"><path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" /></svg>
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900 dark:text-white text-sm">{field.field_label}</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-300">{field.field_name} • {field.field_type}</div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 text-gray-400">
-                          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" /></svg>
-                        </div>
-                        <div>
-                          <div className="font-medium text-gray-900 dark:text-white text-sm">{field.field_label}</div>
-                          <div className="text-xs text-gray-600 dark:text-gray-300">{field.field_name} • {field.field_type}</div>
-                        </div>
+                      <div className="flex items-center gap-1">
+                        <>
+                          <button onClick={() => startEditField(field)} className="px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 transition-colors">Edit</button>
+                          <button onClick={() => handleDeleteField(field.id)} className="px-2 py-1 text-xs rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 transition-colors">Delete</button>
+                        </>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <>
-                        <button onClick={() => startEditField(field)} className="px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 transition-colors">Edit</button>
-                        <button onClick={() => handleDeleteField(field.id)} className="px-2 py-1 text-xs rounded-md bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 transition-colors">Delete</button>
-                      </>
-                    </div>
-                  </div>
+                    {/* Between drop zone */}
+                    <div
+                      className="h-3 rounded border border-transparent hover:border-sky-300 mt-1"
+                      onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; }}
+                      onDrop={(e)=>handleDropBetween(e, index+1)}
+                    />
+                  </>
                 );
               })}
             </div>
