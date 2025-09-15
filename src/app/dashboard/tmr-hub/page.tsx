@@ -236,7 +236,7 @@ export default function TMRHubDashboard() {
         </div>
         
         <div className="mb-8">
-          <SignupSummary formId={selectedFormId} formType="TMR" startDate={startDate} endDate={endDate} />
+          <SignupSummary formId={selectedFormId} formType="TMR" startDate={startDate} endDate={endDate} preset={preset} />
         </div>
       </div>
     </div>

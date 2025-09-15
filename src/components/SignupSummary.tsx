@@ -45,9 +45,10 @@ interface SignupSummaryProps {
   formType?: 'oGV' | 'TMR' | null;
   startDate?: string;
   endDate?: string;
+  preset?: 'full_submissions' | 'this_week' | 'last_week' | 'last_7_days' | 'custom';
 }
 
-export default function SignupSummary({ className = '', formId, formType, startDate, endDate }: SignupSummaryProps) {
+export default function SignupSummary({ className = '', formId, formType, startDate, endDate, preset }: SignupSummaryProps) {
   const [localSummary, setLocalSummary] = useState<SummaryRow[]>([]);
   const [localTotals, setLocalTotals] = useState<SummaryRow | null>(null);
   const [nationalSummary, setNationalSummary] = useState<NationalSummary[]>([]);
@@ -176,7 +177,8 @@ export default function SignupSummary({ className = '', formId, formType, startD
       if (comparePhaseFilter) {
         params.append('compare', comparePhaseFilter);
       }
-      if (startDate && endDate) {
+      // Only add date filters if not using full_submissions preset
+      if (preset !== 'full_submissions' && startDate && endDate) {
         params.append('start_date', startDate);
         params.append('end_date', endDate);
       }

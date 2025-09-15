@@ -236,7 +236,7 @@ export default function OGVHubDashboard() {
         
         {/* Signup Summary */}
         <div className="mb-8">
-          <SignupSummary formId={selectedFormId} formType="oGV" startDate={startDate} endDate={endDate} />
+          <SignupSummary formId={selectedFormId} formType="oGV" startDate={startDate} endDate={endDate} preset={preset} />
         </div>
 
         {/* No Form Selected */}
