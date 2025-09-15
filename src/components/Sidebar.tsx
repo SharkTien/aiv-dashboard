@@ -187,6 +187,9 @@ export default function Sidebar({ user, isAdmin }: { user: any; isAdmin: boolean
                 unreadCount={unreadCount}
                 onRefreshCount={loadUnreadCount}
               />
+              <NavItem href="/dashboard/feedback" icon={<HandshakeIcon className={`${isCollapsed ? 'h-5 w-5' : 'h-4 w-4'}`} />} isCollapsed={isCollapsed}>
+                Feedback
+              </NavItem>
             </div>
 
             {/* Hub Sections with conditional separators */}
