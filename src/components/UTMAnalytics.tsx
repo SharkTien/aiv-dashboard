@@ -122,6 +122,8 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
     loadAnalytics();
   }, [startDate, endDate, selectedFormId, selectedEntity, isAdmin, activeTab]);
 
+  
+
 
 
   const loadAnalytics = async () => {
@@ -140,8 +142,8 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         // If no specific form selected, filter by form type (oGV/TMR/EWA)
         params.append('form_type', formType);
       }
-      // Filter by entity only for User Performance tab
-      if (activeTab === 'user_performance' && selectedEntity) {
+      // Filter by entity for User Performance, and for Overview when admin
+      if ((activeTab === 'user_performance' || (activeTab === 'overview' && isAdmin)) && selectedEntity) {
         params.append('entity_id', selectedEntity);
       }
 
@@ -164,6 +166,8 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
       setLoading(false);
     }
   };
+
+  
 
   if (loading) {
     return (
@@ -325,8 +329,8 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
           />
         </div>
 
-        {/* Entity filter (available to all users). Non-admins won't see 'Organic' */}
-        {activeTab === 'user_performance' && (
+        {/* Entity filter: always for admin in Overview; and User Performance for all */}
+        {((isAdmin && activeTab === 'overview') || activeTab === 'user_performance') && (
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
             Entity
@@ -349,7 +353,9 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         )}
 
         <button
-          onClick={loadAnalytics}
+          onClick={() => {
+            loadAnalytics();
+          }}
           className="h-11 px-6 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors"
         >
           Refresh
@@ -370,16 +376,16 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <div className="text-center">
             <p className="text-xs text-gray-500 dark:text-gray-400">Total Clicks</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white">{insights.totalClicks}</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{insights?.totalClicks ?? 0}</p>
           </div>
           <div className="text-center">
             <p className="text-xs text-gray-500 dark:text-gray-400">Unique Clicks</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white">{insights.totalUniqueClicks}</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{insights?.totalUniqueClicks ?? 0}</p>
           </div>
           <div className="text-center">
             <p className="text-xs text-gray-500 dark:text-gray-400">Click Rate</p>
             <p className="text-lg font-bold text-gray-900 dark:text-white">
-              {insights.totalClicks > 0 ? ((insights.totalUniqueClicks / insights.totalClicks) * 100).toFixed(1) : 0}%
+              {insights && insights.totalClicks > 0 ? ((insights.totalUniqueClicks / insights.totalClicks) * 100).toFixed(1) : 0}%
             </p>
           </div>
         </div>
@@ -438,7 +444,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Medium Performance</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={insights.mediumPerformance.slice(0, 5)}>
+            <BarChart data={(insights?.mediumPerformance || []).slice(0, 5)}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="medium_code" />
               <YAxis />
@@ -454,7 +460,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
-                data={insights.sourcePerformance.slice(0, 5)}
+                data={(insights?.sourcePerformance || []).slice(0, 5)}
                 dataKey="totalClicks"
                 nameKey="source_name"
                 cx="50%"
@@ -463,7 +469,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
                 fill="#8884d8"
                 label
               >
-                {insights.sourcePerformance.slice(0, 5).map((entry, index) => (
+                {(insights?.sourcePerformance || []).slice(0, 5).map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
@@ -477,7 +483,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Campaign Performance</h3>
           <div className="space-y-3">
-            {insights.campaignPerformance.slice(0, 5).map((campaign, index) => (
+            {(insights?.campaignPerformance || []).slice(0, 5).map((campaign, index) => (
               <div key={campaign.campaign_code} className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
@@ -760,6 +766,8 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
           endDate={endDate}
         />
       )}
+
+      
     </div>
   );
 }
