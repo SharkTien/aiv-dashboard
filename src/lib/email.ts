@@ -6,9 +6,10 @@ type SendEmailOptions = {
   html?: string;
 };
 
-let transporter: nodemailer.Transporter | null = null;
+// Use loose typing to avoid build-time type issues with nodemailer typings
+let transporter: any = null;
 
-function getTransporter() {
+function getTransporter(): any {
   if (transporter) return transporter;
 
   const host = process.env.SMTP_HOST;
