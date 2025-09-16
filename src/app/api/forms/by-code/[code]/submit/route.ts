@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbPool } from "@/lib/db";
+import { sendEmail } from "@/lib/email";
 
 const ALLOWED: Record<string, { valueKey: string; labelKey: string }> = {
   entity: { valueKey: "entity_id", labelKey: "name" },
@@ -296,6 +297,33 @@ export async function POST(
     }
 
     await conn.commit();
+
+    // Send confirmation email (best-effort, non-blocking for response)
+    try {
+      // Fetch email value from saved responses if not already available
+      if (!email) {
+        const [emailRows] = await pool.query(
+          `SELECT fr.value 
+           FROM form_responses fr
+           JOIN form_fields ff ON fr.field_id = ff.id
+           WHERE fr.submission_id = ? AND ff.field_name = 'email'
+           LIMIT 1`,
+          [submissionId]
+        );
+        if (Array.isArray(emailRows) && emailRows.length > 0) {
+          email = (emailRows[0] as any).value;
+        }
+      }
+
+      const toEmail = (email || "").trim();
+      if (toEmail) {
+        const subject = "AIESEC in Vietnam | We have received Your Application for Recruitment Fall 2025";
+        // Empty content, optional signature handled in sendEmail
+        await sendEmail({ to: toEmail, subject, html: "" });
+      }
+    } catch (e) {
+      console.warn("[Submit] Failed to send confirmation email:", (e as any)?.message || e);
+    }
 
     const res = NextResponse.json({ success: true, submission_id: submissionId });
     return withCors(res, req);

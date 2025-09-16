@@ -218,11 +218,11 @@ async function createUTMLink(pool: any, params: any): Promise<number> {
   // 2. Handle proper validation and error checking
   // 3. Generate shortened URL if needed
   
-  // Build UTM parameters for the base_url
+  // Build UTM parameters for the base_url (use standard utm_* keys)
   const utmParams = new URLSearchParams();
-  utmParams.set('campaign_id', params.utm_campaign || '');
-  utmParams.set('source_id', params.utm_source || '');
-  utmParams.set('medium_id', params.utm_medium || '');
+  utmParams.set('utm_campaign', params.utm_campaign || '');
+  utmParams.set('utm_source', params.utm_source || '');
+  utmParams.set('utm_medium', params.utm_medium || '');
   if (params.utm_name && params.utm_name.trim() !== '') {
     utmParams.set('utm_name', params.utm_name.trim());
   }
