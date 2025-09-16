@@ -120,27 +120,8 @@ export async function POST(
       }
     }
 
-    // Get existing form codes if formCodeField exists
-    const existingFormCodes = new Set<string>();
-    if (formCodeField) {
-      try {
-        const field = fieldMap.get(formCodeField);
-        if (field?.id) {
-          const [existingRows] = await pool.query(
-            "SELECT fr.value FROM form_responses fr " +
-            "JOIN form_submissions fs ON fr.submission_id = fs.id " +
-            "WHERE fs.form_id = ? AND fr.field_id = ? AND fr.value IS NOT NULL AND fr.value != ''",
-            [formId, field.id]
-          );
-          if (Array.isArray(existingRows)) {
-            for (const row of existingRows as any[]) {
-              existingFormCodes.add(String(row.value));
-            }
-          }
-        }
-      } catch (e) {
-      }
-    }
+    // Note: We no longer check for existing form codes to prevent duplicates
+    // All imports are allowed, and duplicates will be marked after import
 
     // Process and insert submissions in batches
     let successCount = 0;
@@ -208,9 +189,7 @@ export async function POST(
               }
             }
 
-            if (formCodeValue && formCodeField) {
-              existingFormCodes.add(formCodeValue);
-            }
+            // Note: We no longer track existing form codes since we allow duplicates
 
             // Timestamp processing
             let submissionTimestamp = "";
@@ -439,55 +418,70 @@ export async function POST(
     } catch (error) {
     }
 
-    // Post-import de-duplication: mark older submissions as duplicated if a newer one shares phone or email
+    // Post-import de-duplication: mark older submissions as duplicated, keep newest as non-duplicated
     let duplicateCheckCount = 0;
     try {
-      // Mark older phone duplicates
+      // First, reset all duplicated flags to ensure clean state
+      await pool.query(
+        "UPDATE form_submissions SET duplicated = FALSE WHERE form_id = ?",
+        [formId]
+      );
+
+      // Mark older phone duplicates (keep newest submission with same phone number)
       const [dupPhoneResult] = await pool.query(
         `UPDATE form_submissions fs
          JOIN form_responses frp ON frp.submission_id = fs.id
          JOIN form_fields ffp ON ffp.id = frp.field_id AND ffp.field_name = 'phone'
          SET fs.duplicated = TRUE
-         WHERE fs.form_id = ? AND fs.duplicated = FALSE AND EXISTS (
-           SELECT 1 FROM form_submissions fs2
-           JOIN form_responses frp2 ON frp2.submission_id = fs2.id
-           JOIN form_fields ffp2 ON ffp2.id = frp2.field_id AND ffp2.field_name = 'phone'
-           WHERE fs2.form_id = fs.form_id AND fs2.id != fs.id AND frp2.value = frp.value AND fs2.id > fs.id
+         WHERE fs.form_id = ? AND fs.id NOT IN (
+           SELECT latest_id FROM (
+             SELECT MAX(fs2.id) as latest_id
+             FROM form_submissions fs2
+             JOIN form_responses frp2 ON frp2.submission_id = fs2.id
+             JOIN form_fields ffp2 ON ffp2.id = frp2.field_id AND ffp2.field_name = 'phone'
+             WHERE fs2.form_id = ? AND frp2.value = frp.value AND frp2.value IS NOT NULL AND frp2.value != ''
+             GROUP BY frp2.value
+           ) latest_submissions
          )`,
-        [formId]
+        [formId, formId]
       );
       const affectedPhone = (dupPhoneResult as any).affectedRows || 0;
 
-      // Mark older email duplicates
+      // Mark older email duplicates (keep newest submission with same email)
       const [dupEmailResult] = await pool.query(
         `UPDATE form_submissions fs
          JOIN form_responses fre ON fre.submission_id = fs.id
          JOIN form_fields ffe ON ffe.id = fre.field_id AND ffe.field_name = 'email'
          SET fs.duplicated = TRUE
-         WHERE fs.form_id = ? AND fs.duplicated = FALSE AND EXISTS (
-           SELECT 1 FROM form_submissions fs2
-           JOIN form_responses fre2 ON fre2.submission_id = fs2.id
-           JOIN form_fields ffe2 ON ffe2.id = fre2.field_id AND ffe2.field_name = 'email'
-           WHERE fs2.form_id = fs.form_id AND fs2.id != fs.id AND fre2.value = fre.value AND fs2.id > fs.id
+         WHERE fs.form_id = ? AND fs.id NOT IN (
+           SELECT latest_id FROM (
+             SELECT MAX(fs2.id) as latest_id
+             FROM form_submissions fs2
+             JOIN form_responses fre2 ON fre2.submission_id = fs2.id
+             JOIN form_fields ffe2 ON ffe2.id = fre2.field_id AND ffe2.field_name = 'email'
+             WHERE fs2.form_id = ? AND fre2.value = fre.value AND fre2.value IS NOT NULL AND fre2.value != ''
+             GROUP BY fre2.value
+           ) latest_submissions
          )`,
-        [formId]
+        [formId, formId]
       );
       const affectedEmail = (dupEmailResult as any).affectedRows || 0;
 
       duplicateCount += affectedPhone + affectedEmail;
       duplicateCheckCount = affectedPhone + affectedEmail;
     } catch (e) {
+      console.error('Error during duplicate detection:', e);
     }
 
     // Clear relevant caches after successful import
     const response = NextResponse.json({
       success: true,
-      message: `Import completed. ${successCount} submissions imported successfully, ${errorCount} failed, ${duplicateCount} older duplicates marked.`,
+      message: `Import completed. ${successCount} submissions imported successfully, ${errorCount} failed, ${duplicateCheckCount} older duplicates marked (newest submissions kept as non-duplicated).`,
       details: {
         totalRows: dataRows.length,
         successCount,
         errorCount,
-        duplicateCount,
+        duplicateCount: duplicateCheckCount,
         validFields,
         formCodeField,
         timestampField,
