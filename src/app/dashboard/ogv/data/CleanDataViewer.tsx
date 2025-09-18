@@ -105,13 +105,45 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   // Copy feedback
   const copyToClipboard = (text: string) => {
     if (!text) return;
-    navigator.clipboard.writeText(text).then(() => {
+    
+    const showToast = () => {
       const toast = document.createElement('div');
       toast.textContent = 'Copied!';
       toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-green-600 text-white px-3 py-1.5 rounded shadow-lg z-[1100] text-xs';
       document.body.appendChild(toast);
       setTimeout(() => { toast.remove(); }, 1200);
-    }).catch(() => {});
+    };
+
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(showToast).catch(() => {
+        // Fallback for HTTP/older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+        showToast();
+      });
+    } else {
+      // Fallback for HTTP/older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand('copy');
+      textArea.remove();
+      showToast();
+    }
   };
 
   // Lock body scroll when sidebar is open to avoid layout shift and stray gaps

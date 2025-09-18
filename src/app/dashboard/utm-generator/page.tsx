@@ -445,8 +445,24 @@ export default function UTMGeneratorPage() {
 
   const copyToClipboard = async (text: string) => {
     try { 
-      await navigator.clipboard.writeText(text); 
-      showToast('URL copied to clipboard!', 'success'); 
+      // Try modern clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text); 
+        showToast('URL copied to clipboard!', 'success'); 
+      } else {
+        // Fallback for HTTP/older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+        showToast('URL copied to clipboard!', 'success');
+      }
     } catch {
       showToast('Failed to copy URL', 'error');
     }
