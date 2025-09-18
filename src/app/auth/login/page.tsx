@@ -63,7 +63,7 @@ export default function LoginPage() {
             Empower youth leadership
           </h1>
           <p className="mt-4 text-base/7 text-gray-600 dark:text-gray-300 max-w-xl">
-            Sign in to access your AIESEC experience management dashboard.
+            Sign in to access your AIESEC experience management dashboard
           </p>
           <div className="mt-10 grid grid-cols-3 gap-4 opacity-90 max-w-2xl">
             <div className="rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-gray-800/70 backdrop-blur p-4">
