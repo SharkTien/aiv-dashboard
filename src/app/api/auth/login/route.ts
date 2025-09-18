@@ -47,9 +47,6 @@ export async function POST(req: NextRequest) {
       process.env.JWT_SECRET || "dev-secret",
       { expiresIn: "7d" }
     );
-
-    console.log("[Login] Success for user:", user.email, "Role:", user.role);
-    console.log("[Login] JWT token created, length:", token.length);
     
     const res = NextResponse.json({ success: true });
     res.cookies.set("session", token, {
