@@ -5,9 +5,18 @@ import { redirect } from "next/navigation";
 export default async function Home() {
   const cookieStore = await cookies();
   const session = cookieStore.get("session");
+  
+  console.log("[Home] Session cookie:", session ? "EXISTS" : "NOT FOUND");
+  if (session) {
+    console.log("[Home] Session value length:", session.value.length);
+  }
+  
   if (!session) {
+    console.log("[Home] No session, redirecting to login");
     redirect("/auth/login");
   }
+  
+  console.log("[Home] Session found, redirecting to dashboard");
   redirect("/dashboard");
   return (
     <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">

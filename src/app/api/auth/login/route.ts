@@ -4,8 +4,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
   try {
     const { email, password } = await req.json();
+    console.log(`[Login] Attempt for email: ${email}`);
     if (!email || !password) {
       return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
     }
@@ -46,14 +48,20 @@ export async function POST(req: NextRequest) {
       { expiresIn: "7d" }
     );
 
+    console.log("[Login] Success for user:", user.email, "Role:", user.role);
+    console.log("[Login] JWT token created, length:", token.length);
+    
     const res = NextResponse.json({ success: true });
     res.cookies.set("session", token, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: false, // Tạm thời set false để test
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
+    
+    console.log("[Login] Cookie set successfully");
+    console.log(`[Login] Total time: ${Date.now() - startTime}ms`);
     return res;
   } catch (err: unknown) {
     const msg = (err as any)?.message || String(err);

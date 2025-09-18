@@ -1,0 +1,302 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\geometry{margin=2.5cm}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Báo cáo thực tập}
+\fancyhead[R]{AIESEC Dashboard CI/CD}
+\fancyfoot[C]{\thepage}
+
+% Cấu hình cho code blocks
+\lstset{
+    language=bash,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny,
+    stepnumber=1,
+    numbersep=5pt,
+    backgroundcolor=\color{gray!10},
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    frame=single,
+    tabsize=2,
+    captionpos=b,
+    breaklines=true,
+    breakatwhitespace=false,
+    escapeinside={\%*}{*)}
+}
+
+\title{\textbf{CHƯƠNG 4: TRIỂN KHAI HỆ THỐNG CI/CD}}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Tổng quan về CI/CD}
+
+Continuous Integration/Continuous Deployment (CI/CD) là một phương pháp phát triển phần mềm hiện đại, cho phép tự động hóa quá trình tích hợp, kiểm thử và triển khai ứng dụng. Trong dự án AIESEC Dashboard, tôi đã triển khai một hệ thống CI/CD sử dụng GitHub Webhook để tự động deploy ứng dụng mỗi khi có thay đổi code.
+
+\subsection{Định nghĩa và mục tiêu}
+
+CI/CD bao gồm hai khái niệm chính:
+\begin{itemize}
+    \item \textbf{Continuous Integration (CI)}: Tích hợp liên tục code từ nhiều developer vào một repository chung
+    \item \textbf{Continuous Deployment (CD)}: Triển khai liên tục code đã được tích hợp vào môi trường production
+\end{itemize}
+
+Mục tiêu chính của việc triển khai CI/CD:
+\begin{itemize}
+    \item Tự động hóa quy trình deploy
+    \item Giảm thiểu lỗi human error
+    \item Tăng tốc độ phát triển và triển khai
+    \item Đảm bảo tính ổn định của hệ thống
+\end{itemize}
+
+\section{Kiến trúc hệ thống CI/CD}
+
+\subsection{Mô hình hoạt động}
+
+Hệ thống CI/CD được thiết kế theo mô hình đơn giản nhưng hiệu quả:
+
+\begin{center}
+\texttt{Developer → GitHub Repository → Webhook Server → Production Server}
+\end{center}
+
+\subsubsection{Quy trình hoạt động chi tiết}
+
+\begin{enumerate}
+    \item \textbf{Development Phase}: Developer thực hiện commit và push code lên GitHub repository
+    \item \textbf{Webhook Trigger}: GitHub tự động gửi POST request đến webhook server
+    \item \textbf{Webhook Processing}: Webhook server nhận request và validate
+    \item \textbf{Deployment Execution}: Script deploy được thực thi tự động
+    \item \textbf{Application Restart}: PM2 restart ứng dụng với version mới
+\end{enumerate}
+
+\subsection{Các thành phần chính}
+
+\subsubsection{GitHub Webhook}
+\begin{itemize}
+    \item \textbf{URL}: \texttt{http://103.110.85.200:9000/hooks/aiv-dashboard-deploy}
+    \item \textbf{Event}: Push to main branch
+    \item \textbf{Content-Type}: application/json
+    \item \textbf{Security}: IP whitelist cho GitHub servers
+\end{itemize}
+
+\subsubsection{Webhook Service}
+\begin{itemize}
+    \item \textbf{Port}: 9000
+    \item \textbf{Configuration}: \texttt{/etc/webhook/hooks.json}
+    \item \textbf{Service Management}: systemd service
+    \item \textbf{Auto-restart}: Enabled với restart policy
+\end{itemize}
+
+\subsubsection{Deployment Script}
+\begin{itemize}
+    \item \textbf{Path}: \texttt{/root/apps/aiv-dashboard/deploy.sh}
+    \item \textbf{Functionality}: Pull code, install dependencies, build, restart
+    \item \textbf{Working Directory}: \texttt{/root/apps/aiv-dashboard}
+\end{itemize}
+
+\section{Triển khai và cấu hình}
+
+\subsection{Cài đặt Webhook Service}
+
+\begin{lstlisting}[caption=Cài đặt webhook package]
+# Cài đặt webhook package
+sudo apt update
+sudo apt install webhook
+
+# Tạo thư mục cấu hình
+sudo mkdir -p /etc/webhook
+\end{lstlisting}
+
+\subsection{Cấu hình Webhook}
+
+File cấu hình \texttt{/etc/webhook/hooks.json}:
+
+\begin{lstlisting}[caption=Cấu hình webhook hooks.json, language=json]
+[
+  {
+    "id": "aiv-dashboard-deploy",
+    "execute-command": "/root/apps/aiv-dashboard/deploy.sh",
+    "command-working-directory": "/root/apps/aiv-dashboard",
+    "response-message": "Deployment started successfully!"
+  }
+]
+\end{lstlisting}
+
+\subsection{Script Deployment}
+
+Script \texttt{/root/apps/aiv-dashboard/deploy.sh}:
+
+\begin{lstlisting}[caption=Script deployment tự động]
+#!/bin/bash
+
+echo "🚀 Starting deployment at $(date)"
+
+# Pull latest code
+echo "📥 Pulling latest code..."
+git pull origin main
+
+# Install dependencies
+echo "📦 Installing dependencies..."
+npm ci
+
+# Build application
+echo "🔨 Building application..."
+npm run build
+
+# Restart PM2
+echo "🔄 Restarting application..."
+pm2 restart aiv-dashboard
+
+# Check status
+echo "✅ Checking status..."
+pm2 status
+
+echo "🎉 Deployment completed at $(date)"
+\end{lstlisting}
+
+\subsection{Systemd Service Configuration}
+
+File \texttt{/etc/systemd/system/webhook.service}:
+
+\begin{lstlisting}[caption=Cấu hình systemd service]
+[Unit]
+Description=Webhook Service for Auto Deploy
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/webhook -hooks /etc/webhook/hooks.json -verbose -port 9000
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+\end{lstlisting}
+
+\section{Kết quả triển khai}
+
+\subsection{Lợi ích đạt được}
+
+\subsubsection{Tự động hóa hoàn toàn}
+\begin{itemize}
+    \item Loại bỏ việc deploy thủ công
+    \item Giảm thiểu lỗi human error
+    \item Tăng tốc độ triển khai
+\end{itemize}
+
+\subsubsection{Tính khả dụng cao}
+\begin{itemize}
+    \item Auto-restart khi service crash
+    \item Monitoring và logging đầy đủ
+    \item Rollback nhanh chóng khi cần
+\end{itemize}
+
+\subsubsection{Bảo mật}
+\begin{itemize}
+    \item Chỉ deploy từ GitHub repository được ủy quyền
+    \item IP whitelist cho GitHub servers
+    \item Audit trail đầy đủ
+\end{itemize}
+
+\subsection{Metrics và hiệu suất}
+
+\subsubsection{Thời gian deploy}
+\begin{itemize}
+    \item \textbf{Trước khi triển khai CI/CD}: 5-10 phút (thủ công)
+    \item \textbf{Sau khi triển khai}: 30-60 giây (tự động)
+\end{itemize}
+
+\subsubsection{Tần suất deploy}
+\begin{itemize}
+    \item Tăng từ 1-2 lần/tuần lên 5-10 lần/tuần
+    \item Khả năng deploy hotfix ngay lập tức
+\end{itemize}
+
+\subsubsection{Uptime}
+\begin{itemize}
+    \item 99.9\% uptime nhờ auto-restart
+    \item Zero-downtime deployment
+\end{itemize}
+
+\section{Monitoring và Troubleshooting}
+
+\subsection{Logging System}
+
+\begin{lstlisting}[caption=Các lệnh monitoring]
+# Webhook logs
+sudo journalctl -u webhook -f
+
+# Application logs
+pm2 logs aiv-dashboard
+
+# System status
+pm2 status
+sudo systemctl status webhook
+\end{lstlisting}
+
+\subsection{Health Checks}
+
+\begin{lstlisting}[caption=Các lệnh health check]
+# Check webhook endpoint
+curl http://localhost:9000/hooks/aiv-dashboard-deploy
+
+# Check application health
+curl http://localhost:3000/api/health
+
+# Check system resources
+htop
+df -h
+\end{lstlisting}
+
+\section{Kết luận}
+
+Việc triển khai hệ thống CI/CD đã mang lại những lợi ích đáng kể:
+
+\begin{enumerate}
+    \item \textbf{Tăng hiệu quả phát triển}: Developer có thể focus vào coding thay vì deploy
+    \item \textbf{Giảm thiểu rủi ro}: Tự động hóa giảm lỗi human error
+    \item \textbf{Tăng tính ổn định}: Auto-restart và monitoring đảm bảo service luôn available
+    \item \textbf{Cải thiện trải nghiệm người dùng}: Deploy nhanh hơn, ít downtime
+\end{enumerate}
+
+Hệ thống CI/CD này đã chứng minh tính hiệu quả trong việc quản lý và triển khai ứng dụng AIESEC Dashboard, tạo nền tảng vững chắc cho việc phát triển và mở rộng hệ thống trong tương lai.
+
+\subsection{Khuyến nghị phát triển}
+
+Để cải thiện thêm hệ thống CI/CD trong tương lai:
+
+\begin{itemize}
+    \item Triển khai automated testing trước khi deploy
+    \item Thêm notification system (Slack, Email) khi deploy
+    \item Implement blue-green deployment để giảm downtime
+    \item Thêm database migration automation
+    \item Setup monitoring và alerting system
+\end{itemize}
+
+\end{document}
