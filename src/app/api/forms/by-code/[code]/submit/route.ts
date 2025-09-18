@@ -317,9 +317,17 @@ export async function POST(
 
       const toEmail = (email || "").trim();
       if (toEmail) {
-        const subject = "AIESEC in Vietnam | We have received Your Application for Recruitment Fall 2025";
-        // Empty content, optional signature handled in sendEmail
-        await sendEmail({ to: toEmail, subject, html: "" });
+        // Load per-form email settings
+        const [settingsRows] = await pool.query(
+          `SELECT enabled, subject, html FROM form_email_settings WHERE form_id = ? LIMIT 1`,
+          [formId]
+        );
+        const settings = Array.isArray(settingsRows) && settingsRows.length > 0 ? (settingsRows as any)[0] : null;
+        if (settings && settings.enabled) {
+          const subject = settings.subject || "AIESEC in Vietnam | We have received Your Application for Recruitment Fall 2025";
+          const html = typeof settings.html === 'string' ? settings.html : "";
+          await sendEmail({ to: toEmail, subject, html });
+        }
       }
     } catch (e) {
       console.warn("[Submit] Failed to send confirmation email:", (e as any)?.message || e);

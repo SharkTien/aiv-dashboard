@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import Link from "next/link";
 import LoadingOverlay from "@/components/LoadingOverlay";
+import Switch from "@/components/buttonSwitch";
 
 type Form = {
   id: number;
@@ -43,7 +44,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
   const [showAddField, setShowAddField] = useState(false);
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [fieldLoading, setFieldLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'fields' | 'duplicate'>('fields');
+  const [activeTab, setActiveTab] = useState<'fields' | 'duplicate' | 'email'>('fields');
   const [tabLoading, setTabLoading] = useState(false);
   const [dupFieldIds, setDupFieldIds] = useState<number[]>([]);
   const [newField, setNewField] = useState({
@@ -57,11 +58,17 @@ export default function FormBuilder({ formId }: { formId: number }) {
   const [datasourceTable, setDatasourceTable] = useState("");
   const [datasourceOptions, setDatasourceOptions] = useState<DatasourceOption[]>([]);
   
+  // Email settings
+  const [emailEnabled, setEmailEnabled] = useState<boolean>(false);
+  const [emailSubject, setEmailSubject] = useState<string>("AIESEC in Vietnam | We have received Your Application for Recruitment Fall 2025");
+  const [emailHtml, setEmailHtml] = useState<string>("");
+  const [emailLoading, setEmailLoading] = useState<boolean>(false);
+  
   // Drag & Drop states
   const [draggedField, setDraggedField] = useState<number | null>(null);
   const [dragOverField, setDragOverField] = useState<number | null>(null);
 
-  const handleTabChange = (newTab: 'fields' | 'duplicate') => {
+  const handleTabChange = (newTab: 'fields' | 'duplicate' | 'email') => {
     if (newTab !== activeTab) {
       setTabLoading(true);
       setActiveTab(newTab);
@@ -78,6 +85,47 @@ export default function FormBuilder({ formId }: { formId: number }) {
       }
     } catch (error) {
       console.error("Error loading form:", error);
+    }
+  }
+
+  async function loadEmailSettings() {
+    try {
+      setEmailLoading(true);
+      const res = await fetch(`/api/forms/${formId}/email-settings`);
+      if (res.ok) {
+        const data = await res.json();
+        const s = data?.settings || {};
+        setEmailEnabled(!!s.enabled);
+        if (typeof s.subject === 'string' && s.subject) setEmailSubject(s.subject);
+        if (typeof s.html === 'string') setEmailHtml(s.html);
+      }
+    } catch (e) {
+      console.error('Failed to load email settings', e);
+    } finally {
+      setEmailLoading(false);
+    }
+  }
+
+  async function saveEmailSettings() {
+    try {
+      setEmailLoading(true);
+      const res = await fetch(`/api/forms/${formId}/email-settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: emailEnabled, subject: emailSubject, html: emailHtml })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        console.error('Email settings save error:', err);
+        alert(`Failed to save email settings: ${err?.error || 'Unknown error'}${err?.details ? `\nDetails: ${err.details}` : ''}`);
+      } else {
+        alert('Email settings saved');
+      }
+    } catch (e) {
+      console.error('Email settings save error:', e);
+      alert(`Failed to save email settings: ${(e as any)?.message || 'Network error'}`);
+    } finally {
+      setEmailLoading(false);
     }
   }
 
@@ -98,7 +146,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      await Promise.all([loadForm(), loadFields(), loadDuplicateSettings()]);
+      await Promise.all([loadForm(), loadFields(), loadDuplicateSettings(), loadEmailSettings()]);
       setLoading(false);
     }
     load();
@@ -442,6 +490,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
           <div className="flex items-center gap-2">
             <button onClick={() => handleTabChange('fields')} className={`px-3 py-1.5 text-xs rounded-md ${activeTab==='fields' ? 'bg-sky-600 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200'}`}>Fields</button>
             <button onClick={() => handleTabChange('duplicate')} className={`px-3 py-1.5 text-xs rounded-md ${activeTab==='duplicate' ? 'bg-sky-600 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200'}`}>Duplicate Settings</button>
+            <button onClick={() => handleTabChange('email')} className={`px-3 py-1.5 text-xs rounded-md ${activeTab==='email' ? 'bg-sky-600 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200'}`}>Sending Mail</button>
           </div>
           {activeTab === 'fields' && (
             <div className="flex items-center gap-2">
@@ -470,6 +519,37 @@ export default function FormBuilder({ formId }: { formId: number }) {
           </div>
         )}
 
+        {activeTab === 'email' && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-gray-700 dark:text-gray-200">Enable sending mail on new submission</label>
+              <Switch checked={emailEnabled} onChange={setEmailEnabled} />
+            </div>
+            <div className="grid gap-1">
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-200">Email subject</label>
+              <input
+                type="text"
+                value={emailSubject}
+                onChange={(e)=>setEmailSubject(e.target.value)}
+                className="h-9 rounded-md ring-1 ring-black/15 dark:ring-white/15 px-2 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white"
+              />
+            </div>
+            <div className="grid gap-1">
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-200">Email HTML content (supports images, signature)</label>
+              <textarea
+                value={emailHtml}
+                onChange={(e)=>setEmailHtml(e.target.value)}
+                placeholder="Paste your designed HTML here"
+                className="min-h-[160px] rounded-md ring-1 ring-black/15 dark:ring-white/15 px-2 py-2 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white whitespace-pre-wrap"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">Tip: host images publicly (absolute URLs). SMTP signature (if set) will be appended.</p>
+            </div>
+            <div>
+              <button onClick={saveEmailSettings} disabled={emailLoading} className="px-3 py-1.5 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white font-medium transition-colors">{emailLoading ? 'Saving…' : 'Save Settings'}</button>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'fields' && (
           fields.length === 0 ? (
             <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">No fields added yet. Click "Add Field" to get started.</div>
@@ -484,8 +564,8 @@ export default function FormBuilder({ formId }: { formId: number }) {
               {fields.map((field, index) => {
                 const isRequiredField = false;
                 return (
-                  <>
-                    <div key={field.id} draggable={!isRequiredField} onDragStart={!isRequiredField ? (e) => handleDragStart(e, field.id) : undefined} onDragOver={!isRequiredField ? (e) => handleDragOver(e, field.id) : undefined} onDragLeave={!isRequiredField ? handleDragLeave : undefined} onDrop={!isRequiredField ? (e) => handleDrop(e, field.id) : undefined} className={`flex items-center justify-between gap-3 p-3 rounded-md bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50 transition-all ${isRequiredField ? 'cursor-default' : 'cursor-move'} ${draggedField === field.id ? 'opacity-50 scale-95' : ''} ${dragOverField === field.id ? 'border-sky-400 bg-sky-50/50 dark:bg-sky-900/20' : ''}`}>
+                  <Fragment key={field.id}>
+                    <div draggable={!isRequiredField} onDragStart={!isRequiredField ? (e) => handleDragStart(e, field.id) : undefined} onDragOver={!isRequiredField ? (e) => handleDragOver(e, field.id) : undefined} onDragLeave={!isRequiredField ? handleDragLeave : undefined} onDrop={!isRequiredField ? (e) => handleDrop(e, field.id) : undefined} className={`flex items-center justify-between gap-3 p-3 rounded-md bg-white/60 dark:bg-gray-700/60 border border-gray-200/50 dark:border-gray-600/50 transition-all ${isRequiredField ? 'cursor-default' : 'cursor-move'} ${draggedField === field.id ? 'opacity-50 scale-95' : ''} ${dragOverField === field.id ? 'border-sky-400 bg-sky-50/50 dark:bg-sky-900/20' : ''}`}>
                       <div className="flex items-center gap-3">
                         <div className="w-6 h-6 rounded-md bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
                           <span className="text-sky-600 dark:text-sky-400 font-semibold text-xs">{index + 1}</span>
@@ -513,7 +593,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
                       onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; }}
                       onDrop={(e)=>handleDropBetween(e, index+1)}
                     />
-                  </>
+                  </Fragment>
                 );
               })}
             </div>
