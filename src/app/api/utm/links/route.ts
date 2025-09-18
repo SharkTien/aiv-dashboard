@@ -475,7 +475,7 @@ export async function DELETE(req: NextRequest) {
 
 // Helper function to generate tracking link
 function generateTrackingLink(utmLinkId: number, originalUrl: string): string {
-  const baseUrl = process.env.BACKEND_HOST || process.env.NEXT_PUBLIC_APP_URL || 'https://aiv-dashboard-ten.vercel.app';
+  const baseUrl = process.env.BACKEND_HOST || process.env.NEXT_PUBLIC_APP_URL || 'http://103.110.85.200:3000';
   const trackingUrl = `${baseUrl}/api/utm/track?id=${utmLinkId}&url=${encodeURIComponent(originalUrl)}`;
   return trackingUrl;
 }

@@ -10,7 +10,7 @@ const ALLOWED: Record<string, { valueKey: string; labelKey: string }> = {
 
 // Allowlist CORS origins; configurable via env: ALLOWED_ORIGINS="https://site1.com,https://site2.com"
 const ALLOWED_ORIGINS = new Set(
-  (process.env.ALLOWED_ORIGINS || "https://www.aiesec.vn,https://aiv-dashboard-ten.vercel.app,http://localhost:3000")
+  (process.env.ALLOWED_ORIGINS || "https://www.aiesec.vn,http://103.110.85.200:3000,http://localhost:3000")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
