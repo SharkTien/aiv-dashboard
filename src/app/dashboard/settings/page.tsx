@@ -1,5 +1,6 @@
 "use client";
 import ThemeToggle from "@/components/ThemeToggle";
+import MaintenanceToggle from "@/components/MaintenanceToggle";
 import { useEffect, useMemo, useState } from "react";
 
 type Me = { sub: number; name: string; email: string; role: "admin" | "lead" | "member"; entity_id: number; program?: string };
@@ -93,6 +94,15 @@ export default function Page() {
             </div>
           </div>
         </section>
+
+        {me?.role === 'admin' && (
+          <section>
+            <h2 className="text-sm font-medium text-gray-700 dark:text-gray-200">System Administration</h2>
+            <div className="mt-3">
+              <MaintenanceToggle />
+            </div>
+          </section>
+        )}
 
         <section>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

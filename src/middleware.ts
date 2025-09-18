@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import fs from 'fs';
+import path from 'path';
 
 // Optional Upstash Redis (recommended for multi-instance / Vercel)
 // Set env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
@@ -44,6 +46,45 @@ const ALLOWED = new Set([
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  
+  // Check maintenance mode (simple file flag)
+  const maintenanceFlagPath = path.join(process.cwd(), 'maintenance.flag');
+  const isMaintenanceMode = fs.existsSync(maintenanceFlagPath);
+  
+  if (isMaintenanceMode) {
+    // Allow access to maintenance page itself
+    if (pathname === '/maintenance') {
+      return NextResponse.next();
+    }
+    
+    // Allow access to API routes (for admin authentication)
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.next();
+    }
+    
+    // Allow access to admin maintenance page
+    if (pathname === '/admin/maintenance') {
+      return NextResponse.next();
+    }
+    
+    // Allow access to login page for admin authentication
+    if (pathname === '/auth/login') {
+      return NextResponse.next();
+    }
+    
+    // Allow access to dashboard for authenticated admin users
+    if (pathname.startsWith('/dashboard')) {
+      // Check if user has admin session cookie
+      const sessionCookie = req.cookies.get('session');
+      if (sessionCookie) {
+        // Let the request proceed - the dashboard will handle admin check
+        return NextResponse.next();
+      }
+    }
+    
+    // Redirect all other requests to maintenance page
+    return NextResponse.redirect(new URL('/maintenance', req.url));
+  }
   
   // Log all requests
   const timestamp = new Date().toISOString();
