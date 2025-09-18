@@ -41,19 +41,22 @@ export async function GET(request: NextRequest) {
       whereClause += " type = ?";
       params.push(type);
     }
+    
+    console.log('[Forms API] WHERE clause:', whereClause);
+    console.log('[Forms API] WHERE params:', params);
 
     // Get total count
     console.log('[Forms API] Executing count query:', `SELECT COUNT(*) as total FROM forms ${whereClause}`, params);
-    const [countResult] = await pool.execute(
+    const [countResult] = await pool.query(
       `SELECT COUNT(*) as total FROM forms ${whereClause}`,
       params
     );
     console.log('[Forms API] Count result:', countResult);
     const total = Array.isArray(countResult) && countResult.length > 0 ? (countResult[0] as any).total : 0;
 
-    // Fetch paginated forms
-    const [forms] = await pool.execute(
-      `SELECT 
+    // Fetch paginated forms - Simplified approach
+    console.log('[Forms API] Executing forms query with params:', [...params, limit, offset]);
+    let formsQuery = `SELECT 
         id,
         code,
         name,
@@ -64,9 +67,11 @@ export async function GET(request: NextRequest) {
       FROM forms 
       ${whereClause}
       ORDER BY type, is_default DESC, name
-      LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
+      LIMIT ${limit} OFFSET ${offset}`;
+    
+    console.log('[Forms API] Final query:', formsQuery);
+    const [forms] = await pool.query(formsQuery, params);
+    console.log('[Forms API] Forms query result:', forms);
 
     const totalPages = Math.ceil(total / limit);
 
