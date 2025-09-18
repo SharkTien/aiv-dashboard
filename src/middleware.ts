@@ -38,7 +38,7 @@ function memHit(key: string, windowMs: number) {
 
 const ALLOWED = new Set([
   "https://www.aiesec.vn",
-  "http://103.110.85.200:3000",
+  "https://aiv-dashboard-ten.vercel.app",
   "http://localhost:3000",
 ]);
 
