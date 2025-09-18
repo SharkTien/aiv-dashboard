@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDbPool } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+console.log('[Forms API] Module loaded');
+
 export async function GET(request: NextRequest) {
+  console.log('[Forms API] GET request received');
   try {
     const { searchParams } = new URL(request.url);
+    console.log('[Forms API] Search params:', Object.fromEntries(searchParams.entries()));
     const page = Math.max(Number(searchParams.get("page") || 1), 1);
     const limit = Math.min(Number(searchParams.get("limit") || 20), 100);
     const offset = (page - 1) * limit;
@@ -12,6 +16,16 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type") || "";
     
     const pool = getDbPool();
+    console.log('[Forms API] Database pool obtained');
+    
+    // Test database connection
+    try {
+      await pool.query("SELECT 1");
+      console.log('[Forms API] Database connection test successful');
+    } catch (dbError) {
+      console.error('[Forms API] Database connection test failed:', dbError);
+      throw dbError;
+    }
 
     // Build WHERE clause
     let whereClause = "";
@@ -29,10 +43,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Get total count
+    console.log('[Forms API] Executing count query:', `SELECT COUNT(*) as total FROM forms ${whereClause}`, params);
     const [countResult] = await pool.execute(
       `SELECT COUNT(*) as total FROM forms ${whereClause}`,
       params
     );
+    console.log('[Forms API] Count result:', countResult);
     const total = Array.isArray(countResult) && countResult.length > 0 ? (countResult[0] as any).total : 0;
 
     // Fetch paginated forms
@@ -74,8 +90,13 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching forms:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined
+    });
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch forms' },
+      { success: false, error: 'Failed to fetch forms', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
