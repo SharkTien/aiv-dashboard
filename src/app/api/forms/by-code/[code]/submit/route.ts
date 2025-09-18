@@ -199,6 +199,7 @@ export async function POST(
     // 3) Check for duplicates after saving responses
     let phone: string | null = null;
     let email: string | null = null;
+    let displayName: string | null = null;
     
     // Get phone and email values from form_responses
     const [phoneResult] = await conn.query(`
@@ -216,12 +217,24 @@ export async function POST(
       WHERE fr.submission_id = ? AND ff.field_name = 'email'
       LIMIT 1
     `, [submissionId]);
+    // Get name if present
+    const [nameResult] = await conn.query(`
+      SELECT fr.value 
+      FROM form_responses fr
+      JOIN form_fields ff ON fr.field_id = ff.id
+      WHERE fr.submission_id = ? AND ff.field_name IN ('name','full_name')
+      ORDER BY CASE ff.field_name WHEN 'name' THEN 0 ELSE 1 END
+      LIMIT 1
+    `, [submissionId]);
     
     if (Array.isArray(phoneResult) && phoneResult.length > 0) {
       phone = (phoneResult[0] as any).value;
     }
     if (Array.isArray(emailResult) && emailResult.length > 0) {
       email = (emailResult[0] as any).value;
+    }
+    if (Array.isArray(nameResult) && nameResult.length > 0) {
+      displayName = String((nameResult[0] as any).value || '').trim() || null;
     }
     
     // Check for duplicates
@@ -326,8 +339,36 @@ export async function POST(
         );
         const settings = Array.isArray(settingsRows) && settingsRows.length > 0 ? (settingsRows as any)[0] : null;
         if (settings && settings.enabled) {
-          const subject = settings.subject || "AIESEC in Vietnam | We have received Your Application for Recruitment Fall 2025";
-          const html = typeof settings.html === 'string' ? settings.html : "";
+          // Build a map of all submission field values for placeholder replacement
+          const [respRows] = await pool.query(`
+            SELECT ff.field_name, COALESCE(fr.value, '') AS value
+            FROM form_responses fr
+            JOIN form_fields ff ON fr.field_id = ff.id
+            WHERE fr.submission_id = ?
+          `, [submissionId]);
+          const values: Record<string, string> = {};
+          if (Array.isArray(respRows)) {
+            for (const r of respRows as any[]) {
+              const key = String(r.field_name || '').trim();
+              if (key) values[key] = String(r.value ?? '');
+            }
+          }
+          // Backward compat shortcuts
+          if (displayName && !values['name']) values['name'] = displayName;
+          if (email && !values['email']) values['email'] = email;
+
+          // Prepare subject/html and replace placeholders like [field_name]
+          let subject = settings.subject || "AIESEC in Vietnam | We have received Your Application for Recruitment Event";
+          let html = typeof settings.html === 'string' ? settings.html : "";
+
+          const tokenRegex = /\[([a-zA-Z0-9_]+)\]/g;
+          const replacer = (_match: string, key: string) => {
+            const k = String(key || '').trim();
+            return Object.prototype.hasOwnProperty.call(values, k) ? values[k] : _match;
+          };
+          subject = subject.replace(tokenRegex, replacer);
+          html = html.replace(tokenRegex, replacer);
+
           await sendEmail({ to: toEmail, subject, html });
         }
       }

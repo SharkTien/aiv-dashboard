@@ -41,6 +41,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
   const [form, setForm] = useState<Form | null>(null);
   const [fields, setFields] = useState<FormField[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showAddField, setShowAddField] = useState(false);
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [fieldLoading, setFieldLoading] = useState(false);
@@ -76,9 +77,31 @@ export default function FormBuilder({ formId }: { formId: number }) {
     }
   };
 
+  async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit, retries = 2): Promise<Response> {
+    let attempt = 0;
+    let lastError: any = null;
+    while (attempt <= retries) {
+      try {
+        const res = await fetch(input, init);
+        if (!res.ok && res.status >= 500 && attempt < retries) {
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+          attempt++;
+          continue;
+        }
+        return res;
+      } catch (e) {
+        lastError = e;
+        if (attempt === retries) throw e;
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        attempt++;
+      }
+    }
+    throw lastError;
+  }
+
   async function loadForm() {
     try {
-      const res = await fetch(`/api/forms/${formId}`, { cache: 'no-store' });
+      const res = await fetchWithRetry(`/api/forms/${formId}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setForm(data.form);
@@ -91,7 +114,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
   async function loadEmailSettings() {
     try {
       setEmailLoading(true);
-      const res = await fetch(`/api/forms/${formId}/email-settings`);
+      const res = await fetchWithRetry(`/api/forms/${formId}/email-settings`);
       if (res.ok) {
         const data = await res.json();
         const s = data?.settings || {};
@@ -131,7 +154,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
 
   async function loadFields() {
     try {
-      const res = await fetch(`/api/forms/${formId}/fields`, { cache: 'no-store' });
+      const res = await fetchWithRetry(`/api/forms/${formId}/fields`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setFields(Array.isArray(data.fields) ? data.fields : []);
@@ -146,8 +169,14 @@ export default function FormBuilder({ formId }: { formId: number }) {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      await Promise.all([loadForm(), loadFields(), loadDuplicateSettings(), loadEmailSettings()]);
-      setLoading(false);
+      setLoadError(null);
+      try {
+        await Promise.all([loadForm(), loadFields(), loadDuplicateSettings(), loadEmailSettings()]);
+      } catch (e) {
+        setLoadError('Kết nối bị gián đoạn. Vui lòng thử lại.');
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, [formId]);
@@ -294,7 +323,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
 
   async function loadDuplicateSettings() {
     try {
-      const res = await fetch(`/api/forms/${formId}/duplicate-settings`);
+      const res = await fetchWithRetry(`/api/forms/${formId}/duplicate-settings`);
       if (res.ok) {
         const data = await res.json();
         setDupFieldIds(Array.isArray(data.fieldIds) ? data.fieldIds : []);
@@ -454,7 +483,34 @@ export default function FormBuilder({ formId }: { formId: number }) {
   }
 
   if (!form) {
-    return <div className="text-center py-8 text-gray-500 dark:text-gray-400">Form not found</div>;
+    return (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        <div className="mb-3">Form not found</div>
+        {loadError && (
+          <div className="mx-auto mb-3 max-w-md rounded-md bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200 px-3 py-2 text-sm">
+            {loadError}
+          </div>
+        )}
+        <button
+          onClick={() => {
+            setLoading(true);
+            setLoadError(null);
+            Promise.resolve().then(async () => {
+              try {
+                await Promise.all([loadForm(), loadFields(), loadDuplicateSettings(), loadEmailSettings()]);
+              } catch (e) {
+                setLoadError('Kết nối bị gián đoạn. Vui lòng thử lại.');
+              } finally {
+                setLoading(false);
+              }
+            });
+          }}
+          className="px-3 py-1.5 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white font-medium"
+        >
+          Thử lại
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -485,6 +541,29 @@ export default function FormBuilder({ formId }: { formId: number }) {
 
       {/* Tabs container */}
       <div className="bg-white/60 dark:bg-gray-700/60 rounded-lg p-4 border border-gray-200/50 dark:border-gray-600/50 relative">
+        {loadError && (
+          <div className="mb-3 rounded-md bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200 px-3 py-2 text-sm flex items-center justify-between">
+            <span>{loadError}</span>
+            <button
+              onClick={() => {
+                setTabLoading(true);
+                setLoadError(null);
+                Promise.resolve().then(async () => {
+                  try {
+                    await Promise.all([loadForm(), loadFields(), loadDuplicateSettings(), loadEmailSettings()]);
+                  } catch (e) {
+                    setLoadError('Kết nối bị gián đoạn. Vui lòng thử lại.');
+                  } finally {
+                    setTabLoading(false);
+                  }
+                });
+              }}
+              className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
         {tabLoading && <LoadingOverlay isVisible={true} message="Switching tabs..." />}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
