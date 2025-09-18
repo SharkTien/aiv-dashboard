@@ -121,8 +121,8 @@ export async function GET(
       }
     });
     
-    // Cache for 1 minute
-    response.headers.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
+    // Cache for 5 minutes to reduce bandwidth
+    response.headers.set('Cache-Control', 'private, max-age=300, stale-while-revalidate=600');
     
     return response;
 

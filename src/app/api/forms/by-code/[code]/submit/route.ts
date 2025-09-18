@@ -8,11 +8,13 @@ const ALLOWED: Record<string, { valueKey: string; labelKey: string }> = {
   uni_mapping: { valueKey: "uni_id", labelKey: "uni_name" },
 };
 
-const ALLOWED_ORIGINS = new Set([
-  "https://www.aiesec.vn",
-  "https://aiv-dashboard-ten.vercel.app",
-  "http://localhost:3000",
-]);
+// Allowlist CORS origins; configurable via env: ALLOWED_ORIGINS="https://site1.com,https://site2.com"
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS || "https://www.aiesec.vn,https://aiv-dashboard-ten.vercel.app,http://localhost:3000")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
 
 function withCors(res: NextResponse, req?: NextRequest) {
   const origin = req?.headers.get("origin") || "";

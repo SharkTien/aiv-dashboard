@@ -20,6 +20,7 @@ function getTransporter(): any {
 
   if (!host || !port || !user || !pass) {
     console.warn("[Email] SMTP is not fully configured. Skipping email sending.");
+    console.warn("[Email] Missing:", { host: !!host, port: !!port, user: !!user, pass: !!pass });
     return null;
   }
 
@@ -28,12 +29,22 @@ function getTransporter(): any {
     port,
     secure,
     auth: { user, pass },
+    // Reasonable timeouts to avoid blocking submissions if SMTP is slow
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT || 7000),
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT || 7000),
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 10000),
   });
   return transporter;
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailOptions) {
   try {
+    // Skip email sending in development to save bandwidth
+    if (process.env.NODE_ENV === 'development' && process.env.SKIP_EMAIL === 'true') {
+      console.log('[Email] Skipped in development mode');
+      return { success: true, skipped: true, messageId: 'dev-skip' } as const;
+    }
+    
     const tx = getTransporter();
     if (!tx) return { success: false, skipped: true } as const;
 
