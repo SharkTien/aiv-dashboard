@@ -69,6 +69,7 @@ export default function AnalyticsPage() {
   const [filteredUniDistribution, setFilteredUniDistribution] = useState<AnalyticsData['uniDistribution']>([]);
   const [loadingUniDistribution, setLoadingUniDistribution] = useState(false);
   const [activeTab, setActiveTab] = useState<'clicks' | 'forms'>('clicks');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [user, setUser] = useState<any>(null);
   const [userSignUps, setUserSignUps] = useState<number>(0);
@@ -230,6 +231,7 @@ export default function AnalyticsPage() {
     
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await fetch(`/api/dashboard/ogv-analytics?formId=${selectedForm}`);
       const result = await response.json();
       
@@ -244,6 +246,7 @@ export default function AnalyticsPage() {
       }
     } catch (error) {
       console.error('Error loading analytics data:', error);
+      setLoadError('Kết nối bị gián đoạn hoặc quá tải. Vui lòng thử lại.');
     } finally {
       setLoading(false);
     }
@@ -289,6 +292,20 @@ export default function AnalyticsPage() {
 
       {/* Form Selector */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        {loadError && (
+          <div className="mb-3 rounded-md bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200 px-3 py-2 text-sm flex items-center justify-between">
+            <span>{loadError}</span>
+            <button
+              onClick={() => {
+                setLoadError(null);
+                loadAnalyticsData();
+              }}
+              className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Select Phase
@@ -778,7 +795,10 @@ function UniversityList({ data }: { data: AnalyticsData['uniDistribution'] }) {
           className="flex items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg transform transition-all duration-500 ease-out hover:scale-105 hover:shadow-md"
           style={{
             animationDelay: `${index * 100}ms`,
-            animation: 'slideInFromRight 0.6s ease-out forwards',
+            animationName: 'slideInFromRight',
+            animationDuration: '0.6s',
+            animationTimingFunction: 'ease-out',
+            animationFillMode: 'forwards',
             opacity: 0,
             transform: 'translateX(20px)'
           }}
@@ -827,7 +847,10 @@ function MajorChart({ data }: { data: AnalyticsData['majorDistribution'] }) {
           className="flex items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg transform transition-all duration-500 ease-out hover:scale-105 hover:shadow-md"
           style={{
             animationDelay: `${index * 100}ms`,
-            animation: 'slideInFromRight 0.6s ease-out forwards',
+            animationName: 'slideInFromRight',
+            animationDuration: '0.6s',
+            animationTimingFunction: 'ease-out',
+            animationFillMode: 'forwards',
             opacity: 0,
             transform: 'translateX(20px)'
           }}
@@ -963,7 +986,10 @@ function UniversityYearChart({ data }: { data: AnalyticsData['universityYearDist
                 className="text-center py-2 px-3 font-medium text-gray-900 dark:text-white min-w-[80px]"
                 style={{
                   animationDelay: `${index * 100}ms`,
-                  animation: 'slideInFromRight 0.4s ease-out forwards',
+                  animationName: 'slideInFromRight',
+                  animationDuration: '0.4s',
+                  animationTimingFunction: 'ease-out',
+                  animationFillMode: 'forwards',
                   opacity: 0,
                   transform: 'translateX(20px)'
                 }}
@@ -985,7 +1011,10 @@ function UniversityYearChart({ data }: { data: AnalyticsData['universityYearDist
                 className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                 style={{
                   animationDelay: `${entityIndex * 100}ms`,
-                  animation: 'slideInFromRight 0.4s ease-out forwards',
+                  animationName: 'slideInFromRight',
+                  animationDuration: '0.4s',
+                  animationTimingFunction: 'ease-out',
+                  animationFillMode: 'forwards',
                   opacity: 0,
                   transform: 'translateX(20px)'
                 }}
@@ -1029,7 +1058,10 @@ function AgeGroupChart({ data }: { data: AnalyticsData['ageGroupDistribution'] }
           className="flex items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg transform transition-all duration-500 ease-out hover:scale-105 hover:shadow-md"
           style={{
             animationDelay: `${index * 100}ms`,
-            animation: 'slideInFromRight 0.6s ease-out forwards',
+            animationName: 'slideInFromRight',
+            animationDuration: '0.6s',
+            animationTimingFunction: 'ease-out',
+            animationFillMode: 'forwards',
             opacity: 0,
             transform: 'translateX(20px)'
           }}

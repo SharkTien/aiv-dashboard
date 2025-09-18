@@ -205,9 +205,18 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
       return { rows, totalClicks, uniqueTotal: l.uniqueClicks || 0 };
     });
 
-    const allDates = Array.from(new Set(perLink.flatMap((p) => p.rows.map((r) => r.date)))).sort((a, b) => a.localeCompare(b));
+    // Build full date range to avoid missing the last day when total=0 on some links
+    const rangeDates: string[] = (() => {
+      const out: string[] = [];
+      const start = new Date(startDate + 'T00:00:00Z');
+      const end = new Date(endDate + 'T00:00:00Z');
+      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+        out.push(d.toISOString().slice(0, 10));
+      }
+      return out;
+    })();
 
-    dailyClicksData = allDates.map((dStr) => {
+    dailyClicksData = rangeDates.map((dStr) => {
       let clicks = 0;
       let unique = 0;
       perLink.forEach((p) => {

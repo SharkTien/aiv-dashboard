@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import UTMAnalytics from "@/components/UTMAnalytics";
+import FormTrackingTable from "@/components/FormTrackingTable";
 
 interface Form {
   id: number;
@@ -72,6 +73,22 @@ export default function AnalyticsPage() {
   const [user, setUser] = useState<any>(null);
   const [myEntityName, setMyEntityName] = useState<string>("");
   const [userSignUps, setUserSignUps] = useState<number>(0);
+  // Form Tracking (UTM submissions) state
+  const [ftLoading, setFtLoading] = useState(false);
+  const [ftData, setFtData] = useState<{ links: any[]; allDates: string[]; dayTotalSubmissions: Record<string, number>; meta?: { page: number; pageSize: number; totalPages: number; totalCombos: number } } | null>(null);
+  const [ftPage, setFtPage] = useState(1);
+  const [ftPageSize, setFtPageSize] = useState(80);
+  const [ftDatePage, setFtDatePage] = useState(1);
+  const [ftDatePageSize, setFtDatePageSize] = useState(30);
+  const [ftRollup, setFtRollup] = useState<'day'|'week'>('day');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [ftError, setFtError] = useState<string | null>(null);
+  const [ftStartDate, setFtStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0,10);
+  });
+  const [ftEndDate, setFtEndDate] = useState(() => new Date().toISOString().slice(0,10));
 
   useEffect(() => {
     loadForms();
@@ -228,6 +245,7 @@ export default function AnalyticsPage() {
 
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await fetch(`/api/dashboard/tmr-analytics?formId=${selectedForm}`);
       const result = await response.json();
 
@@ -238,9 +256,12 @@ export default function AnalyticsPage() {
         } else {
           setFilteredUniDistribution([]);
         }
+      } else {
+        setLoadError('Kết nối bị gián đoạn hoặc quá tải. Vui lòng thử lại.');
       }
     } catch (error) {
       console.error('Error loading analytics data:', error);
+      setLoadError('Kết nối bị gián đoạn hoặc quá tải. Vui lòng thử lại.');
     } finally {
       setLoading(false);
     }
@@ -272,6 +293,44 @@ export default function AnalyticsPage() {
     }
   };
 
+  const loadFormTracking = async () => {
+    try {
+      setFtLoading(true);
+      setFtError(null);
+      const params = new URLSearchParams({ start_date: ftStartDate, end_date: ftEndDate });
+      if (selectedForm) params.append('form_id', String(selectedForm));
+      params.append('page', String(ftPage));
+      params.append('page_size', String(ftPageSize));
+      params.append('date_page', String(ftDatePage));
+      params.append('date_page_size', String(ftDatePageSize));
+      if (ftRollup === 'week') params.append('rollup', 'week');
+      const res = await fetch(`/api/utm/form-tracking?${params.toString()}`, { cache: 'no-store' });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        setFtData({
+          links: json.data?.links || [],
+          allDates: json.data?.allDates || [],
+          dayTotalSubmissions: json.data?.dayTotalSubmissions || {},
+          meta: json.data?.meta
+        });
+      } else {
+        setFtData({ links: [], allDates: [], dayTotalSubmissions: {}, meta: { page: ftPage, pageSize: ftPageSize, totalPages: 1, totalCombos: 0 } });
+        setFtError(String(json?.details || json?.error || 'Không tải được dữ liệu.')); // show server detail
+      }
+    } catch (e) {
+      setFtData({ links: [], allDates: [], dayTotalSubmissions: {}, meta: { page: ftPage, pageSize: ftPageSize, totalPages: 1, totalCombos: 0 } });
+      setFtError('Không tải được dữ liệu Form Tracking. Thử lại.');
+    } finally {
+      setFtLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'forms') return;
+    if (!user) return;
+    loadFormTracking();
+  }, [activeTab, user, selectedForm, ftPage, ftPageSize, ftStartDate, ftEndDate, ftDatePage, ftDatePageSize, ftRollup]);
+
   const selectedFormName = forms.find(f => f.id === selectedForm)?.name || '';
 
   return (
@@ -286,6 +345,20 @@ export default function AnalyticsPage() {
 
       {/* Form Selector */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        {loadError && (
+          <div className="mb-3 rounded-md bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200 px-3 py-2 text-sm flex items-center justify-between">
+            <span>{loadError}</span>
+            <button
+              onClick={() => {
+                setLoadError(null);
+                loadAnalyticsData();
+              }}
+              className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Select Phase
@@ -355,6 +428,98 @@ export default function AnalyticsPage() {
 
               {analyticsData && !loading && (
                 <div className="space-y-6">
+                  {/* UTM Form Tracking Matrix */}
+                  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Form Tracking by UTM</h2>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Daily submissions by UTM link và bảng mật độ theo Campaign/Medium/Source.</p>
+                      {/* Date range controls for Form Tracking */}
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Date</label>
+                          <input type="date" value={ftStartDate} onChange={(e)=>setFtStartDate(e.target.value)} className="w-full h-9 rounded ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">End Date</label>
+                          <input type="date" value={ftEndDate} onChange={(e)=>setFtEndDate(e.target.value)} className="w-full h-9 rounded ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                        </div>
+                        <div className="flex items-end">
+                          <button onClick={loadFormTracking} className="h-9 w-full sm:w-auto px-4 rounded bg-sky-600 hover:bg-sky-700 text-white">Refresh</button>
+                        </div>
+                      </div>
+                    </div>
+                    {ftError && (
+                      <div className="px-6 py-3 bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200 text-sm flex items-center justify-between">
+                        <span>{ftError}</span>
+                        <button onClick={loadFormTracking} className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white">Thử lại</button>
+                      </div>
+                    )}
+                    {ftLoading && (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      </div>
+                    )}
+                    {!ftLoading && ftError && (!ftData || (ftData?.links || []).length === 0) && (
+                      <div className="p-8 text-center text-sm text-gray-600 dark:text-gray-400">
+                        <div className="mb-2">Không tải được dữ liệu Form Tracking. Có thể do quá tải kết nối.</div>
+                        <button onClick={loadFormTracking} className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-700 text-white">Thử lại</button>
+                      </div>
+                    )}
+                    {ftData && ftData.allDates?.length > 0 && (
+                      <div className="p-4 space-y-6">
+                        {ftData.meta && (
+                          <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                            <span>Page {ftData.meta.page} / {ftData.meta.totalPages}</span>
+                            <span>•</span>
+                            <span>{ftData.meta.totalCombos} UTM combinations</span>
+                            <span>•</span>
+                            <label className="inline-flex items-center gap-1">Page size
+                              <select value={ftPageSize} onChange={(e)=>{ setFtPageSize(Number(e.target.value)); setFtPage(1); }} className="ml-1 h-7 rounded bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 px-2">
+                                {[40,80,120,160].map(n=> <option key={n} value={n}>{n}</option>)}
+                              </select>
+                            </label>
+                            <span>•</span>
+                            <label className="inline-flex items-center gap-1">Date page
+                              <select value={ftDatePageSize} onChange={(e)=>{ setFtDatePageSize(Number(e.target.value)); setFtDatePage(1); }} className="ml-1 h-7 rounded bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 px-2">
+                                {[14,30,60,90].map(n=> <option key={n} value={n}>{n}d</option>)}
+                              </select>
+                            </label>
+                            <div className="ml-auto flex items-center gap-2">
+                              <button onClick={()=> setFtDatePage(p=> Math.max(1, p-1))} disabled={(ftData.meta as any)?.datePage <= 1} className="h-7 px-2 rounded bg-gray-100 dark:bg-gray-700 disabled:opacity-50">Prev dates</button>
+                              <button onClick={()=> setFtDatePage(p=> Math.min((ftData.meta as any)?.totalDatePages || 1, p+1))} disabled={(ftData.meta as any)?.datePage >= (ftData.meta as any)?.totalDatePages} className="h-7 px-2 rounded bg-gray-100 dark:bg-gray-700 disabled:opacity-50">Next dates</button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="inline-flex items-center gap-1">
+                                <input type="checkbox" checked={ftRollup==='week'} onChange={(e)=>{ setFtRollup(e.target.checked ? 'week' : 'day'); setFtDatePage(1); }} /> Weekly rollup
+                              </label>
+                            </div>
+                            <div className="ml-2 flex items-center gap-2">
+                              <button onClick={()=> setFtPage(p=> Math.max(1, p-1))} disabled={(ftData.meta?.page||1) <= 1} className="h-7 px-2 rounded bg-gray-100 dark:bg-gray-700 disabled:opacity-50">Prev</button>
+                              <button onClick={()=> setFtPage(p=> Math.min(ftData.meta!.totalPages, p+1))} disabled={(ftData.meta?.page||1) >= (ftData.meta?.totalPages||1)} className="h-7 px-2 rounded bg-gray-100 dark:bg-gray-700 disabled:opacity-50">Next</button>
+                              <button onClick={loadFormTracking} className="h-7 px-2 rounded bg-sky-600 text-white">Thử lại</button>
+                            </div>
+                          </div>
+                        )}
+                        {/* User Performance-style matrix but for submissions */}
+                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                            <h3 className="text-md font-medium text-gray-900 dark:text-white">User Performance by UTM Link (Submissions)</h3>
+                          </div>
+                          <SubmissionPerformanceTable links={ftData.links} dates={ftData.allDates} />
+                        </div>
+
+                        {/* Detailed tracking + density */}
+                        <FormTrackingTable 
+                          links={ftData.links}
+                          allDates={ftData.allDates}
+                          dayTotalSubmissions={ftData.dayTotalSubmissions}
+                          selectedEntity={selectedEntity}
+                          isAdmin={!!user && user.role === 'admin'}
+                          entities={[]}
+                        />
+                      </div>
+                    )}
+                  </div>
                   {/* Overview Cards */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
                     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
@@ -776,7 +941,10 @@ function UniversityList({ data }: { data: AnalyticsData['uniDistribution'] }) {
           className="flex items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg transform transition-all duration-500 ease-out hover:scale-105 hover:shadow-md"
           style={{
             animationDelay: `${index * 100}ms`,
-            animation: 'slideInFromRight 0.6s ease-out forwards',
+            animationName: 'slideInFromRight',
+            animationDuration: '0.6s',
+            animationTimingFunction: 'ease-out',
+            animationFillMode: 'forwards',
             opacity: 0,
             transform: 'translateX(20px)'
           }}
@@ -823,7 +991,10 @@ function MajorChart({ data }: { data: AnalyticsData['majorDistribution'] }) {
           className="flex items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg transform transition-all duration-500 ease-out hover:scale-105 hover:shadow-md"
           style={{
             animationDelay: `${index * 100}ms`,
-            animation: 'slideInFromRight 0.6s ease-out forwards',
+            animationName: 'slideInFromRight',
+            animationDuration: '0.6s',
+            animationTimingFunction: 'ease-out',
+            animationFillMode: 'forwards',
             opacity: 0,
             transform: 'translateX(20px)'
           }}
@@ -959,7 +1130,10 @@ function UniversityYearChart({ data }: { data: AnalyticsData['universityYearDist
                 className="text-center py-2 px-3 font-medium text-gray-900 dark:text-white min-w-[80px]"
                 style={{
                   animationDelay: `${index * 100}ms`,
-                  animation: 'slideInFromRight 0.4s ease-out forwards',
+                  animationName: 'slideInFromRight',
+                  animationDuration: '0.4s',
+                  animationTimingFunction: 'ease-out',
+                  animationFillMode: 'forwards',
                   opacity: 0,
                   transform: 'translateX(20px)'
                 }}
@@ -981,7 +1155,10 @@ function UniversityYearChart({ data }: { data: AnalyticsData['universityYearDist
                 className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                 style={{
                   animationDelay: `${entityIndex * 100}ms`,
-                  animation: 'slideInFromRight 0.4s ease-out forwards',
+                  animationName: 'slideInFromRight',
+                  animationDuration: '0.4s',
+                  animationTimingFunction: 'ease-out',
+                  animationFillMode: 'forwards',
                   opacity: 0,
                   transform: 'translateX(20px)'
                 }}
@@ -1007,6 +1184,113 @@ function UniversityYearChart({ data }: { data: AnalyticsData['universityYearDist
             );
           })}
         </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SubmissionPerformanceTable({ links, dates }: { links: Array<any>; dates: string[] }) {
+  const [showPercent, setShowPercent] = useState(false);
+  const [compactMode, setCompactMode] = useState(false);
+
+  const perLink = links.map((l: any) => {
+    const byDate: Record<string, { total: number; unique: number }> = {};
+    dates.forEach(d => {
+      const v = l?.dailySubmissions?.[d] || { total: 0, unique: 0 };
+      byDate[d] = { total: Number(v.total || 0), unique: Number(v.unique || 0) };
+    });
+    return { link: l, byDate };
+  });
+
+  // Totals per day
+  const dayTotals: Record<string, { total: number; unique: number }> = {};
+  dates.forEach(d => { dayTotals[d] = { total: 0, unique: 0 }; });
+  perLink.forEach(({ byDate }) => {
+    dates.forEach(d => {
+      dayTotals[d].total += byDate[d].total;
+      dayTotals[d].unique += byDate[d].unique;
+    });
+  });
+
+  // Max per-day to color
+  const perDateMax: Record<string, number> = {};
+  dates.forEach(d => {
+    let m = 1;
+    perLink.forEach(({ byDate }) => { if (byDate[d].total > m) m = byDate[d].total; });
+    perDateMax[d] = m;
+  });
+  const bgFor = (d: string, val: number, share: number) => {
+    const ratio = showPercent ? Math.min(1, share / 100) : Math.min(1, val / (perDateMax[d] || 1));
+    const alpha = ratio === 0 ? 0 : 0.12 + 0.68 * ratio;
+    return { backgroundColor: `rgba(59, 130, 246, ${alpha.toFixed(3)})` };
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-700 text-xs">
+        <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showPercent} onChange={(e)=>setShowPercent(e.target.checked)} /> <span>Show % share</span></label>
+        <label className="inline-flex items-center gap-2"><input type="checkbox" checked={compactMode} onChange={(e)=>setCompactMode(e.target.checked)} /> <span>Compact (hide unique)</span></label>
+      </div>
+      <div className="overflow-x-auto w-full pb-1">
+        <table className="min-w-max text-xs md:text-sm border-collapse w-full">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left w-[200px] min-w-[200px]">UTM</th>
+              <th className="sticky left-[200px] z-10 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left w-[180px] min-w-[180px]">Campaign</th>
+              <th className="sticky left-[380px] z-10 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left w-[140px] min-w-[140px]">Medium</th>
+              <th className="sticky left-[520px] z-10 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left w-[160px] min-w-[160px]">Source</th>
+              {dates.map(d => (
+                <th key={d} className="px-2 py-2 text-center whitespace-nowrap">
+                  <div className="text-[11px] text-gray-700 dark:text-gray-200">
+                    {new Date(d).toLocaleDateString(undefined,{month:'short', day:'numeric'})}
+                  </div>
+                  <div className="text-[10px] text-amber-600">{showPercent ? 'share | uniq%' : 'total | uniq'}</div>
+                </th>
+              ))}
+              <th className="px-3 py-2 text-center font-semibold">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* Totals row */}
+            <tr className="border-t border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40">
+              <td className="sticky left-0 bg-gray-50 dark:bg-gray-700/40 px-3 py-2 font-semibold" colSpan={4}>TOTALS</td>
+              {dates.map(d => (
+                <td key={`tot-${d}`} className="px-2 py-1 text-center">
+                  <div className="text-[12px] font-semibold">{dayTotals[d].total}</div>
+                  {!compactMode && <div className="text-[10px] text-gray-600">{dayTotals[d].unique}</div>}
+                </td>
+              ))}
+              <td className="px-3 py-2 text-center font-semibold">
+                {Object.values(dayTotals).reduce((s, v) => s + v.total, 0)}
+              </td>
+            </tr>
+            {perLink.map(({ link, byDate }) => (
+              <tr key={link.id} className="border-t border-gray-200 dark:border-gray-700">
+                <td className="sticky left-0 z-0 bg-white dark:bg-gray-800 px-3 py-2 w-[200px] min-w-[200px] truncate" title={link.utm_name}>{link.custom_name || link.utm_name || 'Unnamed'}</td>
+                <td className="sticky left-[200px] z-0 bg-white dark:bg-gray-800 px-3 py-2 w-[180px] min-w-[180px] truncate" title={link.campaign_name}>{link.campaign_name}</td>
+                <td className="sticky left-[380px] z-0 bg-white dark:bg-gray-800 px-3 py-2 w-[140px] min-w-[140px] truncate" title={link.medium_name}>{link.medium_name}</td>
+                <td className="sticky left-[520px] z-0 bg-white dark:bg-gray-800 px-3 py-2 w-[160px] min-w-[160px] truncate" title={link.source_name}>{link.source_name}</td>
+                {dates.map(d => {
+                  const v = byDate[d] || { total: 0, unique: 0 };
+                  const totalDay = dayTotals[d].total || 0;
+                  const share = totalDay > 0 ? (v.total / totalDay) * 100 : 0;
+                  const uniqShare = totalDay > 0 ? (v.unique / totalDay) * 100 : 0;
+                  return (
+                    <td key={`${link.id}-${d}`} className="px-2 py-1 text-center" style={bgFor(d, v.total, share)}>
+                      <div className="text-[12px] font-medium text-gray-900 dark:text-white">{showPercent ? `${share.toFixed(1)}%` : v.total}</div>
+                      {!compactMode && (
+                        <div className="text-[10px] text-gray-500">{showPercent ? `${uniqShare.toFixed(1)}%` : v.unique}</div>
+                      )}
+                    </td>
+                  );
+                })}
+                <td className="px-3 py-2 text-center font-semibold">
+                  {Object.values(byDate).reduce((s, it) => s + (it?.total || 0), 0)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
     </div>

@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getDbPool } from "@/lib/db";
 
+function formatDateInTz(date: Date, tz: string): string {
+  // en-CA yields YYYY-MM-DD
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(date);
+}
+
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
@@ -9,8 +14,9 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const startDate = searchParams.get("start_date") || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const endDate = searchParams.get("end_date") || new Date().toISOString().split('T')[0];
+  const tz = process.env.APP_TIMEZONE || 'Asia/Ho_Chi_Minh';
+  const startDate = searchParams.get("start_date") || formatDateInTz(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), tz);
+  const endDate = searchParams.get("end_date") || formatDateInTz(new Date(), tz);
   const entityId = searchParams.get("entity_id");
   const campaignId = searchParams.get("campaign_id");
   const campaignCode = searchParams.get("campaign_code");
@@ -756,9 +762,9 @@ async function getDatabaseClickData(pool: any, utmLinkId: number, startDate: str
         COUNT(DISTINCT session_id) as uniqueClicks
        FROM click_logs 
        WHERE utm_link_id = ? 
-         AND DATE(clicked_at) >= ? 
-         AND DATE(clicked_at) <= ?`,
-      [utmLinkId, startDate, endDate]
+         AND clicked_at >= ? 
+         AND clicked_at <= ?`,
+      [utmLinkId, `${startDate} 00:00:00`, `${endDate} 23:59:59`]
     );
     
     const click = Array.isArray(clickData) && clickData.length > 0 ? clickData[0] : null;
@@ -775,11 +781,11 @@ async function getDatabaseClickData(pool: any, utmLinkId: number, startDate: str
         COUNT(DISTINCT session_id) as unique_clicks
        FROM click_logs 
        WHERE utm_link_id = ? 
-         AND DATE(clicked_at) >= ? 
-         AND DATE(clicked_at) <= ?
+         AND clicked_at >= ? 
+         AND clicked_at <= ?
        GROUP BY DATE(clicked_at)
        ORDER BY date ASC`,
-      [utmLinkId, startDate, endDate]
+      [utmLinkId, `${startDate} 00:00:00`, `${endDate} 23:59:59`]
     );
     
     const clicksByDate = Array.isArray(dailyData) 
@@ -797,13 +803,13 @@ async function getDatabaseClickData(pool: any, utmLinkId: number, startDate: str
         COUNT(*) as clicks
        FROM click_logs 
        WHERE utm_link_id = ? 
-         AND DATE(clicked_at) >= ? 
-         AND DATE(clicked_at) <= ?
+         AND clicked_at >= ? 
+         AND clicked_at <= ?
          AND country IS NOT NULL
        GROUP BY country
        ORDER BY clicks DESC
        LIMIT 10`,
-      [utmLinkId, startDate, endDate]
+      [utmLinkId, `${startDate} 00:00:00`, `${endDate} 23:59:59`]
     );
     
     const clicksByCountry = Array.isArray(geoData)
@@ -827,12 +833,12 @@ async function getDatabaseClickData(pool: any, utmLinkId: number, startDate: str
         COUNT(*) as clicks
        FROM click_logs 
        WHERE utm_link_id = ? 
-         AND DATE(clicked_at) >= ? 
-         AND DATE(clicked_at) <= ?
+         AND clicked_at >= ? 
+         AND clicked_at <= ?
        GROUP BY referrer_group
        ORDER BY clicks DESC
        LIMIT 10`,
-      [utmLinkId, startDate, endDate]
+      [utmLinkId, `${startDate} 00:00:00`, `${endDate} 23:59:59`]
     );
     
     const clicksByReferrer = Array.isArray(refData)
@@ -849,11 +855,11 @@ async function getDatabaseClickData(pool: any, utmLinkId: number, startDate: str
         COUNT(*) as clicks
        FROM click_logs 
        WHERE utm_link_id = ? 
-         AND DATE(clicked_at) >= ? 
-         AND DATE(clicked_at) <= ?
+         AND clicked_at >= ? 
+         AND clicked_at <= ?
        GROUP BY device_type
        ORDER BY clicks DESC`,
-      [utmLinkId, startDate, endDate]
+      [utmLinkId, `${startDate} 00:00:00`, `${endDate} 23:59:59`]
     );
     
     const clicksByDevice = Array.isArray(deviceData)

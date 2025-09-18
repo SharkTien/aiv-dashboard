@@ -178,10 +178,54 @@ export default function FormTrackingTable({
   const maxSubmissions = useMemo(() => {
     return Math.max(
       ...filteredLinks.flatMap(link => 
-        link.rows.map(row => Math.max(row.total, row.unique))
+        link.rows.map(row => row.unique)
       )
     );
   }, [filteredLinks]);
+
+  // Build density table grouped by Campaign/Medium/Source
+  const densityRows = useMemo(() => {
+    type Row = { label: string; campaign: string; medium: string; source: string; totals: number; byDate: Record<string, number> };
+    const map = new Map<string, Row>();
+    const safe = (v: any) => String(v ?? '').trim() || 'Unknown';
+    allDates.forEach(d => { /* ensure column existence later */ });
+    links.forEach(link => {
+      const campaign = safe(link.campaign_name);
+      const medium = safe(link.medium_name);
+      const source = safe(link.source_name);
+      const key = `${campaign}|||${medium}|||${source}`;
+      if (!map.has(key)) {
+        const base: Record<string, number> = {};
+        allDates.forEach(d => { base[d] = 0; });
+        map.set(key, {
+          label: `${campaign} / ${medium} / ${source}`,
+          campaign, medium, source,
+          totals: 0,
+          byDate: base
+        });
+      }
+      const row = map.get(key)!;
+      allDates.forEach(d => {
+        const v = link.dailySubmissions[d]?.total || 0;
+        if (v) {
+          row.byDate[d] = (row.byDate[d] || 0) + v;
+          row.totals += v;
+        }
+      });
+    });
+    // Sort by totals desc
+    return Array.from(map.values()).sort((a, b) => b.totals - a.totals);
+  }, [links, allDates]);
+
+  const densityMax = useMemo(() => {
+    return Math.max(1, ...densityRows.flatMap(r => allDates.map(d => r.byDate[d] || 0)));
+  }, [densityRows, allDates]);
+
+  const densityBg = (value: number) => {
+    const ratio = Math.min(1, (value || 0) / (densityMax || 1));
+    const alpha = value === 0 ? 0 : 0.12 + 0.75 * ratio;
+    return { backgroundColor: `rgba(16, 185, 129, ${alpha.toFixed(3)})` }; // emerald tone
+  };
 
   // Export CSV
   const exportCsv = () => {
@@ -347,10 +391,6 @@ export default function FormTrackingTable({
               <td className="sticky left-[620px] z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600">—</td>
               {allDates.map(date => {
                 const total = dayTotalSubmissions[date] || 0;
-                const dayTotal = filteredLinks.reduce((sum, link) => {
-                  const row = link.rows.find(r => r.date === date);
-                  return sum + (row?.total || 0);
-                }, 0);
                 const dayUnique = filteredLinks.reduce((sum, link) => {
                   const row = link.rows.find(r => r.date === date);
                   return sum + (row?.unique || 0);
@@ -359,8 +399,7 @@ export default function FormTrackingTable({
                 return (
                   <td key={date} className="text-center px-2 py-1">
                     <div className="space-y-1">
-                      <div className="font-semibold">{dayTotal}</div>
-                      {!compactMode && <div className="text-xs text-gray-600 dark:text-gray-400">{dayUnique}</div>}
+                      <div className="font-semibold">{dayUnique}</div>
                     </div>
                   </td>
                 );
@@ -368,13 +407,8 @@ export default function FormTrackingTable({
               <td className="px-3 py-2 text-center">
                 <div className="space-y-1">
                   <div className="font-semibold">
-                    {filteredLinks.reduce((sum, link) => sum + link.totalSubmissions, 0)}
+                    {filteredLinks.reduce((sum, link) => sum + link.totalUnique, 0)}
                   </div>
-                  {!compactMode && (
-                    <div className="text-xs text-gray-600 dark:text-gray-400">
-                      {filteredLinks.reduce((sum, link) => sum + link.totalUnique, 0)}
-                    </div>
-                  )}
                 </div>
               </td>
             </tr>
@@ -398,42 +432,85 @@ export default function FormTrackingTable({
                   {link.form_name}
                 </td>
                 {link.rows.map(row => {
-                  const dayTotal = dayTotalSubmissions[row.date] || 0;
-                  const totalPercent = dayTotal > 0 ? ((row.total / dayTotal) * 100).toFixed(1) : '0.0';
-                  const uniquePercent = dayTotal > 0 ? ((row.unique / dayTotal) * 100).toFixed(1) : '0.0';
+                  const dayUniqueTotal = dayTotalSubmissions[row.date] || 0;
+                  const uniquePercent = dayUniqueTotal > 0 ? ((row.unique / dayUniqueTotal) * 100).toFixed(1) : '0.0';
                   
                   return (
                     <td 
                       key={row.date} 
                       className="text-center px-2 py-1 cursor-pointer"
                       onClick={(e) => handleDateSelection(row.date, e)}
-                      style={getHeatmapColor(row.total, maxSubmissions)}
+                      style={getHeatmapColor(row.unique, maxSubmissions)}
                     >
                       <div className="space-y-1">
                         <div className="font-medium">
-                          {showPercent ? `${totalPercent}%` : row.total}
+                          {showPercent ? `${uniquePercent}%` : row.unique}
                         </div>
-                        {!compactMode && (
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            {showPercent ? `${uniquePercent}%` : row.unique}
-                          </div>
-                        )}
                       </div>
                     </td>
                   );
                 })}
                 <td className="px-3 py-2 text-center">
                   <div className="space-y-1">
-                    <div className="font-semibold">{link.totalSubmissions}</div>
-                    {!compactMode && (
-                      <div className="text-xs text-gray-600 dark:text-gray-400">{link.totalUnique}</div>
-                    )}
+                    <div className="font-semibold">{link.totalUnique}</div>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+      {/* Density table by Campaign/Medium/Source */}
+      <div className="mt-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="p-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Submission Density by Campaign / Medium / Source</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Daily submissions aggregated by UTM combination. Heat intensity reflects counts.</p>
+          <div className="overflow-x-auto">
+            <table className="min-w-max w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="sticky left-0 z-20 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left font-semibold text-gray-900 dark:text-white" style={{ width: '420px', minWidth: '420px' }}>Campaign / Medium / Source</th>
+                  {allDates.map(date => (
+                    <th key={date} className="px-2 py-2 text-center font-semibold text-gray-900 dark:text-white min-w-[80px]">
+                      {new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-center font-semibold text-gray-900 dark:text-white">TOTAL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Totals row */}
+                <tr className="bg-gray-100 dark:bg-gray-700 font-semibold">
+                  <td className="sticky left-0 z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2">TOTALS</td>
+                  {allDates.map(date => {
+                    const dayTotal = densityRows.reduce((sum, r) => sum + (r.byDate[date] || 0), 0);
+                    return (
+                      <td key={`total-${date}`} className="text-center px-2 py-1">
+                        {dayTotal}
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-2 text-center">
+                    {densityRows.reduce((sum, r) => sum + (r.totals || 0), 0)}
+                  </td>
+                </tr>
+                {densityRows.map(r => (
+                  <tr key={`${r.campaign}|${r.medium}|${r.source}`} className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 py-2 font-medium">
+                      {r.label}
+                    </td>
+                    {allDates.map(d => (
+                      <td key={`${r.label}-${d}`} className="text-center px-2 py-1" style={densityBg(r.byDate[d] || 0)}>
+                        {r.byDate[d] || 0}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2 text-center font-semibold">{r.totals}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

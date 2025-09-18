@@ -61,7 +61,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
   
   // Email settings
   const [emailEnabled, setEmailEnabled] = useState<boolean>(false);
-  const [emailSubject, setEmailSubject] = useState<string>("AIESEC in Vietnam | We have received Your Application for Recruitment Fall 2025");
+  const [emailSubject, setEmailSubject] = useState<string>("AIESEC in Vietnam | We have received Your Application");
   const [emailHtml, setEmailHtml] = useState<string>("");
   const [emailLoading, setEmailLoading] = useState<boolean>(false);
   
