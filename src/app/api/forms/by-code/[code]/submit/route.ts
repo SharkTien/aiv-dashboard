@@ -369,7 +369,15 @@ export async function POST(
           subject = subject.replace(tokenRegex, replacer);
           html = html.replace(tokenRegex, replacer);
 
-          await sendEmail({ to: toEmail, subject, html });
+          const emailResult = await sendEmail({ to: toEmail, subject, html });
+          
+          // Mark email as sent if successful
+          if (emailResult.success) {
+            await pool.query(
+              "UPDATE form_submissions SET email_sent = TRUE WHERE id = ?",
+              [submissionId]
+            );
+          }
         }
       }
     } catch (e) {

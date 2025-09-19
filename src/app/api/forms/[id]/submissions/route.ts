@@ -22,7 +22,7 @@ export async function GET(
     // Get submissions with responses and entity information in a single optimized query
     const [submissionRows] = await pool.query(
       `SELECT 
-        fs.id, fs.timestamp, fs.entity_id, e.name as entity_name, fs.duplicated,
+        fs.id, fs.timestamp, fs.entity_id, e.name as entity_name, fs.duplicated, fs.email_sent,
         fr.field_id, fr.value,
         ff.field_name, ff.field_label, ff.field_type, ff.sort_order,
         CASE 
@@ -56,6 +56,7 @@ export async function GET(
           entityId: row.entity_id,
           entityName: row.entity_name || null,
           duplicated: row.duplicated === 1,
+          emailSent: row.email_sent === 1,
           responses: []
         });
       }

@@ -41,6 +41,7 @@ export async function GET(
         fs.id,
         fs.timestamp,
         fs.entity_id,
+        fs.email_sent,
         e.name as entity_name,
         f.code as form_code,
         ff.field_name,
@@ -87,6 +88,7 @@ export async function GET(
           formCode: row.form_code,
           utmCampaign: row.utm_campaign_value,
           utmCampaignName: row.utm_campaign_name,
+          emailSent: row.email_sent === 1,
           responses: []
         });
       }

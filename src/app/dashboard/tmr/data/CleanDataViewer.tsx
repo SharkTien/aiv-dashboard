@@ -10,6 +10,7 @@ type Submission = {
   entityName: string | null;
   utmCampaign: string | null;
   utmCampaignName: string | null;
+  emailSent: boolean;
   // Prefer array format with value_label available
   responses: { field_name: string; field_label: string; value: string; value_label?: string | null }[] | { [key: string]: string };
   timestamp: string;
@@ -506,9 +507,9 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
 
   const exportToCSV = () => {
     if (filteredSubmissions.length === 0) return;
-    const headers = ['Date', 'Entity', 'UTM Campaign', ...formFields.sort((a,b)=>a.sort_order-b.sort_order).map(f => f.field_label || f.field_name)];
+    const headers = ['Date', 'Entity', 'UTM Campaign', 'Email Sent', ...formFields.sort((a,b)=>a.sort_order-b.sort_order).map(f => f.field_label || f.field_name)];
     const csvRows: string[][] = filteredSubmissions.map(sub => {
-      const base = [new Date(sub.timestamp).toLocaleString(), sub.entityName || '', sub.utmCampaignName || sub.utmCampaign || ''];
+      const base = [new Date(sub.timestamp).toLocaleString(), sub.entityName || '', sub.utmCampaignName || sub.utmCampaign || '', sub.emailSent ? 'Yes' : 'No'];
       const map = Array.isArray(sub.responses)
         ? new Map(sub.responses.map((r: any) => [r.field_name, r]))
         : new Map(Object.entries(sub.responses as any).map(([k,v]: any) => [k, { field_name: k, value: v, value_label: v }]));
@@ -805,6 +806,12 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                 >
                   UTM Campaign {sortField === 'utmCampaign' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={() => handleSort('emailSent')}
+                >
+                  Email Sent {sortField === 'emailSent' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
                 {/* Dynamic form fields */}
                 {formFields
                   .sort((a, b) => a.sort_order - b.sort_order)
@@ -830,6 +837,15 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {submission.utmCampaign || <span className="text-gray-400">No campaign</span>}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      submission.emailSent 
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
+                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                    }`}>
+                      {submission.emailSent ? '✓ Sent' : '✗ Not Sent'}
+                    </span>
                   </td>
                   {/* Dynamic form field values */}
                   {formFields
