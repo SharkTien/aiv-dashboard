@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import UTMAnalytics from "@/components/UTMAnalytics";
+import AccessDenied from "@/components/AccessDenied";
+import { checkProgramAccess } from "@/hooks/useProgramAccess";
 
 interface Form {
   id: number;
@@ -65,13 +67,12 @@ export default function AnalyticsPage() {
   const [entities, setEntities] = useState<string[]>([]);
   const [universities, setUniversities] = useState<string[]>([]);
   const [filteredUniversities, setFilteredUniversities] = useState<string[]>([]);
+  const [user, setUser] = useState<any>(null);
   const [uniSearch, setUniSearch] = useState<string>("");
   const [filteredUniDistribution, setFilteredUniDistribution] = useState<AnalyticsData['uniDistribution']>([]);
   const [loadingUniDistribution, setLoadingUniDistribution] = useState(false);
   const [activeTab, setActiveTab] = useState<'clicks' | 'forms'>('clicks');
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  const [user, setUser] = useState<any>(null);
   const [userSignUps, setUserSignUps] = useState<number>(0);
   const [myEntityName, setMyEntityName] = useState<string>("");
 
@@ -279,6 +280,20 @@ export default function AnalyticsPage() {
   };
 
   const selectedFormName = forms.find(f => f.id === selectedForm)?.name || '';
+
+  // Check program access
+  const { hasAccess, userProgram } = checkProgramAccess(user, 'oGV');
+  
+  if (user && !hasAccess) {
+    return (
+      <AccessDenied 
+        userProgram={userProgram}
+        requiredProgram="oGV"
+        title="oGV Analytics Access Denied"
+        message="This page is for oGV users only. Your account is associated with TMR."
+      />
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">

@@ -41,7 +41,7 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
   try {
     // Skip email sending in development to save bandwidth
     if (process.env.NODE_ENV === 'development' && process.env.SKIP_EMAIL === 'true') {
-      console.log('[Email] Skipped in development mode');
+      // console.log('[Email] Skipped in development mode');
       return { success: true, skipped: true, messageId: 'dev-skip' } as const;
     }
     

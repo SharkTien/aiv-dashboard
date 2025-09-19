@@ -5,6 +5,7 @@ import Image from "next/image";
 import ExcelTemplate from "./ExcelTemplate";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import SearchableDropdown from "@/components/SearchableDropdown";
+import DateFilter, { DatePreset } from "@/components/DateFilter";
 
 type Form = {
   id: number;
@@ -121,6 +122,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
   // Date filter state
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [preset, setPreset] = useState<DatePreset>('custom');
   const [showDateFilter, setShowDateFilter] = useState(false);
 
   // Helper function to format any datetime value (Excel serial, MySQL datetime, etc.)
@@ -894,29 +896,17 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
             </div>
             
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              <DateFilter
+                preset={preset}
+                setPreset={setPreset}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
+                showFullSubmissions={false}
+                showApplyButton={false}
+                className="flex-col gap-4"
+              />
               
               {(startDate || endDate) && (
                 <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">

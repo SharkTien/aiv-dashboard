@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
           susUtmSource = Array.isArray(susUtmResult) && susUtmResult.length > 0 ? (susUtmResult[0] as any).count : 0;
         }
 
-        // Get EMT+Organic (submissions allocated to this entity but utm_campaign from EMT entity or no utm_campaign) - using duplicated column
+        // Get EMT+Organic (submissions allocated to this entity but utm_campaign from EMT entity, no utm_campaign, or utm_campaign from other forms) - using duplicated column
         let emtPlusOrganic = 0;
         if (emtEntityId) {
           const emtActiveCampaign = activeCampaignsByEntity.get(emtEntityId);
@@ -172,7 +172,7 @@ export async function GET(request: NextRequest) {
             `, haveRange ? [formId, entityId, emtActiveCampaign, startDate, endDate] : [formId, entityId, emtActiveCampaign]);
             const emtCampaignCount = Array.isArray(emtCampaignResult) && emtCampaignResult.length > 0 ? (emtCampaignResult[0] as any).count : 0;
 
-            // Submissions allocated to this entity but without ANY UTM parameters (organic) - using duplicated column
+            // Submissions allocated to this entity but without utm_campaign (organic) - using duplicated column
             const [organicResult] = await pool.query(`
               SELECT COUNT(*) as count
               FROM form_submissions fs
@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
                   SELECT 1 FROM form_responses fr2
                   JOIN form_fields ff2 ON fr2.field_id = ff2.id
                   WHERE fr2.submission_id = fs.id 
-                    AND ff2.field_name IN ('utm_source', 'utm_medium', 'utm_campaign', 'utm_id', 'utm_content', 'utm_name', 'utm_term')
+                    AND ff2.field_name = 'utm_campaign'
                     AND fr2.value IS NOT NULL 
                     AND TRIM(fr2.value) != ''
                 )
@@ -191,8 +191,33 @@ export async function GET(request: NextRequest) {
             `, haveRange ? [formId, entityId, startDate, endDate] : [formId, entityId]);
             const organicCount = Array.isArray(organicResult) && organicResult.length > 0 ? (organicResult[0] as any).count : 0;
 
-            emtPlusOrganic = emtCampaignCount + organicCount;
+            // Submissions allocated to this entity but with utm_campaign from other forms (not from current form)
+            const [otherFormCampaignResult] = await pool.query(`
+              SELECT COUNT(*) as count
+              FROM form_submissions fs
+              JOIN form_responses fr ON fs.id = fr.submission_id
+              JOIN form_fields ff ON fr.field_id = ff.id
+              LEFT JOIN utm_campaigns uc ON fr.value = uc.code
+              WHERE fs.form_id = ? 
+                AND fs.entity_id = ?
+                AND ff.field_name = 'utm_campaign' 
+                AND fr.value IS NOT NULL 
+                AND TRIM(fr.value) != ''
+                AND (uc.form_id IS NULL OR uc.form_id != ?)
+                AND fs.duplicated = FALSE
+                ${haveRange ? 'AND DATE(fs.timestamp) BETWEEN ? AND ?' : ''}
+            `, haveRange ? [formId, entityId, formId, startDate, endDate] : [formId, entityId, formId]);
+            const otherFormCampaignCount = Array.isArray(otherFormCampaignResult) && otherFormCampaignResult.length > 0 ? (otherFormCampaignResult[0] as any).count : 0;
+
+            emtPlusOrganic = emtCampaignCount + organicCount + otherFormCampaignCount;
           }
+        }
+
+        // Get SUs | other source = SUs | market (total) - M.SUs - EMT + Organic
+        let susOtherSource = 0;
+        if (emtEntityId) {
+          // Calculate: sus - msus - emtPlusOrganic
+          susOtherSource = Math.max(0, sus - msus - emtPlusOrganic);
         }
 
         // Get Other Source (submissions that come from this entity's UTM campaign but entity_id is NOT FOUND) - with deduplication
@@ -231,6 +256,7 @@ export async function GET(request: NextRequest) {
           msus,
           sus_utm_source: susUtmSource,
           emt_plus_organic: emtPlusOrganic,
+          sus_other_source: susOtherSource,
           other_source: otherSource,
           progress: Math.round(progress * 100) / 100,
           msu_percentage: Math.round(msuPercentage * 100) / 100,
@@ -254,6 +280,7 @@ export async function GET(request: NextRequest) {
         let msus = 0;
         let susUtmSource = 0;
         let emtPlusOrganic = 0;
+        let susOtherSource = 0;
         let otherSource = 0;
 
         if (entityName.toLowerCase() === 'emt') {
@@ -410,6 +437,10 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        // For National entities, susOtherSource is always 0 since they don't have entity allocation
+        // National entities represent submissions by utm_campaign type, not by entity allocation
+        susOtherSource = 0;
+
         // Calculate percentages
         const progress = goal > 0 ? (sus / goal) * 100 : 0;
         const msuPercentage = sus > 0 ? (msus / sus) * 100 : 0;
@@ -424,6 +455,7 @@ export async function GET(request: NextRequest) {
           msus,
           sus_utm_source: susUtmSource,
           emt_plus_organic: emtPlusOrganic,
+          sus_other_source: susOtherSource,
           other_source: otherSource,
           progress: Math.round(progress * 100) / 100,
           msu_percentage: Math.round(msuPercentage * 100) / 100,

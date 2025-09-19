@@ -14,32 +14,31 @@ export async function GET(request: NextRequest) {
     let query = `
       SELECT 
         f.type,
-        COUNT(DISTINCT f.id) as total_forms,
-        SUM(CASE WHEN fs.duplicated = FALSE AND (__DATE_FILTER1__) THEN 1 ELSE 0 END) as total_submissions,
-        f.id as highest_phase_id,
-        f.name as highest_phase_name,
-        f.code as highest_phase_code,
-        SUM(CASE WHEN fs.duplicated = FALSE AND (__DATE_FILTER2__) THEN 1 ELSE 0 END) as highest_phase_submissions
+        f.id as form_id,
+        f.name as form_name,
+        f.code as form_code,
+        COALESCE(COUNT(CASE WHEN fs.duplicated = FALSE AND (__DATE_FILTER__) THEN 1 END), 0) as form_submissions
       FROM forms f
       LEFT JOIN form_submissions fs ON f.id = fs.form_id
       WHERE f.type IN ('oGV', 'TMR')
       GROUP BY f.type, f.id, f.name, f.code
-      ORDER BY f.type, highest_phase_submissions DESC`;
+      ORDER BY f.type, form_submissions DESC`;
+    
 
     // Replace date filter placeholders
     const params: any[] = [];
     if (haveRange) {
       const dateExpr = `DATE(fs.timestamp) BETWEEN ? AND ?`;
-      query = query.replace(/__DATE_FILTER1__/g, dateExpr).replace(/__DATE_FILTER2__/g, dateExpr);
-      // Need params twice (for both SUMs)
-      params.push(startDate, endDate, startDate, endDate);
+      query = query.replace(/__DATE_FILTER__/g, dateExpr);
+      params.push(startDate, endDate);
     } else {
-      query = query.replace(/__DATE_FILTER1__/g, '1=1').replace(/__DATE_FILTER2__/g, '1=1');
+      query = query.replace(/__DATE_FILTER__/g, '1=1');
     }
 
     const [statsResult] = await pool.query(query, params);
 
     const rows = Array.isArray(statsResult) ? statsResult : [];
+    
     
     // Process results
     const statsByType = new Map();
@@ -56,36 +55,42 @@ export async function GET(request: NextRequest) {
       }
       
       const stats = statsByType.get(type);
-      stats.totalForms = Math.max(stats.totalForms, row.total_forms);
-      stats.totalSubmissions += row.total_submissions;
       
-      // Track highest phase (first row for each type due to ORDER BY)
-      if (row.highest_phase_submissions > stats.highestPhaseSubmissions) {
+      // Count total forms (each row represents one form)
+      stats.totalForms += 1;
+      
+      // Sum all submissions for this form type
+      stats.totalSubmissions += row.form_submissions;
+      
+      // Track highest phase (first row for each type due to ORDER BY DESC)
+      if (row.form_submissions > stats.highestPhaseSubmissions) {
         stats.highestPhase = {
-          id: row.highest_phase_id,
-          name: row.highest_phase_name,
-          code: row.highest_phase_code,
-          submission_count: row.highest_phase_submissions
+          id: row.form_id,
+          name: row.form_name,
+          code: row.form_code,
+          submission_count: row.form_submissions
         };
-        stats.highestPhaseSubmissions = row.highest_phase_submissions;
+        stats.highestPhaseSubmissions = row.form_submissions;
       }
     });
     
     const ogvStats = statsByType.get('oGV') || { totalForms: 0, totalSubmissions: 0, highestPhase: null };
     const tmrStats = statsByType.get('TMR') || { totalForms: 0, totalSubmissions: 0, highestPhase: null };
+    
 
     const stats = {
       ogv: {
-        totalForms: ogvStats.totalForms,
-        totalSubmissions: ogvStats.totalSubmissions,
+        totalForms: Number(ogvStats.totalForms),
+        totalSubmissions: Number(ogvStats.totalSubmissions),
         highestPhase: ogvStats.highestPhase
       },
       tmr: {
-        totalForms: tmrStats.totalForms,
-        totalSubmissions: tmrStats.totalSubmissions,
+        totalForms: Number(tmrStats.totalForms),
+        totalSubmissions: Number(tmrStats.totalSubmissions),
         highestPhase: tmrStats.highestPhase
       }
     };
+
 
     const response = NextResponse.json({
       success: true,

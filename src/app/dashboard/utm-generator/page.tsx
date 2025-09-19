@@ -857,13 +857,6 @@ export default function UTMGeneratorPage() {
                               >
                                 {link.tracking_short_url}
                               </div>
-                              <button
-                                onClick={() => startEditTrackingAlias(link.id, link.tracking_short_url!)}
-                                className="px-1 py-1 text-xs rounded bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
-                                title="Edit tracking alias"
-                              >
-                                ✏️
-                              </button>
                             </div>
                           )
                         ) : (
@@ -923,6 +916,38 @@ export default function UTMGeneratorPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Available UTM Links</h2>
             <div className="flex items-center gap-4">
+              {selectedIds.length > 0 && (
+                <button
+                  onClick={async () => {
+                    const count = selectedIds.length;
+                    if (!confirm(`Delete ${count} selected link(s)?`)) return;
+                    try {
+                      setBulkDeleting(true);
+                      const res = await fetch('/api/utm/links/bulk-delete', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids: selectedIds })
+                      });
+                      const json = await res.json();
+                      if (!res.ok) {
+                        alert(json?.error || 'Bulk delete failed');
+                        return;
+                      }
+                      if (pagination) await loadLinks(pagination.page);
+                      setSelectedIds([]);
+                    } catch (e) {
+                      alert('Bulk delete failed');
+                    } finally {
+                      setBulkDeleting(false);
+                    }
+                  }}
+                  disabled={bulkDeleting}
+                  className="px-3 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white flex items-center gap-2"
+                >
+                  {bulkDeleting && (<span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>)}
+                  {bulkDeleting ? 'Deleting…' : 'Delete Selected'}
+                </button>
+              )}
               {role === 'admin' && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Filter by Entity</label>
@@ -1255,38 +1280,6 @@ export default function UTMGeneratorPage() {
               </div>
               <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200/50 dark:border-gray-600/50">
                 <div className="flex items-center gap-2">
-                  {selectedIds.length > 0 && (
-                    <button
-                      onClick={async () => {
-                        const count = selectedIds.length;
-                        if (!confirm(`Delete ${count} selected link(s)?`)) return;
-                        try {
-                          setBulkDeleting(true);
-                          const res = await fetch('/api/utm/links/bulk-delete', {
-                            method: 'DELETE',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ ids: selectedIds })
-                          });
-                          const json = await res.json();
-                          if (!res.ok) {
-                            alert(json?.error || 'Bulk delete failed');
-                            return;
-                          }
-                          if (pagination) await loadLinks(pagination.page);
-                          setSelectedIds([]);
-                        } catch (e) {
-                          alert('Bulk delete failed');
-                        } finally {
-                          setBulkDeleting(false);
-                        }
-                      }}
-                      disabled={bulkDeleting}
-                      className="px-3 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white flex items-center gap-2"
-                    >
-                      {bulkDeleting && (<span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>)}
-                      {bulkDeleting ? 'Deleting…' : 'Delete Selected'}
-                    </button>
-                  )}
                   {pagination && (
                     <>
                       <button onClick={() => handlePageChange(pagination.page - 1)} disabled={!pagination.hasPrev} className="px-3 py-2 text-sm rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">Previous</button>

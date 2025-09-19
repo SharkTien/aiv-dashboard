@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       SELECT 
         e.name as channel,
         COUNT(*) as signUps,
-        ROUND((COUNT(*) * 100.0 / ?), 2) as percentage
+        ROUND((COUNT(*) * 100.0 / NULLIF(?, 0)), 2) as percentage
       FROM form_submissions fs
       JOIN entity e ON fs.entity_id = e.entity_id
       WHERE fs.form_id = ? AND fs.duplicated = FALSE
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
       WHERE fs.form_id = ? 
         AND fs.duplicated = FALSE
         AND ff.field_name = 'utm_campaign'
-      GROUP BY uc.name, uc.code
+      GROUP BY COALESCE(uc.name, 'No campaign'), COALESCE(uc.code, 'No source')
       ORDER BY COUNT(*) DESC
       LIMIT 20
     `, [formId]);
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       SELECT 
         COALESCE(um.uni_name, fr.value, 'Unknown University') as uni_name,
         COUNT(*) as signUps,
-        ROUND((COUNT(*) * 100.0 / ?), 2) as percentage
+        ROUND((COUNT(*) * 100.0 / NULLIF(?, 0)), 2) as percentage
       FROM form_submissions fs
       LEFT JOIN form_responses fr ON fs.id = fr.submission_id
       LEFT JOIN form_fields ff ON fr.field_id = ff.id
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
         AND (ff.field_name = 'uni' OR ff.field_name = 'other--uni')
         AND fr.value IS NOT NULL 
         AND fr.value != ''
-      GROUP BY COALESCE(um.uni_name, fr.value)
+      GROUP BY COALESCE(um.uni_name, fr.value, 'Unknown University')
       ORDER BY COUNT(*) DESC
     `, [totalSignUps, formId]);
 
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
       SELECT 
         TRIM(BOTH '"' FROM COALESCE(fr.value, 'Unknown Major')) as major,
         COUNT(*) as signUps,
-        ROUND((COUNT(*) * 100.0 / ?), 2) as percentage
+        ROUND((COUNT(*) * 100.0 / NULLIF(?, 0)), 2) as percentage
       FROM form_submissions fs
       LEFT JOIN form_responses fr ON fs.id = fr.submission_id
       LEFT JOIN form_fields ff ON fr.field_id = ff.id

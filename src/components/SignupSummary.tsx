@@ -10,6 +10,7 @@ interface SummaryRow {
   msu: number;
   yourUtm: number;
   emtPlusOrganic: number;
+  susOtherSource: number;
   otherSource: number;
   notFound: number;
 }
@@ -22,6 +23,7 @@ interface EntityStats {
   msus: number;
   sus_utm_source: number;
   emt_plus_organic: number;
+  sus_other_source: number;
   other_source: number;
   progress: number;
   msu_percentage: number;
@@ -36,6 +38,7 @@ interface NationalSummary {
   msu: number;
   yourUtm: number;
   emtPlusOrganic: number;
+  susOtherSource: number;
   otherSource: number;
 }
 
@@ -57,6 +60,29 @@ export default function SignupSummary({ className = '', formId, formType, startD
   const [summarySort, setSummarySort] = useState<{ column: 'msu' | 'total' | null; direction: 'asc' | 'desc' }>({ column: null, direction: 'desc' });
   const [availableForms, setAvailableForms] = useState<Array<{id: number, name: string, code: string}>>([]);
   const [compareData, setCompareData] = useState<any>(null);
+  
+  // Column visibility settings
+  const [showColumns, setShowColumns] = useState({
+    msus: true,
+    utmSource: false, // Default hidden
+    emtPlusOrganic: true,
+    otherSource: true, // New column
+    notFound: false // Default hidden
+  });
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (showColumnSettings && !target.closest('.column-settings-dropdown')) {
+        setShowColumnSettings(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColumnSettings]);
 
   // Helper functions for calculations
   const calculateProgress = (total: number, goal: number) => {
@@ -177,13 +203,13 @@ export default function SignupSummary({ className = '', formId, formType, startD
       if (comparePhaseFilter) {
         params.append('compare', comparePhaseFilter);
       }
-      // Only add date filters if not using full_submissions preset
-      if (preset !== 'full_submissions' && startDate && endDate) {
+      // Only add date filters if not using full_submissions preset and dates are provided
+      if (preset !== 'full_submissions' && startDate && endDate && startDate.trim() && endDate.trim()) {
         params.append('start_date', startDate);
         params.append('end_date', endDate);
       }
       
-      // Load signup summary data from ogv-stats API
+      // Load signup summary data from ogv-stats API (works for both oGV and TMR)
       const response = await fetch(`/api/dashboard/ogv-stats?${params.toString()}`);
       const result = await response.json();
       
@@ -208,6 +234,7 @@ export default function SignupSummary({ className = '', formId, formType, startD
           msu: stat.msus,
           yourUtm: stat.sus_utm_source,
           emtPlusOrganic: stat.emt_plus_organic,
+          susOtherSource: stat.sus_other_source,
           otherSource: stat.other_source,
           notFound: 0
         }));
@@ -221,6 +248,7 @@ export default function SignupSummary({ className = '', formId, formType, startD
           msu: localData.reduce((sum, item) => sum + item.msu, 0),
           yourUtm: localData.reduce((sum, item) => sum + item.yourUtm, 0),
           emtPlusOrganic: localData.reduce((sum, item) => sum + item.emtPlusOrganic, 0),
+          susOtherSource: localData.reduce((sum, item) => sum + item.susOtherSource, 0),
           otherSource: localData.reduce((sum, item) => sum + item.otherSource, 0),
           notFound: localData.reduce((sum, item) => sum + item.notFound, 0)
         };
@@ -234,6 +262,7 @@ export default function SignupSummary({ className = '', formId, formType, startD
           msu: stat.msus,
           yourUtm: stat.sus_utm_source,
           emtPlusOrganic: stat.emt_plus_organic,
+          susOtherSource: stat.sus_other_source,
           otherSource: stat.other_source
         }));
 
@@ -297,6 +326,77 @@ export default function SignupSummary({ className = '', formId, formType, startD
               </option>
             ))}
           </select>
+          
+          {/* Column Settings Button */}
+          <div className="relative column-settings-dropdown">
+            <button
+              onClick={() => setShowColumnSettings(!showColumnSettings)}
+              className="h-10 px-4 rounded-lg ring-1 ring-black/15 dark:ring-white/15 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+              </svg>
+              Columns
+            </button>
+            
+            {/* Column Settings Dropdown */}
+            {showColumnSettings && (
+              <div className="absolute right-0 top-12 z-50 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Show/Hide Columns</h4>
+                <div className="space-y-3">
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={showColumns.msus}
+                      onChange={(e) => setShowColumns(prev => ({ ...prev, msus: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">MSUs</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={showColumns.utmSource}
+                      onChange={(e) => setShowColumns(prev => ({ ...prev, utmSource: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">SUs | utm source</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={showColumns.emtPlusOrganic}
+                      onChange={(e) => setShowColumns(prev => ({ ...prev, emtPlusOrganic: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">EMT + Organic</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={showColumns.otherSource}
+                      onChange={(e) => setShowColumns(prev => ({ ...prev, otherSource: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">SUs | other source</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={showColumns.notFound}
+                      onChange={(e) => setShowColumns(prev => ({ ...prev, notFound: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">not found from your utm source</span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       
@@ -313,23 +413,38 @@ export default function SignupSummary({ className = '', formId, formType, startD
                   <span className="ml-1">{summarySort.direction === 'asc' ? '▲' : '▼'}</span>
                 )}
               </th>
-              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold cursor-pointer hover:bg-blue-700 dark:hover:bg-blue-800 transition-colors" onClick={() => toggleSummarySort('msu')} title="SUs mỗi LC có được từ UTM Links cho own market">
-                MSUs
-                {summarySort.column === 'msu' && (
-                  <span className="ml-1">{summarySort.direction === 'asc' ? '▲' : '▼'}</span>
-                )}
-              </th>
-              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại cho mọi market">SUs | utm source</th>
-              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại của EMT hoặc là SUs Organic">EMT + Organic</th>
-              <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại mà entity NOT FOUND">not found from your utm source</th>
+              {showColumns.msus && (
+                <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold cursor-pointer hover:bg-blue-700 dark:hover:bg-blue-800 transition-colors" onClick={() => toggleSummarySort('msu')} title="SUs mỗi LC có được từ UTM Links cho own market">
+                  MSUs
+                  {summarySort.column === 'msu' && (
+                    <span className="ml-1">{summarySort.direction === 'asc' ? '▲' : '▼'}</span>
+                  )}
+                </th>
+              )}
+              {showColumns.utmSource && (
+                <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại cho mọi market">SUs | utm source</th>
+              )}
+              {showColumns.emtPlusOrganic && (
+                <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại của EMT hoặc là SUs Organic">EMT + Organic</th>
+              )}
+              {showColumns.otherSource && (
+                <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs được gán cho entity đó nhưng utm_campaign khác rỗng và không của EMT">SUs | other source</th>
+              )}
+              {showColumns.notFound && (
+                <th rowSpan={2} className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" title="SUs mỗi LC có được từ UTM Campaigns ứng với phase hiện tại mà entity NOT FOUND">not found from your utm source</th>
+              )}
               <th className="text-center py-4 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold" colSpan={comparePhaseFilter ? 9 : 3}>
                 %GvA{comparePhaseFilter ? ` compared to ${availableForms.find(f => f.id.toString() === comparePhaseFilter)?.name || comparePhaseFilter}` : ''}
               </th>
             </tr>
             <tr>
               <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="Progress = SUs / Goal">Progress</th>
-              <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="%M.SUs/SUs = MSUs / SUs">%M.SUs/SUs</th>
-              <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="%M.SUs/UTM = MSUs / SUs | utm source">%M.SUs/UTM</th>
+              {showColumns.msus && (
+                <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="%M.SUs/SUs = MSUs / SUs">%M.SUs/SUs</th>
+              )}
+              {showColumns.utmSource && (
+                <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title="%M.SUs/UTM = MSUs / SUs | utm source">%M.SUs/UTM</th>
+              )}
               {comparePhaseFilter && (
                 <>
                   <th className="text-center py-3 px-4 bg-blue-600 dark:bg-blue-700 text-white font-semibold border-l border-blue-500 dark:border-blue-600" title={`MSUs at ${availableForms.find(f => f.id.toString() === comparePhaseFilter)?.name || comparePhaseFilter}`}>MSUs ({availableForms.find(f => f.id.toString() === comparePhaseFilter)?.name.replace("oGV", "").replace("Submissions", "") || comparePhaseFilter})</th>
@@ -348,13 +463,28 @@ export default function SignupSummary({ className = '', formId, formType, startD
                 <td className="py-4 px-4 font-medium text-gray-900 dark:text-white">{row.entity}</td>
                 <td className="py-4 px-4 font-semibold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{row.goal}</td>
                 <td className="py-4 px-4 text-center text-gray-900 dark:text-white">{row.total}</td>
-                <td className="py-4 px-4 text-center text-gray-900 dark:text-white">{row.msu}</td>
-                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{row.yourUtm}</td>
-                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{row.emtPlusOrganic}</td>
-                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{row.otherSource}</td>
+                {showColumns.msus && (
+                  <td className="py-4 px-4 text-center text-gray-900 dark:text-white">{row.msu}</td>
+                )}
+                {showColumns.utmSource && (
+                  <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{row.yourUtm}</td>
+                )}
+                {showColumns.emtPlusOrganic && (
+                  <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{row.emtPlusOrganic}</td>
+                )}
+                {showColumns.otherSource && (
+                  <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{row.susOtherSource}</td>
+                )}
+                {showColumns.notFound && (
+                  <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{row.otherSource}</td>
+                )}
                 <td className="py-4 px-4 text-center font-semibold bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{calculateProgress(row.total, row.goal).toFixed(2)}%</td>
-                <td className="py-4 px-4 text-center font-semibold bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{calculatePercentage(row.msu, row.total).toFixed(2)}%</td>
-                <td className="py-4 px-4 text-center font-semibold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(row.msu, row.yourUtm).toFixed(2)}%</td>
+                {showColumns.msus && (
+                  <td className="py-4 px-4 text-center font-semibold bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{calculatePercentage(row.msu, row.total).toFixed(2)}%</td>
+                )}
+                {showColumns.utmSource && (
+                  <td className="py-4 px-4 text-center font-semibold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(row.msu, row.yourUtm).toFixed(2)}%</td>
+                )}
                 {comparePhaseFilter && (
                   <>
                     <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
@@ -379,13 +509,28 @@ export default function SignupSummary({ className = '', formId, formType, startD
                 <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">LOCAL</td>
                 <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{localTotals.goal}</td>
                 <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">{localTotals.total}</td>
-                <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">{localTotals.msu}</td>
-                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{localTotals.yourUtm}</td>
-                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{localTotals.emtPlusOrganic}</td>
-                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{localTotals.otherSource}</td>
+                {showColumns.msus && (
+                  <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">{localTotals.msu}</td>
+                )}
+                {showColumns.utmSource && (
+                  <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{localTotals.yourUtm}</td>
+                )}
+                {showColumns.emtPlusOrganic && (
+                  <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{localTotals.emtPlusOrganic}</td>
+                )}
+                {showColumns.otherSource && (
+                  <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{localTotals.susOtherSource}</td>
+                )}
+                {showColumns.notFound && (
+                  <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{localTotals.otherSource}</td>
+                )}
                 <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{calculateProgress(localTotals.total, localTotals.goal).toFixed(2)}%</td>
-                <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{calculatePercentage(localTotals.msu, localTotals.total).toFixed(2)}%</td>
-                <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(localTotals.msu, localTotals.yourUtm).toFixed(2)}%</td>
+                {showColumns.msus && (
+                  <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{calculatePercentage(localTotals.msu, localTotals.total).toFixed(2)}%</td>
+                )}
+                {showColumns.utmSource && (
+                  <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">{calculatePercentage(localTotals.msu, localTotals.yourUtm).toFixed(2)}%</td>
+                )}
                 {comparePhaseFilter && (
                   <>
                     <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
@@ -414,13 +559,28 @@ export default function SignupSummary({ className = '', formId, formType, startD
                   {r.goal}
                 </td>
                 <td className="py-4 px-4 text-center text-gray-900 dark:text-white">{formatNumber(r.count)}</td>
-                <td className="py-4 px-4 text-center text-gray-900 dark:text-white">-</td>
-                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
-                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
-                <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{r.otherSource}</td>
+                {showColumns.msus && (
+                  <td className="py-4 px-4 text-center text-gray-900 dark:text-white">-</td>
+                )}
+                {showColumns.utmSource && (
+                  <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
+                )}
+                {showColumns.emtPlusOrganic && (
+                  <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
+                )}
+                {showColumns.otherSource && (
+                  <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
+                )}
+                {showColumns.notFound && (
+                  <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{r.otherSource}</td>
+                )}
                 <td className="py-4 px-4 text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{calculateProgress(r.count, r.goal).toFixed(2)}%</td>
-                <td className="py-4 px-4 text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">-</td>
-                <td className="py-4 px-4 text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">-</td>
+                {showColumns.msus && (
+                  <td className="py-4 px-4 text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">-</td>
+                )}
+                {showColumns.utmSource && (
+                  <td className="py-4 px-4 text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">-</td>
+                )}
                 {comparePhaseFilter && (
                   <>
                     <td className="py-4 px-4 text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
@@ -436,13 +596,28 @@ export default function SignupSummary({ className = '', formId, formType, startD
               <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">NATIONAL</td>
               <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{nationalSummary.reduce((sum, item) => sum + item.goal, 0)}</td>
               <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">{formatNumber(nationalSummary.reduce((sum, item) => sum + item.count, 0))}</td>
-              <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">-</td>
-              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
-              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
-              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{(window as any).totalNationalNotFound || 0}</td>
+              {showColumns.msus && (
+                <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">-</td>
+              )}
+              {showColumns.utmSource && (
+                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
+              )}
+              {showColumns.emtPlusOrganic && (
+                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
+              )}
+              {showColumns.otherSource && (
+                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
+              )}
+              {showColumns.notFound && (
+                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">{(window as any).totalNationalNotFound || 0}</td>
+              )}
               <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">{calculateProgress(nationalSummary.reduce((sum, item) => sum + item.count, 0), nationalSummary.reduce((sum, item) => sum + item.goal, 0)).toFixed(2)}%</td>
-              <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">-</td>
-              <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">-</td>
+              {showColumns.msus && (
+                <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">-</td>
+              )}
+              {showColumns.utmSource && (
+                <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">-</td>
+              )}
               {comparePhaseFilter && (
                 <>
                   <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>
@@ -461,30 +636,47 @@ export default function SignupSummary({ className = '', formId, formType, startD
               <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">
                 {formatNumber((localTotals?.total || 0) + (localTotals?.otherSource || 0) + (window as any).totalNationalNotFound)}
               </td>
-              <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">
-                {(localTotals?.msu || 0) + nationalSummary.reduce((sum, item) => sum + item.msu, 0)}
-              </td>
-              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
-                {(localTotals?.yourUtm || 0) + nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)}
-              </td>
-              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
-                {(localTotals?.emtPlusOrganic || 0) + nationalSummary.reduce((sum, item) => sum + item.emtPlusOrganic, 0)}
-              </td>
-              <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
-                {(localTotals?.otherSource || 0) + ((window as any).totalNationalNotFound || 0)}
-              </td>
+              {showColumns.msus && (
+                <td className="py-4 px-4 font-bold text-center text-gray-900 dark:text-white">
+                  {(localTotals?.msu || 0) + nationalSummary.reduce((sum, item) => sum + item.msu, 0)}
+                </td>
+              )}
+              {showColumns.utmSource && (
+                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                  {(localTotals?.yourUtm || 0) + nationalSummary.reduce((sum, item) => sum + item.yourUtm, 0)}
+                </td>
+              )}
+              {showColumns.emtPlusOrganic && (
+                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                  {(localTotals?.emtPlusOrganic || 0) + nationalSummary.reduce((sum, item) => sum + item.emtPlusOrganic, 0)}
+                </td>
+              )}
+              {showColumns.otherSource && (
+                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                  {(localTotals?.susOtherSource || 0) + nationalSummary.reduce((sum, item) => sum + item.susOtherSource, 0)}
+                </td>
+              )}
+              {showColumns.notFound && (
+                <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                  {(localTotals?.otherSource || 0) + ((window as any).totalNationalNotFound || 0)}
+                </td>
+              )}
               <td className="py-4 px-4 font-bold text-center bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">
                 {calculateProgress(
                   (localTotals?.total || 0) + (localTotals?.otherSource || 0) + nationalSummary.reduce((sum, item) => sum + item.count, 0),
                   (localTotals?.goal || 0) + nationalSummary.reduce((sum, item) => sum + item.goal, 0)
                 ).toFixed(2)}%
               </td>
-              <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
-                {calculatePercentage(localTotals?.msu || 0, localTotals?.total || 0).toFixed(2)}%
-              </td>
+              {showColumns.msus && (
+                <td className="py-4 px-4 font-bold text-center bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                  {calculatePercentage(localTotals?.msu || 0, localTotals?.total || 0).toFixed(2)}%
+                </td>
+              )}
+              {showColumns.utmSource && (
                 <td className="py-4 px-4 font-bold text-center bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">
                   {calculatePercentage(localTotals?.msu || 0, localTotals?.yourUtm || 0).toFixed(2)}%
                 </td>
+              )}
               {comparePhaseFilter && (
                 <>
                   <td className="py-4 px-4 font-bold text-center bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">-</td>

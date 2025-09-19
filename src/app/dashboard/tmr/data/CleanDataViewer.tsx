@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from "react";
 import Image from "next/image";
 import SearchableDropdown from "@/components/SearchableDropdown";
+import DateFilter, { DatePreset } from "@/components/DateFilter";
 
 type Submission = {
   id: number;
@@ -39,6 +40,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   // Filter states
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [preset, setPreset] = useState<DatePreset>('custom');
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<string>('');
   const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<Set<string>>(new Set());
@@ -612,28 +614,17 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
               </button>
             </div>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                />
-              </div>
+              <DateFilter
+                preset={preset}
+                setPreset={setPreset}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
+                showFullSubmissions={false}
+                showApplyButton={false}
+                className="flex-col gap-4"
+              />
             </div>
             <div className="flex justify-end space-x-3 mt-6">
               <button

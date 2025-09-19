@@ -6,6 +6,8 @@ import SubmissionsViewer from "@/app/dashboard/forms/[id]/submissions/Submission
 import CleanDataViewer from "./CleanDataViewer";
 import ManualAllocateViewerWithRequests from "./ManualAllocateViewerWithRequests";
 import LoadingOverlay from "@/components/LoadingOverlay";
+import AccessDenied from "@/components/AccessDenied";
+import { checkProgramAccess } from "@/hooks/useProgramAccess";
 import Link from "next/link";
 
 type TabType = 'raw' | 'clean' | 'manual';
@@ -34,6 +36,7 @@ export default function Page() {
   const [loadingForms, setLoadingForms] = useState(false);
   const [q, setQ] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>('raw');
+  const [user, setUser] = useState<any>(null);
 
   async function loadForms(query: string) {
     setLoadingForms(true);
@@ -58,6 +61,7 @@ export default function Page() {
 
   // Debounced search - this will handle both initial load and search
   useEffect(() => {
+    loadUser();
     setLoading(true);
     const t = setTimeout(() => { 
       loadForms(q).finally(() => setLoading(false));
@@ -65,6 +69,18 @@ export default function Page() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
+
+  const loadUser = async () => {
+    try {
+      const response = await fetch('/api/auth/me');
+      const result = await response.json();
+      if (result.user) {
+        setUser(result.user);
+      }
+    } catch (error) {
+      console.error('Error loading user:', error);
+    }
+  };
 
   // Sync selected form to URL without full navigation
   useEffect(() => {
@@ -74,6 +90,20 @@ export default function Page() {
     else url.searchParams.delete('formId');
     window.history.replaceState({}, '', url.toString());
   }, [selectedFormId]);
+
+  // Check program access
+  const { hasAccess, userProgram } = checkProgramAccess(user, 'TMR');
+  
+  if (user && !hasAccess) {
+    return (
+      <AccessDenied 
+        userProgram={userProgram}
+        requiredProgram="TMR"
+        title="TMR Data Access Denied"
+        message="This page is for TMR users only. Your account is associated with oGV."
+      />
+    );
+  }
 
   return (
     <div className="p-8 space-y-6">

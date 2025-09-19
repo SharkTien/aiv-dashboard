@@ -5,6 +5,8 @@ import SubmissionsViewer from "@/app/dashboard/forms/[id]/submissions/Submission
 import CleanDataViewer from "./CleanDataViewer";
 import ManualAllocateViewerWithRequests from "./ManualAllocateViewerWithRequests";
 import LoadingOverlay from "@/components/LoadingOverlay";
+import AccessDenied from "@/components/AccessDenied";
+import { checkProgramAccess } from "@/hooks/useProgramAccess";
 import Link from "next/link";
 
 type TabType = 'raw' | 'clean' | 'manual';
@@ -25,6 +27,7 @@ export default function Page() {
   const [loadingForms, setLoadingForms] = useState(false);
   const [q, setQ] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>('raw');
+  const [user, setUser] = useState<any>(null);
 
 
   async function loadForms(query: string) {
@@ -45,6 +48,7 @@ export default function Page() {
 
   // Debounced search - this will handle both initial load and search
   useEffect(() => {
+    loadUser();
     setLoading(true);
     const t = setTimeout(() => { 
       loadForms(q).finally(() => setLoading(false));
@@ -53,7 +57,33 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
+  const loadUser = async () => {
+    try {
+      const response = await fetch('/api/auth/me');
+      const result = await response.json();
+      if (result.user) {
+        setUser(result.user);
+      }
+    } catch (error) {
+      console.error('Error loading user:', error);
+    }
+  };
 
+
+
+  // Check program access
+  const { hasAccess, userProgram } = checkProgramAccess(user, 'oGV');
+  
+  if (user && !hasAccess) {
+    return (
+      <AccessDenied 
+        userProgram={userProgram}
+        requiredProgram="oGV"
+        title="oGV Data Access Denied"
+        message="This page is for oGV users only. Your account is associated with TMR."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">

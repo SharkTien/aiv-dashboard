@@ -8,6 +8,9 @@ import {
 } from "@/components/icons";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import SignupSummary from "@/components/SignupSummary";
+import DateFilter, { DatePreset } from "@/components/DateFilter";
+import AccessDenied from "@/components/AccessDenied";
+import { checkProgramAccess } from "@/hooks/useProgramAccess";
 
 type Form = {
   id: number;
@@ -48,17 +51,31 @@ export default function TMRHubDashboard() {
   const [stats, setStats] = useState<TMRStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 6);
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [preset, setPreset] = useState<'full_submissions' | 'this_week' | 'last_week' | 'last_7_days' | 'custom'>('full_submissions');
+  const [preset, setPreset] = useState<DatePreset>('full_submissions');
 
   useEffect(() => {
+    loadUser();
     loadForms();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const response = await fetch('/api/auth/me');
+      const result = await response.json();
+      if (result.user) {
+        setUser(result.user);
+      }
+    } catch (error) {
+      console.error('Error loading user:', error);
+    }
+  };
 
   useEffect(() => {
     if (selectedFormId) {
@@ -92,8 +109,8 @@ export default function TMRHubDashboard() {
     try {
       setLoadingStats(true);
       const params = new URLSearchParams({ formId: String(formId) });
-      // Only add date filters if not using full_submissions preset
-      if (preset !== 'full_submissions' && startDate && endDate) {
+      // Only add date filters if not using full_submissions preset and dates are provided
+      if (preset !== 'full_submissions' && startDate && endDate && startDate.trim() && endDate.trim()) {
         params.set('start_date', startDate);
         params.set('end_date', endDate);
       }
@@ -111,28 +128,6 @@ export default function TMRHubDashboard() {
     }
   };
 
-  useEffect(() => {
-    const setWeekRange = (offsetWeeks: number) => {
-      const now = new Date();
-      const day = now.getDay();
-      const mondayOffset = ((day + 6) % 7);
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - mondayOffset - 7 * offsetWeeks);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      setStartDate(monday.toISOString().split('T')[0]);
-      setEndDate(sunday.toISOString().split('T')[0]);
-    };
-    if (preset === 'this_week') setWeekRange(0);
-    else if (preset === 'last_week') setWeekRange(1);
-    else if (preset === 'last_7_days') {
-      const d = new Date();
-      const s = new Date();
-      s.setDate(d.getDate() - 6);
-      setStartDate(s.toISOString().split('T')[0]);
-      setEndDate(d.toISOString().split('T')[0]);
-    }
-  }, [preset]);
 
   const formatNumber = (num: number) => {
     return num.toLocaleString();
@@ -141,6 +136,20 @@ export default function TMRHubDashboard() {
   const formatPercentage = (num: number) => {
     return `${num.toFixed(1)}%`;
   };
+
+  // Check program access
+  const { hasAccess, userProgram } = checkProgramAccess(user, 'TMR');
+  
+  if (user && !hasAccess) {
+    return (
+      <AccessDenied 
+        userProgram={userProgram}
+        requiredProgram="TMR"
+        title="TMR Hub Access Denied"
+        message="This page is for TMR users only. Your account is associated with oGV."
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
@@ -212,25 +221,16 @@ export default function TMRHubDashboard() {
                 ))}
               </select>
               </div>
-              <div>
-                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Preset</label>
-                <select value={preset} onChange={(e) => setPreset(e.target.value as any)} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
-                  <option value="full_submissions">All of this phase</option>
-                  <option value="this_week">This week (Mon-Sun)</option>
-                  <option value="last_week">Last week</option>
-                  <option value="last_7_days">Last 7 days</option>
-                  <option value="custom">Custom</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Start date</label>
-                <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreset('custom'); }} disabled={preset === 'full_submissions'} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">End date</label>
-                <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset('custom'); }} disabled={preset === 'full_submissions'} className="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed" />
-              </div>
-              <button onClick={() => selectedFormId && loadStats(selectedFormId)} className="h-10 px-4 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-sm">Apply</button>
+              <DateFilter
+                preset={preset}
+                setPreset={setPreset}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
+                onApply={() => selectedFormId && loadStats(selectedFormId)}
+                showFullSubmissions={true}
+              />
             </div>
           </div>
         </div>

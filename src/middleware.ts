@@ -50,7 +50,7 @@ export async function middleware(req: NextRequest) {
   const method = req.method;
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || req.headers.get("x-real-ip") || "unknown";
   
-  console.log(`[${timestamp}] ${method} ${pathname} - IP: ${ip}`);
+  // console.log(`[${timestamp}] ${method} ${pathname} - IP: ${ip}`);
 
   // Global rate limiting for API (light) + stricter for public submission endpoints
   if (pathname.startsWith("/api/")) {
@@ -101,7 +101,7 @@ export async function middleware(req: NextRequest) {
   res.headers.set("Vary", "Origin");
   
   // Log response
-  console.log(`[${timestamp}] ${method} ${pathname} - Status: ${res.status} - IP: ${ip}`);
+  // console.log(`[${timestamp}] ${method} ${pathname} - Status: ${res.status} - IP: ${ip}`);
   
   return res;
 }

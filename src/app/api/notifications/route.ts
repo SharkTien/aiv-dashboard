@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   if (unreadOnly) {
     clauses.push('user_id = ?');
     params.push(user.sub);
-    clauses.push('read_flag = 0');
+    clauses.push('is_read = 0');
   } else {
     clauses.push('(user_id = ? OR user_id = 0)');
     params.push(user.sub);
@@ -25,8 +25,8 @@ export async function GET(req: NextRequest) {
   const whereClause = `WHERE ${clauses.join(' AND ')}`;
 
   const [rows] = await pool.query(
-    `SELECT id, type, title, body, read_flag, created_at
-     FROM notification
+    `SELECT id, type, title, message, is_read, created_at
+     FROM notifications
      ${whereClause}
      ORDER BY id DESC
      LIMIT ?`,
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   );
 
   const [countRows] = await pool.query(
-    `SELECT COUNT(*) as total FROM notification ${whereClause}`,
+    `SELECT COUNT(*) as total FROM notifications ${whereClause}`,
     params
   );
   const total = Array.isArray(countRows) && countRows.length ? (countRows[0] as any).total : 0;

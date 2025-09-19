@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import DateFilter, { DatePreset } from "./DateFilter";
 
 interface UTMAnalyticsProps {
   formType?: "oGV" | "TMR";
@@ -78,6 +79,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
     return date.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [preset, setPreset] = useState<DatePreset>('custom');
   // Admin-only entity filter
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<string>('');
@@ -314,29 +316,18 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
     <div className="space-y-6">
       {/* Controls */}
       <div className="flex flex-wrap gap-4 items-end">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-            Start Date
-          </label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-            End Date
-          </label>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
-          />
-        </div>
+        <DateFilter
+          preset={preset}
+          setPreset={setPreset}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          onApply={loadAnalytics}
+          showFullSubmissions={false}
+          showApplyButton={false}
+          className="gap-4"
+        />
 
         {/* Entity filter: always for admin in Overview; and User Performance for all */}
         {((isAdmin && activeTab === 'overview') || activeTab === 'user_performance') && (

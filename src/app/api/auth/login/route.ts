@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   const startTime = Date.now();
   try {
     const { email, password } = await req.json();
-    console.log(`[Login] Attempt for email: ${email}`);
+    // console.log(`[Login] Attempt for email: ${email}`);
     if (!email || !password) {
       return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
     }
@@ -57,8 +57,8 @@ export async function POST(req: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
     });
     
-    console.log("[Login] Cookie set successfully");
-    console.log(`[Login] Total time: ${Date.now() - startTime}ms`);
+    // console.log("[Login] Cookie set successfully");
+    // console.log(`[Login] Total time: ${Date.now() - startTime}ms`);
     return res;
   } catch (err: unknown) {
     const msg = (err as any)?.message || String(err);

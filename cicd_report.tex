@@ -50,6 +50,321 @@
 
 \maketitle
 
+\section{Quy trình lắp đặt hệ điều hành và deploy lên VPS}
+
+Mục tiêu của phần này là mô tả đầy đủ các bước từ một VPS ``trắng'' (chỉ có SSH) tới khi ứng dụng Next.js chạy ổn định kèm cơ sở dữ liệu MySQL và giao diện quản trị Adminer. Các bước áp dụng trên Ubuntu 22.04 LTS.
+
+\subsection{Khởi tạo và bảo mật cơ bản}
+
+\begin{lstlisting}[caption=Cập nhật hệ thống và tạo user quản trị]
+# Cập nhật OS
+sudo apt update && sudo apt upgrade -y
+
+# Tạo user mới (ví dụ: deploy)
+sudo adduser deploy
+sudo usermod -aG sudo deploy
+
+# Kích hoạt firewall cơ bản
+sudo apt install ufw -y
+sudo ufw allow OpenSSH
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw enable
+sudo ufw status
+\end{lstlisting}
+
+\subsection{Cấu hình SSH key-based login}
+
+\begin{enumerate}
+  \item Tạo SSH key trên máy Windows (PowerShell):
+\begin{lstlisting}
+ssh-keygen -t ed25519 -C "email@domain"  # sinh C:\\Users\\YOU\\.ssh\\id_ed25519(.pub)
+\end{lstlisting}
+  \item Dán public key vào VPS cho user \texttt{deploy}:
+\begin{lstlisting}
+sudo -u deploy mkdir -p /home/deploy/.ssh
+sudo nano /home/deploy/.ssh/authorized_keys  # dán nội dung id_ed25519.pub
+sudo chown -R deploy:deploy /home/deploy/.ssh
+sudo chmod 700 /home/deploy/.ssh
+sudo chmod 600 /home/deploy/.ssh/authorized_keys
+sudo chmod 755 /home /home/deploy
+\end{lstlisting}
+  \item Chỉnh \texttt{/etc/ssh/sshd\_config} (tùy chọn, tăng bảo mật):
+\begin{lstlisting}
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitRootLogin prohibit-password
+AuthorizedKeysFile .ssh/authorized_keys
+\end{lstlisting}
+  \item Khởi động lại SSH:
+\begin{lstlisting}
+sudo systemctl reload ssh
+\end{lstlisting}
+\end{enumerate}
+
+\subsection{Cài đặt Node.js, PM2, Git}
+
+\begin{lstlisting}[caption=Cài Node.js LTS, PM2, Git]
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt install -y nodejs git
+
+sudo npm i -g pm2
+pm2 --version
+git --version
+node -v && npm -v
+\end{lstlisting}
+
+\subsection{Triển khai ứng dụng Next.js với PM2}
+
+\begin{lstlisting}[caption=Clone mã nguồn và chạy bằng PM2]
+sudo mkdir -p /root/apps/aiv-dashboard
+sudo chown -R $USER:$USER /root/apps/aiv-dashboard || true
+cd /root/apps/aiv-dashboard
+
+# Clone (hoặc scp) project
+git clone https://github.com/your-org/aiv-dashboard.git .
+
+# Cài dependencies và build
+npm ci
+npm run build
+
+# Tạo ecosystem PM2
+cat > ecosystem.config.js <<'EOF'
+module.exports = {
+  apps: [{
+    name: 'aiv-dashboard',
+    script: 'npm',
+    args: 'run start -- -p 3000 -H 0.0.0.0',
+    cwd: '/root/apps/aiv-dashboard',
+    env_file: '.env'
+  }]
+}
+EOF
+
+# Tạo file .env theo ứng dụng
+cat > .env <<'EOF'
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=3306
+DATABASE_USER=root
+DATABASE_PASSWORD=yourStrongPass
+DATABASE_NAME=aivdb
+DATABASE_SSL=false
+EOF
+
+# Khởi chạy bằng PM2
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup  # Thiết lập tự khởi động cùng hệ thống
+\end{lstlisting}
+
+\subsection{Cài đặt MySQL và tạo cơ sở dữ liệu}
+
+\begin{lstlisting}[caption=Cài MySQL và khởi tạo database]
+sudo apt install -y mysql-server
+sudo systemctl enable --now mysql
+sudo mysql_secure_installation
+
+# Tạo DB và user (nếu dùng user riêng)
+sudo mysql <<'SQL'
+CREATE DATABASE aivdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'aivuser'@'localhost' IDENTIFIED BY 'yourStrongPass';
+GRANT ALL PRIVILEGES ON aivdb.* TO 'aivuser'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+\end{lstlisting}
+
+\subsection{Cài Adminer (tuỳ chọn) qua Nginx + PHP-FPM}
+
+\begin{lstlisting}[caption=Cài Nginx, PHP-FPM và Adminer]
+sudo apt install -y nginx php-fpm php-mysql
+sudo mkdir -p /var/www/adminer && cd /var/www/adminer
+sudo curl -L https://www.adminer.org/latest.php -o index.php
+sudo chown -R www-data:www-data /var/www/adminer
+
+# Tạo virtual host Nginx
+sudo tee /etc/nginx/sites-available/adminer > /dev/null <<'NGINX'
+server {
+    listen 80;
+    server_name _;
+    root /var/www/adminer;
+    index index.php;
+
+    location / {
+        try_files $uri /index.php?$args;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+    }
+}
+NGINX
+
+sudo ln -s /etc/nginx/sites-available/adminer /etc/nginx/sites-enabled/adminer
+sudo nginx -t && sudo systemctl reload nginx
+\end{lstlisting}
+
+\subsection{Reverse proxy Nginx cho ứng dụng}
+
+\begin{lstlisting}[caption=Reverse proxy tới Next.js trên cổng 3000]
+sudo tee /etc/nginx/sites-available/aiv-dashboard > /dev/null <<'NGINX'
+server {
+    listen 80;
+    server_name your-domain.example.com;  # thay bằng domain thật khi có
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://127.0.0.1:3000;
+    }
+}
+NGINX
+
+sudo ln -s /etc/nginx/sites-available/aiv-dashboard /etc/nginx/sites-enabled/aiv-dashboard
+sudo nginx -t && sudo systemctl reload nginx
+\end{lstlisting}
+
+\subsection{SSL/TLS (tuỳ chọn theo domain)}
+
+SSL áp dụng cho \textbf{domain}, không áp dụng cho địa chỉ IP. Khi đã trỏ A record của domain về IP VPS, có thể dùng Certbot để phát hành chứng chỉ Let's Encrypt:
+
+\begin{lstlisting}[caption=Cài Certbot và cấp chứng chỉ]
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d your-domain.example.com
+
+# Gia hạn tự động (cron mặc định đã tạo bởi certbot)
+sudo systemctl status certbot.timer
+\end{lstlisting}
+
+\subsection{Kiểm tra và vận hành}
+
+\begin{lstlisting}[caption=Các lệnh vận hành thường dùng]
+# Ứng dụng
+pm2 status
+pm2 logs aiv-dashboard --lines 100
+pm2 restart aiv-dashboard
+
+# Dịch vụ hệ thống
+sudo systemctl status nginx
+sudo systemctl status mysql
+
+# Kết nối HTTP
+curl -I http://127.0.0.1:3000
+\end{lstlisting}
+
+\subsection{Sự cố phổ biến và cách khắc phục}
+
+\begin{itemize}
+  \item \textbf{Port 3000 bận (EADDRINUSE)}: tìm và dừng tiến trình: \texttt{sudo lsof -i :3000}, \texttt{sudo kill -9 <PID>} và \texttt{pm2 restart}.
+  \item \textbf{Không kết nối MySQL}: kiểm tra biến môi trường \texttt{DATABASE\_*}, thử \texttt{mysql -u root -p}, kiểm tra \texttt{bind-address} trong \texttt{/etc/mysql/my.cnf} nếu cần truy cập từ xa.
+  \item \textbf{SSH Permission denied (publickey)}: kiểm tra quyền \texttt{.ssh} (700) và \texttt{authorized\_keys} (600), đúng user, đúng key.
+  \item \textbf{Certbot lỗi DNS NXDOMAIN}: đảm bảo A record của domain trỏ về IP VPS trước khi cấp chứng chỉ.
+\end{itemize}
+
+\subsection{Trỏ subdomain từ Vinahost để gọi API backend}
+
+Phần này hướng dẫn trỏ một \textbf{subdomain} (ví dụ: \texttt{api.example.vn}) từ Vinahost về VPS để sử dụng làm endpoint API backend.
+
+\subsubsection{Bước 1: Tạo DNS record tại Vinahost}
+
+\begin{itemize}
+  \item Đăng nhập trang quản trị DNS của Vinahost.
+  \item Tạo \textbf{A record} cho subdomain trỏ về IP VPS:
+\end{itemize}
+
+\begin{lstlisting}[caption=Tham chiếu cấu hình DNS (Vinahost), language=bash]
+Type:   A
+Host:   api            # nghĩa là api.example.vn
+Value:  103.110.85.200 # IP VPS của bạn
+TTL:    300            # 5 phút (tuỳ chọn)
+\end{lstlisting}
+
+Lưu ý: DNS propagation có thể mất vài phút đến 1 giờ. Kiểm tra bằng:
+
+\begin{lstlisting}[caption=Kiểm tra phân giải DNS]
+dig +short A api.example.vn
+\end{lstlisting}
+
+\subsubsection{Bước 2: Cập nhật Nginx \texttt{server\_name} cho API}
+
+Nếu API backend chia sẻ cùng process Next.js, có thể dùng chung reverse proxy. Nếu tách route API dưới \texttt{/api}, chỉ cần thêm \texttt{server\_name} vào virtual host hiện có:
+
+\begin{lstlisting}[caption=Thêm server_name cho subdomain API]
+sudo tee /etc/nginx/sites-available/aiv-dashboard > /dev/null <<'NGINX'
+server {
+    listen 80;
+    server_name api.example.vn;  # thêm subdomain API
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://127.0.0.1:3000;
+    }
+}
+NGINX
+
+sudo nginx -t && sudo systemctl reload nginx
+\end{lstlisting}
+
+\subsubsection{Bước 3: Cấp SSL (khuyến nghị)}
+
+\begin{lstlisting}[caption=Cấp chứng chỉ Let's Encrypt cho subdomain API]
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d api.example.vn
+\end{lstlisting}
+
+Sau khi cài SSL, Nginx sẽ tự redirect HTTP→HTTPS (nếu chọn). Xác minh:
+
+\begin{lstlisting}
+curl -I https://api.example.vn/api/health
+\end{lstlisting}
+
+\subsubsection{Bước 4: Cập nhật biến môi trường và CORS}
+
+Nếu frontend hoặc client khác gọi API qua subdomain mới, cập nhật biến môi trường và allowlist CORS:
+
+\begin{lstlisting}[caption=Cập nhật .env trên server]
+BACKEND_HOST=https://api.example.vn
+NEXT_PUBLIC_API_BASE=https://api.example.vn
+ALLOWED_ORIGINS=https://www.example.vn,https://app.example.vn,https://api.example.vn,http://localhost:3000
+\end{lstlisting}
+
+Ví dụ cập nhật allowlist trong \texttt{src/middleware.ts} hoặc các route API public:
+
+\begin{lstlisting}[language=diff,caption=Bổ sung origin mới]
+@@
+ const ALLOWED = new Set([
+   "https://www.aiesec.vn",
+   "https://aiv-dashboard-ten.vercel.app",
+   "https://api.example.vn",   // thêm subdomain API
+   "http://localhost:3000",
+ ]);
+\end{lstlisting}
+
+Khởi động lại ứng dụng:
+
+\begin{lstlisting}
+pm2 restart aiv-dashboard --update-env
+\end{lstlisting}
+
+\subsubsection{Bước 5: Kiểm thử end-to-end}
+
+\begin{lstlisting}[caption=Kiểm thử]
+# DNS
+dig +short A api.example.vn
+
+# HTTP/HTTPS
+curl -I https://api.example.vn
+curl -I https://api.example.vn/api/health
+
+# Từ frontend (browser devtools):
+// fetch('https://api.example.vn/api/health').then(r => r.status)
+\end{lstlisting}
+
 \section{Tổng quan về CI/CD}
 
 Continuous Integration/Continuous Deployment (CI/CD) là một phương pháp phát triển phần mềm hiện đại, cho phép tự động hóa quá trình tích hợp, kiểm thử và triển khai ứng dụng. Trong dự án AIESEC Dashboard, tôi đã triển khai một hệ thống CI/CD sử dụng GitHub Webhook để tự động deploy ứng dụng mỗi khi có thay đổi code.
@@ -273,6 +588,110 @@ curl http://localhost:3000/api/health
 htop
 df -h
 \end{lstlisting}
+
+\section{Cập nhật URL hệ thống: Chuyển từ IP sang Vercel Domain}
+
+\subsection{Bối cảnh và mục tiêu}
+
+Trong giai đoạn đầu, ứng dụng được truy cập thông qua IP \texttt{http://103.110.85.200:3000} nhằm phục vụ mục đích kiểm thử nhanh. Sau khi ổn định, yêu cầu là chuyển toàn bộ endpoint và tracking URL về domain Vercel chính thức \href{https://aiv-dashboard-ten.vercel.app}{aiv-dashboard-ten.vercel.app} \cite{vercel-app}, đảm bảo:
+\begin{itemize}
+  \item CORS cho phép từ domain mới (HTTPS)
+  \item Các API phát sinh tracking link dùng đúng host mới
+  \item Biến môi trường và dữ liệu trong cơ sở dữ liệu được đồng bộ
+  \item Có kế hoạch rollback an toàn
+\end{itemize}
+
+\subsection{Các thay đổi mã nguồn}
+
+\subsubsection{Cập nhật CORS trong middleware}
+\texttt{src/middleware.ts} – thêm Vercel domain vào allowlist, thay cho IP:
+\begin{lstlisting}[language=diff,caption=Update ALLOWED origins trong middleware.ts]
+@@
+ const ALLOWED = new Set([
+-  "https://www.aiesec.vn",
+-  "http://103.110.85.200:3000",
+-  "http://localhost:3000",
++  "https://www.aiesec.vn",
++  "https://aiv-dashboard-ten.vercel.app",
++  "http://localhost:3000",
+ ]);
+\end{lstlisting}
+
+\subsubsection{Cập nhật host khi tạo tracking link}
+\texttt{src/app/api/utm/links/route.ts} – đặt fallback host về Vercel domain thay vì IP:
+\begin{lstlisting}[language=diff,caption=Update generateTrackingLink]
+@@
+-const baseUrl = process.env.BACKEND_HOST || process.env.NEXT_PUBLIC_APP_URL || 'http://103.110.85.200:3000';
++const baseUrl = process.env.BACKEND_HOST || process.env.NEXT_PUBLIC_APP_URL || 'https://aiv-dashboard-ten.vercel.app';
+\end{lstlisting}
+
+\subsubsection{Đồng bộ CORS ở public submit endpoint}
+\texttt{src/app/api/forms/by-code/[code]/submit/route.ts} – cập nhật \texttt{ALLOWED\_ORIGINS}:
+\begin{lstlisting}[language=diff,caption=Update ALLOWED_ORIGINS cho submit route]
+@@
+- (process.env.ALLOWED_ORIGINS || "https://www.aiesec.vn,http://103.110.85.200:3000,http://localhost:3000")
++ (process.env.ALLOWED_ORIGINS || "https://www.aiesec.vn,https://aiv-dashboard-ten.vercel.app,http://localhost:3000")
+\end{lstlisting}
+
+\subsection{Cập nhật biến môi trường}
+
+Trên máy chủ (PM2), cập nhật file \texttt{.env} và khởi động lại ứng dụng:
+\begin{lstlisting}[caption=Cập nhật .env]
+ALLOWED_ORIGINS=https://www.aiesec.vn,https://aiv-dashboard-ten.vercel.app,http://localhost:3000
+BACKEND_HOST=https://aiv-dashboard-ten.vercel.app
+NEXT_PUBLIC_APP_URL=https://aiv-dashboard-ten.vercel.app
+\end{lstlisting}
+
+\begin{lstlisting}[caption=Restart ứng dụng]
+pm2 restart aiv-dashboard
+pm2 logs aiv-dashboard --lines 50
+\end{lstlisting}
+
+\subsection{Cập nhật dữ liệu trong cơ sở dữ liệu}
+
+Chuẩn hóa các tracking URL đã tạo trước đó để trỏ về domain mới (MySQL):
+\begin{lstlisting}[language=sql,caption=Chuẩn hóa tracking_link về domain Vercel]
+UPDATE utm_links 
+SET tracking_link = REPLACE(tracking_link, 'http://103.110.85.200:3000', 'https://aiv-dashboard-ten.vercel.app')
+WHERE tracking_link LIKE '%103.110.85.200:3000%';
+
+UPDATE utm_links 
+SET tracking_link = REPLACE(tracking_link, 'http://aiesecvn.digital.com:3000', 'https://aiv-dashboard-ten.vercel.app')
+WHERE tracking_link LIKE '%aiesecvn.digital.com:3000%';
+\end{lstlisting}
+
+\subsection{Kiểm thử và xác minh}
+
+\begin{itemize}
+  \item Kiểm tra API test:
+\begin{lstlisting}
+curl https://aiv-dashboard-ten.vercel.app/api/test
+\end{lstlisting}
+  \item Kiểm tra CORS từ trang Webflow/Client: forms submit thành công, không lỗi preflight
+  \item Tạo UTM link mới và xác nhận \texttt{tracking\_link} dùng đúng domain HTTPS
+  \item Kiểm tra log ứng dụng qua PM2 đảm bảo không có lỗi 4xx/5xx bất thường
+\end{itemize}
+
+\subsection{Rủi ro và kế hoạch rollback}
+
+\begin{itemize}
+  \item \textbf{Rủi ro CORS}: origin không nằm trong allowlist \Rightarrow lỗi preflight. Khắc phục: bổ sung domain vào \texttt{ALLOWED}/\texttt{ALLOWED\_ORIGINS}
+  \item \textbf{Rủi ro data mismatch}: các \texttt{tracking\_link} cũ không được chuẩn hóa \Rightarrow redirect sai host. Khắc phục: chạy script SQL trên
+  \item \textbf{Rollback}: khôi phục \texttt{.env} cũ và revert code thay đổi host về IP, \texttt{pm2 restart}
+\end{itemize}
+
+\subsection{Kết quả}
+
+Sau thay đổi:
+\begin{itemize}
+  \item Tất cả request sử dụng HTTPS trên domain Vercel, tương thích với Clipboard API và các chính sách bảo mật trình duyệt
+  \item CORS cấu hình đúng cho domain mới, không còn phụ thuộc IP
+  \item Hệ thống tracking link đồng bộ và nhất quán, giảm rủi ro khi thay đổi hạ tầng
+\end{itemize}
+
+\begin{thebibliography}{9}
+\bibitem{vercel-app} AIESEC Dashboard (Vercel). Truy cập: \href{https://aiv-dashboard-ten.vercel.app}{https://aiv-dashboard-ten.vercel.app}
+\end{thebibliography}
 
 \section{Kết luận}
 

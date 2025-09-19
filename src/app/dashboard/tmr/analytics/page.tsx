@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import UTMAnalytics from "@/components/UTMAnalytics";
+import AccessDenied from "@/components/AccessDenied";
+import { checkProgramAccess } from "@/hooks/useProgramAccess";
 import FormTrackingTable from "@/components/FormTrackingTable";
 
 interface Form {
@@ -65,12 +67,12 @@ export default function AnalyticsPage() {
   const [selectedUni, setSelectedUni] = useState<string>('');
   const [entities, setEntities] = useState<string[]>([]);
   const [universities, setUniversities] = useState<string[]>([]);
+  const [user, setUser] = useState<any>(null);
   const [filteredUniversities, setFilteredUniversities] = useState<string[]>([]);
   const [uniSearch, setUniSearch] = useState<string>("");
   const [filteredUniDistribution, setFilteredUniDistribution] = useState<AnalyticsData['uniDistribution']>([]);
   const [loadingUniDistribution, setLoadingUniDistribution] = useState(false);
   const [activeTab, setActiveTab] = useState<'clicks' | 'forms'>('clicks');
-  const [user, setUser] = useState<any>(null);
   const [myEntityName, setMyEntityName] = useState<string>("");
   const [userSignUps, setUserSignUps] = useState<number>(0);
   // Form Tracking (UTM submissions) state
@@ -332,6 +334,20 @@ export default function AnalyticsPage() {
   }, [activeTab, user, selectedForm, ftPage, ftPageSize, ftStartDate, ftEndDate, ftDatePage, ftDatePageSize, ftRollup]);
 
   const selectedFormName = forms.find(f => f.id === selectedForm)?.name || '';
+
+  // Check program access
+  const { hasAccess, userProgram } = checkProgramAccess(user, 'TMR');
+  
+  if (user && !hasAccess) {
+    return (
+      <AccessDenied 
+        userProgram={userProgram}
+        requiredProgram="TMR"
+        title="TMR Analytics Access Denied"
+        message="This page is for TMR users only. Your account is associated with oGV."
+      />
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
