@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
         const shortResponse = await fetch('https://api.short.io/links', {
           method: 'POST',
           headers: {
-            'Authorization': shortApiKey,
+            'Authorization': `Bearer ${shortApiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

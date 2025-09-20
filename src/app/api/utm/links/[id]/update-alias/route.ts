@@ -127,7 +127,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           const deleteResponse = await fetch(`https://api.short.io/links/${shortIoId}`, {
             method: 'DELETE',
             headers: {
-              'Authorization': shortApiKey,
+              'Authorization': `Bearer ${shortApiKey}`,
             },
           });
           
@@ -156,7 +156,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const shortResponse = await fetch('https://api.short.io/links', {
       method: 'POST',
       headers: {
-        'Authorization': shortApiKey,
+        'Authorization': `Bearer ${shortApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

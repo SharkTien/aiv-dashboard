@@ -31,23 +31,37 @@ export async function POST(request: NextRequest) {
     }
 
     // Use Short.io API to shorten the URL
+    const requestBody = {
+      originalURL: url,
+      domain: shortDomain,
+      // Bỏ path để Short.io tự tạo
+      allowDuplicates: false
+    };
+    
+    console.log('Making request to Short.io:', {
+      url: 'https://api.short.io/links',
+      domain: shortDomain,
+      originalURL: url,
+      hasApiKey: !!shortApiKey
+    });
+    
     const shortResponse = await fetch('https://api.short.io/links', {
       method: 'POST',
       headers: {
-        'Authorization': shortApiKey,
+        'Authorization': `Bearer ${shortApiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        originalURL: url,
-        domain: shortDomain,
-        // Bỏ path để Short.io tự tạo
-        allowDuplicates: false
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!shortResponse.ok) {
-      const errorData = await shortResponse.json();
-      throw new Error(`Short.io API error: ${errorData.message || 'Unknown error'}`);
+      const errorText = await shortResponse.text();
+      console.error('Short.io API error response:', {
+        status: shortResponse.status,
+        statusText: shortResponse.statusText,
+        body: errorText
+      });
+      throw new Error(`Short.io API error: ${shortResponse.status} - ${errorText}`);
     }
 
     const shortData = await shortResponse.json();
