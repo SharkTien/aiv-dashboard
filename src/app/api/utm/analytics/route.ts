@@ -478,7 +478,7 @@ async function getShortIoClickData(shortUrlId: string, startDate: string, endDat
       // Try to get link details using domain expansion method
       const expandRes = await fetch(`${apiBase}/links/expand?shortURL=${encodeURIComponent(shortUrlId)}`, {
         headers: { 
-          'Authorization': `Bearer ${apiKey}`, 
+          'Authorization': apiKey, 
           'Content-Type': 'application/json'
         },
         cache: 'no-store'
@@ -507,7 +507,7 @@ async function getShortIoClickData(shortUrlId: string, startDate: string, endDat
     const statsUrl = `${apiBase}/statistics/link/${encodeURIComponent(linkId)}`;
     promises.push(
       fetch(statsUrl, {
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
         cache: 'no-store'
       }).then(res => res.ok ? res.json() : null).catch(() => null)
     );
@@ -519,7 +519,7 @@ async function getShortIoClickData(shortUrlId: string, startDate: string, endDat
     const dailyStatsUrl = `${apiBase}/statistics/link/${encodeURIComponent(linkId)}/clicks?from=${fromTimestamp}&to=${toTimestamp}&groupBy=day`;
     promises.push(
       fetch(dailyStatsUrl, {
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
         cache: 'no-store'
       }).then(res => res.ok ? res.json() : null).catch(() => null)
     );
@@ -528,7 +528,7 @@ async function getShortIoClickData(shortUrlId: string, startDate: string, endDat
     const geoStatsUrl = `${apiBase}/statistics/link/${encodeURIComponent(linkId)}/countries`;
     promises.push(
       fetch(geoStatsUrl, {
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
         cache: 'no-store'
       }).then(res => res.ok ? res.json() : null).catch(() => null)
     );
@@ -537,7 +537,7 @@ async function getShortIoClickData(shortUrlId: string, startDate: string, endDat
     const refStatsUrl = `${apiBase}/statistics/link/${encodeURIComponent(linkId)}/referrers`;
     promises.push(
       fetch(refStatsUrl, {
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
         cache: 'no-store'
       }).then(res => res.ok ? res.json() : null).catch(() => null)
     );

@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   const shortDomain = domain || process.env.SHORT_IO_DOMAIN || "aiesecvn.short.gy";
-  const authHeaders: HeadersInit = { Authorization: `Bearer ${shortApiKey}` as string };
+  const authHeaders: HeadersInit = { Authorization: shortApiKey as string };
 
   function withTimeout(ms: number): { signal: AbortSignal; cancel: () => void } {
     const controller = new AbortController();
