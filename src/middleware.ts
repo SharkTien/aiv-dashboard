@@ -45,6 +45,14 @@ const ALLOWED = new Set([
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const host = req.headers.get("host") || "";
+  
+  // Redirect from old host to new host
+  if (host === "aiv-dashboard-ten.vercel.app") {
+    const newUrl = new URL(req.url);
+    newUrl.host = "aiv-dashboard.aiesec.vn";
+    return NextResponse.redirect(newUrl, 301); // Permanent redirect
+  }
   
   // Log all requests
   const timestamp = new Date().toISOString();
@@ -109,6 +117,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/api/:path*",
+    "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };

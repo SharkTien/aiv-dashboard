@@ -7,6 +7,7 @@ type UpdateRequestBody = {
   limitPerPage?: number; // optional page size for short.io listing
   dryRun?: boolean; // if true, do not perform updates, only report
   maxPages?: number; // safety cap for pagination
+  startOffset?: number; // start from specific offset
 };
 
 type ShortIoLink = {
@@ -17,6 +18,7 @@ type ShortIoLink = {
 };
 
 export async function POST(req: NextRequest) {
+  console.log("[UPDATE-ORIGINAL-HOST] API called at", new Date().toISOString());
 
   let body: UpdateRequestBody;
   try {
@@ -25,7 +27,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { fromHost, toHost, domain, limitPerPage = 100, dryRun = false, maxPages = 50 } = body;
+  const { fromHost, toHost, domain, limitPerPage = 100, dryRun = false, maxPages = 100, startOffset = 0 } = body;
   if (!fromHost || !toHost) {
     return NextResponse.json({ error: "fromHost and toHost are required" }, { status: 400 });
   }
@@ -62,13 +64,13 @@ export async function POST(req: NextRequest) {
     return found.id || found.domain_id || found.identifier;
   }
 
-  // Helper: fetch one page of links (supports token-based or offset pagination)
-  async function fetchLinks(domainId: number, pageToken?: string, offset?: number): Promise<{ links: ShortIoLink[]; nextToken?: string }> {
+    // Helper: fetch one page of links
+  async function fetchLinks(domainId: number, pageToken?: string): Promise<{ links: ShortIoLink[]; nextToken?: string }> {
     const url = new URL("https://api.short.io/api/links");
     url.searchParams.set("domain_id", String(domainId));
     url.searchParams.set("limit", String(limitPerPage));
-    if (pageToken) url.searchParams.set("page_token", pageToken);
-    if (offset !== undefined) url.searchParams.set("offset", String(offset));
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+
     const t = withTimeout(30000);
     const resp = await fetch(url.toString(), { headers: authHeaders, signal: t.signal }).finally(t.cancel);
     if (!resp.ok) {
@@ -76,10 +78,12 @@ export async function POST(req: NextRequest) {
       throw new Error(`Failed to list links: ${resp.status} ${JSON.stringify(err)}`);
     }
     const data = await resp.json();
-    const links: ShortIoLink[] = Array.isArray(data) ? data : data.links || [];
-    const nextToken: string | undefined = (Array.isArray(data) ? undefined : (data.nextToken || data.nextPageToken || data.pageToken || data.next || data.token));
-    return { links, nextToken };
+    return {
+      links: data.links || [],
+      nextToken: data.nextToken || data.pageToken || data.nextPageToken,
+    };
   }
+
 
   // Helper: patch a link's originalURL
   async function patchLinkOriginalUrl(idString: string, newOriginalUrl: string): Promise<void> {
@@ -113,7 +117,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const domainId = await fetchDomainIdByHostname(shortDomain);
-    let offset = 0;
+    let offset = startOffset;
     let pageToken: string | undefined = undefined;
     let pageCount = 0;
     let processed = 0;
@@ -124,7 +128,7 @@ export async function POST(req: NextRequest) {
     const seen = new Set<string>();
 
     while (true) {
-      const { links, nextToken } = await fetchLinks(domainId, pageToken, pageToken ? undefined : offset);
+      const { links, nextToken } = await fetchLinks(domainId, pageToken);
       if (!links.length) break;
 
       for (const link of links) {
@@ -134,7 +138,38 @@ export async function POST(req: NextRequest) {
         try {
           const original = link.originalURL;
           const originalUrl = new URL(original);
-          if (originalUrl.host !== fromHost) continue;
+          
+          // Normalize hosts for comparison (lowercase, remove trailing dots)
+          const normalizedOriginalHost = originalUrl.host.toLowerCase().replace(/\.$/, '');
+          const normalizedFromHost = fromHost.toLowerCase().replace(/\.$/, '');
+          
+          // Debug: Log all originalURLs to see the format
+          const globalIndex = startOffset + processed;
+          console.log(`[DEBUG] Link ${globalIndex} (batch ${Math.floor(startOffset/150) + 1}): originalURL="${original}", host="${originalUrl.host}"`);
+          
+          // Special debug for link 220
+          if (globalIndex === 220) {
+            console.log(`[DEBUG 220] Special debug for link 220:`);
+            console.log(`[DEBUG 220] originalURL="${original}"`);
+            console.log(`[DEBUG 220] host="${originalUrl.host}"`);
+            console.log(`[DEBUG 220] fromHost="${fromHost}"`);
+            console.log(`[DEBUG 220] normalizedOriginalHost="${normalizedOriginalHost}"`);
+            console.log(`[DEBUG 220] normalizedFromHost="${normalizedFromHost}"`);
+            console.log(`[DEBUG 220] match result: ${normalizedOriginalHost === normalizedFromHost}`);
+          }
+          
+          // Special debug for link 238
+          if (globalIndex === 238) {
+            console.log(`[DEBUG 238] Special debug for link 238:`);
+            console.log(`[DEBUG 238] originalURL="${original}"`);
+            console.log(`[DEBUG 238] host="${originalUrl.host}"`);
+            console.log(`[DEBUG 238] fromHost="${fromHost}"`);
+            console.log(`[DEBUG 238] normalizedOriginalHost="${normalizedOriginalHost}"`);
+            console.log(`[DEBUG 238] normalizedFromHost="${normalizedFromHost}"`);
+            console.log(`[DEBUG 238] match result: ${normalizedOriginalHost === normalizedFromHost}`);
+          }
+          
+          if (normalizedOriginalHost !== normalizedFromHost) continue;
           matched += 1;
 
           const newUrl = replaceHostKeepingPathAndQuery(original, toHost);
@@ -151,12 +186,20 @@ export async function POST(req: NextRequest) {
       // Advance pagination
       if (nextToken) {
         pageToken = nextToken;
+        offset = 0; // Reset offset when using token-based pagination
       } else {
         offset += links.length;
         if (links.length < limitPerPage) break; // last page via offset mode
       }
       pageCount += 1;
       if (pageCount >= maxPages) break; // safety cap
+      
+      // Safety check: if we get the same links again, break
+      if (links.length === 0) break;
+      
+      if (!nextToken) break;
+      // Debug pagination
+      console.log(`[PAGINATION] Page ${pageCount}: processed ${processed} links, offset=${offset}, nextToken=${nextToken ? 'yes' : 'no'}`);
     }
 
     return NextResponse.json({

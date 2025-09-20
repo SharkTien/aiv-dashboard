@@ -25,6 +25,7 @@ interface UTMLink {
   uniqueClicks: number;
   clicksByDate: Array<{ date: string; clicks: number; unique?: number }>;
   shortened_url: string;
+  tracking_short_url?: string;
   created_at: string;
   conversionRate?: number;
   effectivenessScore?: number;
@@ -88,10 +89,6 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
   const [page, setPage] = useState(1);
   // Search state for custom_name
   const [searchTerm, setSearchTerm] = useState<string>("");
-  // Inline edit alias state for Tracking Short URL
-  const [editingAliasId, setEditingAliasId] = useState<number | null>(null);
-  const [aliasInput, setAliasInput] = useState<string>("");
-  const [savingAlias, setSavingAlias] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'user_performance'>('overview');
 
   // Load entities for admin filter
@@ -254,63 +251,6 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
   const paginatedLinks = filteredLinks.slice(startIndex, startIndex + pageSize);
   const goPrev = () => setPage((p) => Math.max(1, p - 1));
   const goNext = () => setPage((p) => Math.min(totalPages, p + 1));
-
-  // Helpers for alias editing
-  const extractAliasFromShortUrl = (shortUrl: string): string => {
-    try {
-      if (!shortUrl) return "";
-      const url = new URL(shortUrl);
-      return url.pathname.replace(/^\//, "");
-    } catch {
-      // Fallback: try to read after last '/'
-      const idx = shortUrl.lastIndexOf('/')
-      return idx >= 0 ? shortUrl.slice(idx + 1) : shortUrl;
-    }
-  };
-
-  const beginEditAlias = (link: UTMLink) => {
-    setEditingAliasId(link.id);
-    setAliasInput(extractAliasFromShortUrl(link.shortened_url));
-  };
-
-  const cancelEditAlias = () => {
-    setEditingAliasId(null);
-    setAliasInput("");
-  };
-
-  const saveAlias = async (linkId: number) => {
-    const alias = aliasInput.trim();
-    if (!alias) return;
-    setSavingAlias(true);
-    try {
-      const res = await fetch(`/api/utm/links/${linkId}/update-alias`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alias })
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        alert(json?.error || 'Failed to update alias');
-        return;
-      }
-      const newUrl: string = json.shortenedUrl;
-      // Update local state
-      setData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          links: prev.links.map((l) => (l.id === linkId ? { ...l, shortened_url: newUrl } : l))
-        } as typeof prev;
-      });
-      setEditingAliasId(null);
-      setAliasInput("");
-    } catch (e) {
-      console.error('Update alias error:', e);
-      alert('Failed to update alias');
-    } finally {
-      setSavingAlias(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -613,46 +553,15 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    {editingAliasId === link.id ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{(link.shortened_url || '').split('?')[0].split('#')[0].replace(/\/$/, '').split('/').slice(0, 3).join('/')}/</span>
-                        <input
-                          value={aliasInput}
-                          onChange={(e) => setAliasInput(e.target.value)}
-                          className="h-8 w-40 px-2 rounded-md ring-1 ring-black/10 dark:ring-white/10 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-                          placeholder="alias"
-                        />
-                        <button
-                          onClick={() => saveAlias(link.id)}
-                          disabled={savingAlias}
-                          className="h-8 px-3 rounded-md bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs"
-                        >
-                          {savingAlias ? 'Saving...' : 'Save'}
-                        </button>
-                        <button
-                          onClick={cancelEditAlias}
-                          className="h-8 px-3 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        {link.shortened_url ? (
-                          <a href={link.shortened_url} target="_blank" rel="noreferrer" className="text-sky-600 hover:underline break-all">
-                            {link.shortened_url}
-                          </a>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                        <button
-                          onClick={() => beginEditAlias(link)}
-                          className="ml-1 h-7 px-2 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    )}
+                    <div className="text-sm text-gray-900 dark:text-white">
+                      {link.tracking_short_url ? (
+                        <a href={link.tracking_short_url} target="_blank" rel="noreferrer" className="text-sky-600 hover:underline break-all">
+                          {link.tracking_short_url}
+                        </a>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-4 text-center">
                     <div className="text-sm font-medium text-gray-900 dark:text-white">
