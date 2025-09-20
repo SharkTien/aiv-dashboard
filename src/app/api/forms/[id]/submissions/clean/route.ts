@@ -56,7 +56,13 @@ export async function GET(
           ELSE fr.value
         END AS value_label,
         utm_campaign.value as utm_campaign_value,
-        uc.name as utm_campaign_name
+        uc.name as utm_campaign_name,
+        utm_medium.value as utm_medium_value,
+        um_table.code as utm_medium_code,
+        um_table.name as utm_medium_name,
+        utm_source.value as utm_source_value,
+        us_table.code as utm_source_code,
+        us_table.name as utm_source_name
       FROM form_submissions fs
       LEFT JOIN entity e ON fs.entity_id = e.entity_id
       LEFT JOIN forms f ON fs.form_id = f.id
@@ -68,10 +74,16 @@ export async function GET(
       LEFT JOIN form_responses utm_campaign ON fs.id = utm_campaign.submission_id 
         AND utm_campaign.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_campaign')
       LEFT JOIN utm_campaigns uc ON utm_campaign.value = uc.code
+      LEFT JOIN form_responses utm_medium ON fs.id = utm_medium.submission_id 
+        AND utm_medium.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_medium')
+      LEFT JOIN utm_mediums um_table ON utm_medium.value = um_table.code
+      LEFT JOIN form_responses utm_source ON fs.id = utm_source.submission_id 
+        AND utm_source.field_id IN (SELECT id FROM form_fields WHERE form_id = ? AND field_name = 'utm_source')
+      LEFT JOIN utm_sources us_table ON utm_source.value = us_table.code
       WHERE fs.form_id = ? AND fs.duplicated = FALSE
       ORDER BY fs.timestamp DESC, ff.sort_order ASC
       ${getUnlimited ? '' : 'LIMIT ? OFFSET ?'}
-    `, getUnlimited ? [formId, formId] : [formId, formId, limit, offset]);
+    `, getUnlimited ? [formId, formId, formId, formId, formId] : [formId, formId, formId, formId, formId, limit, offset]);
 
     const rows = Array.isArray(submissionsResult) ? submissionsResult : [];
     
@@ -88,6 +100,10 @@ export async function GET(
           formCode: row.form_code,
           utmCampaign: row.utm_campaign_value,
           utmCampaignName: row.utm_campaign_name,
+          utmMedium: row.utm_medium_code || row.utm_medium_value,
+          utmMediumName: row.utm_medium_name,
+          utmSource: row.utm_source_code || row.utm_source_value,
+          utmSourceName: row.utm_source_name,
           emailSent: row.email_sent === 1,
           responses: []
         });

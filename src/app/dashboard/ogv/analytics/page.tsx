@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import UTMAnalytics from "@/components/UTMAnalytics";
 import AccessDenied from "@/components/AccessDenied";
 import { checkProgramAccess } from "@/hooks/useProgramAccess";
+import FormTrackingTable from "@/components/FormTrackingTable";
+import WeeklySubmissionsChart from "@/components/WeeklySubmissionsChart";
 
 interface Form {
   id: number;
@@ -71,10 +73,22 @@ export default function AnalyticsPage() {
   const [uniSearch, setUniSearch] = useState<string>("");
   const [filteredUniDistribution, setFilteredUniDistribution] = useState<AnalyticsData['uniDistribution']>([]);
   const [loadingUniDistribution, setLoadingUniDistribution] = useState(false);
-  const [activeTab, setActiveTab] = useState<'clicks' | 'forms'>('clicks');
+  const [activeTab, setActiveTab] = useState<'clicks' | 'forms' | 'weekly'>('clicks');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [userSignUps, setUserSignUps] = useState<number>(0);
   const [myEntityName, setMyEntityName] = useState<string>("");
+  
+  // Form Tracking (UTM submissions) state
+  const [ftLoading, setFtLoading] = useState(false);
+  const [ftData, setFtData] = useState<{ links: any[]; allDates: string[]; dayTotalSubmissions: Record<string, number>; meta?: { page: number; pageSize: number; totalPages: number; totalCombos: number } } | null>(null);
+  const [ftPage, setFtPage] = useState(1);
+  const [ftPageSize, setFtPageSize] = useState(80);
+  const [ftDatePage, setFtDatePage] = useState(1);
+  const [ftDatePageSize, setFtDatePageSize] = useState(30);
+  const [ftRollup, setFtRollup] = useState<'day' | 'week'>('day');
+  const [ftError, setFtError] = useState<string | null>(null);
+  const [ftStartDate, setFtStartDate] = useState(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0,10));
+  const [ftEndDate, setFtEndDate] = useState(() => new Date().toISOString().slice(0,10));
 
   useEffect(() => {
     loadForms();
@@ -121,6 +135,12 @@ export default function AnalyticsPage() {
       setFilteredUniversities(universities);
     }
   }, [selectedEntity, universities, user]);
+
+  useEffect(() => {
+    if (activeTab !== 'forms') return;
+    if (!user) return;
+    loadFormTracking();
+  }, [activeTab, user, selectedForm, ftPage, ftPageSize, ftStartDate, ftEndDate, ftDatePage, ftDatePageSize, ftRollup]);
 
   // Client-side search filtering for universities
   const displayedUniversities = (uniSearch.trim()
@@ -279,6 +299,34 @@ export default function AnalyticsPage() {
     }
   };
 
+  const loadFormTracking = async () => {
+    try {
+      setFtLoading(true);
+      setFtError(null);
+      const params = new URLSearchParams({ start_date: ftStartDate, end_date: ftEndDate });
+      if (selectedForm) params.append('form_id', String(selectedForm));
+      params.append('page', String(ftPage));
+      params.append('page_size', String(ftPageSize));
+      params.append('date_page', String(ftDatePage));
+      params.append('date_page_size', String(ftDatePageSize));
+      if (ftRollup) params.append('rollup', ftRollup);
+      
+      const response = await fetch(`/api/utm/form-tracking?${params}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setFtData(result.data);
+      } else {
+        setFtError(result.error || 'Failed to load form tracking data');
+      }
+    } catch (e) {
+      setFtData({ links: [], allDates: [], dayTotalSubmissions: {}, meta: { page: ftPage, pageSize: ftPageSize, totalPages: 1, totalCombos: 0 } });
+      setFtError('Không tải được dữ liệu Form Tracking. Try again.');
+    } finally {
+      setFtLoading(false);
+    }
+  };
+
   const selectedFormName = forms.find(f => f.id === selectedForm)?.name || '';
 
   // Check program access
@@ -317,7 +365,7 @@ export default function AnalyticsPage() {
               }}
               className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white"
             >
-              Thử lại
+              Try again
             </button>
           </div>
         )}
@@ -363,6 +411,16 @@ export default function AnalyticsPage() {
             >
               Form Tracking
             </button>
+            <button
+              onClick={() => setActiveTab('weekly')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'weekly'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Weekly Trend
+            </button>
           </nav>
         </div>
 
@@ -372,7 +430,7 @@ export default function AnalyticsPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">UTM Clicks</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Click tracking and UTM effectiveness</p>
-              <UTMAnalytics formType="TMR" selectedFormId={selectedForm} />
+              <UTMAnalytics formType="oGV" selectedFormId={selectedForm} />
             </div>
           )}
 
@@ -537,6 +595,67 @@ export default function AnalyticsPage() {
                     )}
                   </div>
 
+                  {/* UTM Form Tracking Matrix */}
+                  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Form Tracking by UTM</h2>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Daily submissions by UTM link và bảng mật độ theo Campaign/Medium/Source.</p>
+                      {/* Date range controls for Form Tracking */}
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Date</label>
+                          <input type="date" value={ftStartDate} onChange={(e)=>setFtStartDate(e.target.value)} className="w-full h-9 rounded ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">End Date</label>
+                          <input type="date" value={ftEndDate} onChange={(e)=>setFtEndDate(e.target.value)} className="w-full h-9 rounded ring-1 ring-black/15 dark:ring-white/15 px-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                        </div>
+                        <div className="flex items-end">
+                          <button onClick={loadFormTracking} className="h-9 w-full sm:w-auto px-4 rounded bg-sky-600 hover:bg-sky-700 text-white">Refresh</button>
+                        </div>
+                      </div>
+                    </div>
+                    {ftError && (
+                      <div className="p-4 text-center text-sm text-gray-600 dark:text-gray-400">
+                        <div className="mb-2">Không tải được dữ liệu Form Tracking. Có thể do quá tải kết nối.</div>
+                        <button onClick={loadFormTracking} className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white">Try again</button>
+                      </div>
+                    )}
+                    {ftLoading && (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      </div>
+                    )}
+                    {!ftLoading && ftError && (!ftData || (ftData?.links || []).length === 0) && (
+                      <div className="p-8 text-center text-sm text-gray-600 dark:text-gray-400">
+                        <div className="mb-2">Không tải được dữ liệu Form Tracking. Có thể do quá tải kết nối.</div>
+                        <button onClick={loadFormTracking} className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-700 text-white">Try again</button>
+                      </div>
+                    )}
+                    {ftData && ftData.allDates?.length > 0 && (
+                      <div className="p-4 space-y-6">
+                        {ftData.meta && (
+                          <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                            <span>Page {ftData.meta.page} / {ftData.meta.totalPages}</span>
+                            <span>•</span>
+                            <span>{ftData.meta.totalCombos} UTM combinations</span>
+                            <span>•</span>
+                            <span>{ftData.allDates.length} dates</span>
+                          </div>
+                        )}
+                        {/* Detailed tracking + density */}
+                        <FormTrackingTable 
+                          links={ftData.links}
+                          allDates={ftData.allDates}
+                          dayTotalSubmissions={ftData.dayTotalSubmissions}
+                          selectedEntity={selectedEntity}
+                          isAdmin={user?.role === 'admin'}
+                          entities={entities.map(e => ({ entity_id: 0, name: e }))}
+                        />
+                      </div>
+                    )}
+                  </div>
+
                   {/* Academic Analytics */}
                   <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -558,6 +677,14 @@ export default function AnalyticsPage() {
                   </div>
                 </div>  
               )}
+            </div>
+          )}
+
+          {activeTab === 'weekly' && (
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Weekly Submissions Trend</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Weekly submissions comparison across oGV forms</p>
+              <WeeklySubmissionsChart formType="oGV" />
             </div>
           )}
         </div>

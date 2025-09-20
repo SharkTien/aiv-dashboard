@@ -52,9 +52,9 @@ export async function GET(request: NextRequest) {
     // Get university distribution with filters - optimized query using MAX(CASE WHEN)
     let uniQuery = `
       SELECT 
-        COALESCE(um.uni_name, uni_value, 'Unknown University') as uni_name,
-        COUNT(DISTINCT fs.id) as signUps,
-        ROUND((COUNT(DISTINCT fs.id) * 100.0 / ?), 2) as percentage
+        COALESCE(um.uni_name, fs_with_uni.uni_value, fs_with_uni.other_uni_value, 'Unknown University') as uni_name,
+        COUNT(DISTINCT fs_with_uni.id) as signUps,
+        ROUND((COUNT(DISTINCT fs_with_uni.id) * 100.0 / ?), 2) as percentage
       FROM (
         SELECT 
           fs.id,

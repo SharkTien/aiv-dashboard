@@ -98,22 +98,24 @@ export async function GET(request: NextRequest) {
     const [utmBreakdownResult] = await pool.query(`
       SELECT 
         fr_campaign.value as utm_campaign,
-        fr_source.value as utm_source,
-        fr_medium.value as utm_medium,
+        COALESCE(us.code, fr_source.value) as utm_source,
+        COALESCE(um.code, fr_medium.value) as utm_medium,
         COUNT(DISTINCT fs.id) as signUps
       FROM form_submissions fs
       JOIN form_responses fr_campaign ON fs.id = fr_campaign.submission_id
       JOIN form_fields ff_campaign ON fr_campaign.field_id = ff_campaign.id
       LEFT JOIN form_responses fr_source ON fs.id = fr_source.submission_id
       LEFT JOIN form_fields ff_source ON fr_source.field_id = ff_source.id AND ff_source.field_name = 'utm_source'
+      LEFT JOIN utm_sources us ON fr_source.value = us.code
       LEFT JOIN form_responses fr_medium ON fs.id = fr_medium.submission_id
       LEFT JOIN form_fields ff_medium ON fr_medium.field_id = ff_medium.id AND ff_medium.field_name = 'utm_medium'
+      LEFT JOIN utm_mediums um ON fr_medium.value = um.code
       WHERE fs.form_id = ? 
         AND fs.duplicated = FALSE
         AND ff_campaign.field_name = 'utm_campaign'
         AND fr_campaign.value IS NOT NULL
         AND fr_campaign.value != ''
-      GROUP BY fr_campaign.value, fr_source.value, fr_medium.value
+      GROUP BY fr_campaign.value, COALESCE(us.code, fr_source.value), COALESCE(um.code, fr_medium.value)
       ORDER BY signUps DESC
       LIMIT 20
     `, [formId]);

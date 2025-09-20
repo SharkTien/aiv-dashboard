@@ -97,6 +97,7 @@ export default function FormsManager() {
       if (res.ok) {
         setShowCreateModal(false);
         setCreateForm({ name: "", type: "oGV" });
+        // Reload current page to preserve pagination
         load(currentPage);
       } else {
         const data = await res.json();
@@ -214,6 +215,7 @@ export default function FormsManager() {
         alert(`Form updated successfully! New code: ${data.form.code}`);
         setEditingForm(null);
         setEditFormName("");
+        // Reload current page to preserve pagination
         load(currentPage);
       } else {
         const data = await res.json();

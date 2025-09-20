@@ -5,6 +5,7 @@ import UTMAnalytics from "@/components/UTMAnalytics";
 import AccessDenied from "@/components/AccessDenied";
 import { checkProgramAccess } from "@/hooks/useProgramAccess";
 import FormTrackingTable from "@/components/FormTrackingTable";
+import WeeklySubmissionsChart from "@/components/WeeklySubmissionsChart";
 
 interface Form {
   id: number;
@@ -72,7 +73,7 @@ export default function AnalyticsPage() {
   const [uniSearch, setUniSearch] = useState<string>("");
   const [filteredUniDistribution, setFilteredUniDistribution] = useState<AnalyticsData['uniDistribution']>([]);
   const [loadingUniDistribution, setLoadingUniDistribution] = useState(false);
-  const [activeTab, setActiveTab] = useState<'clicks' | 'forms'>('clicks');
+  const [activeTab, setActiveTab] = useState<'clicks' | 'forms' | 'weekly'>('clicks');
   const [myEntityName, setMyEntityName] = useState<string>("");
   const [userSignUps, setUserSignUps] = useState<number>(0);
   // Form Tracking (UTM submissions) state
@@ -321,7 +322,7 @@ export default function AnalyticsPage() {
       }
     } catch (e) {
       setFtData({ links: [], allDates: [], dayTotalSubmissions: {}, meta: { page: ftPage, pageSize: ftPageSize, totalPages: 1, totalCombos: 0 } });
-      setFtError('Không tải được dữ liệu Form Tracking. Thử lại.');
+      setFtError('Không tải được dữ liệu Form Tracking. Try again.');
     } finally {
       setFtLoading(false);
     }
@@ -371,7 +372,7 @@ export default function AnalyticsPage() {
               }}
               className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white"
             >
-              Thử lại
+              Try again
             </button>
           </div>
         )}
@@ -417,6 +418,16 @@ export default function AnalyticsPage() {
               }`}
             >
               Form Tracking
+            </button>
+            <button
+              onClick={() => setActiveTab('weekly')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'weekly'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Weekly Trend
             </button>
           </nav>
         </div>
@@ -467,7 +478,7 @@ export default function AnalyticsPage() {
                     {ftError && (
                       <div className="px-6 py-3 bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200 text-sm flex items-center justify-between">
                         <span>{ftError}</span>
-                        <button onClick={loadFormTracking} className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white">Thử lại</button>
+                        <button onClick={loadFormTracking} className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white">Try again</button>
                       </div>
                     )}
                     {ftLoading && (
@@ -478,7 +489,7 @@ export default function AnalyticsPage() {
                     {!ftLoading && ftError && (!ftData || (ftData?.links || []).length === 0) && (
                       <div className="p-8 text-center text-sm text-gray-600 dark:text-gray-400">
                         <div className="mb-2">Không tải được dữ liệu Form Tracking. Có thể do quá tải kết nối.</div>
-                        <button onClick={loadFormTracking} className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-700 text-white">Thử lại</button>
+                        <button onClick={loadFormTracking} className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-700 text-white">Try again</button>
                       </div>
                     )}
                     {ftData && ftData.allDates?.length > 0 && (
@@ -512,17 +523,11 @@ export default function AnalyticsPage() {
                             <div className="ml-2 flex items-center gap-2">
                               <button onClick={()=> setFtPage(p=> Math.max(1, p-1))} disabled={(ftData.meta?.page||1) <= 1} className="h-7 px-2 rounded bg-gray-100 dark:bg-gray-700 disabled:opacity-50">Prev</button>
                               <button onClick={()=> setFtPage(p=> Math.min(ftData.meta!.totalPages, p+1))} disabled={(ftData.meta?.page||1) >= (ftData.meta?.totalPages||1)} className="h-7 px-2 rounded bg-gray-100 dark:bg-gray-700 disabled:opacity-50">Next</button>
-                              <button onClick={loadFormTracking} className="h-7 px-2 rounded bg-sky-600 text-white">Thử lại</button>
+                              <button onClick={loadFormTracking} className="h-7 px-2 rounded bg-sky-600 text-white">Try again</button>
                             </div>
                           </div>
                         )}
                         {/* User Performance-style matrix but for submissions */}
-                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                            <h3 className="text-md font-medium text-gray-900 dark:text-white">User Performance by UTM Link (Submissions)</h3>
-                          </div>
-                          <SubmissionPerformanceTable links={ftData.links} dates={ftData.allDates} />
-                        </div>
 
                         {/* Detailed tracking + density */}
                         <FormTrackingTable 
@@ -705,6 +710,14 @@ export default function AnalyticsPage() {
                   </div>
                 </div>  
               )}
+            </div>
+          )}
+
+          {activeTab === 'weekly' && (
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Weekly Submissions Trend</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Weekly submissions comparison across TMR forms</p>
+              <WeeklySubmissionsChart formType="TMR" />
             </div>
           )}
         </div>
@@ -1206,109 +1219,4 @@ function UniversityYearChart({ data }: { data: AnalyticsData['universityYearDist
   );
 }
 
-function SubmissionPerformanceTable({ links, dates }: { links: Array<any>; dates: string[] }) {
-  const [showPercent, setShowPercent] = useState(false);
-  const [compactMode, setCompactMode] = useState(false);
 
-  const perLink = links.map((l: any) => {
-    const byDate: Record<string, { total: number; unique: number }> = {};
-    dates.forEach(d => {
-      const v = l?.dailySubmissions?.[d] || { total: 0, unique: 0 };
-      byDate[d] = { total: Number(v.total || 0), unique: Number(v.unique || 0) };
-    });
-    return { link: l, byDate };
-  });
-
-  // Totals per day
-  const dayTotals: Record<string, { total: number; unique: number }> = {};
-  dates.forEach(d => { dayTotals[d] = { total: 0, unique: 0 }; });
-  perLink.forEach(({ byDate }) => {
-    dates.forEach(d => {
-      dayTotals[d].total += byDate[d].total;
-      dayTotals[d].unique += byDate[d].unique;
-    });
-  });
-
-  // Max per-day to color
-  const perDateMax: Record<string, number> = {};
-  dates.forEach(d => {
-    let m = 1;
-    perLink.forEach(({ byDate }) => { if (byDate[d].total > m) m = byDate[d].total; });
-    perDateMax[d] = m;
-  });
-  const bgFor = (d: string, val: number, share: number) => {
-    const ratio = showPercent ? Math.min(1, share / 100) : Math.min(1, val / (perDateMax[d] || 1));
-    const alpha = ratio === 0 ? 0 : 0.12 + 0.68 * ratio;
-    return { backgroundColor: `rgba(59, 130, 246, ${alpha.toFixed(3)})` };
-  };
-
-  return (
-    <div>
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-700 text-xs">
-        <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showPercent} onChange={(e)=>setShowPercent(e.target.checked)} /> <span>Show % share</span></label>
-        <label className="inline-flex items-center gap-2"><input type="checkbox" checked={compactMode} onChange={(e)=>setCompactMode(e.target.checked)} /> <span>Compact (hide unique)</span></label>
-      </div>
-      <div className="overflow-x-auto w-full pb-1">
-        <table className="min-w-max text-xs md:text-sm border-collapse w-full">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-10 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left w-[200px] min-w-[200px]">UTM</th>
-              <th className="sticky left-[200px] z-10 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left w-[180px] min-w-[180px]">Campaign</th>
-              <th className="sticky left-[380px] z-10 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left w-[140px] min-w-[140px]">Medium</th>
-              <th className="sticky left-[520px] z-10 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left w-[160px] min-w-[160px]">Source</th>
-              {dates.map(d => (
-                <th key={d} className="px-2 py-2 text-center whitespace-nowrap">
-                  <div className="text-[11px] text-gray-700 dark:text-gray-200">
-                    {new Date(d).toLocaleDateString(undefined,{month:'short', day:'numeric'})}
-                  </div>
-                  <div className="text-[10px] text-amber-600">{showPercent ? 'share | uniq%' : 'total | uniq'}</div>
-                </th>
-              ))}
-              <th className="px-3 py-2 text-center font-semibold">TOTAL</th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* Totals row */}
-            <tr className="border-t border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40">
-              <td className="sticky left-0 bg-gray-50 dark:bg-gray-700/40 px-3 py-2 font-semibold" colSpan={4}>TOTALS</td>
-              {dates.map(d => (
-                <td key={`tot-${d}`} className="px-2 py-1 text-center">
-                  <div className="text-[12px] font-semibold">{dayTotals[d].total}</div>
-                  {!compactMode && <div className="text-[10px] text-gray-600">{dayTotals[d].unique}</div>}
-                </td>
-              ))}
-              <td className="px-3 py-2 text-center font-semibold">
-                {Object.values(dayTotals).reduce((s, v) => s + v.total, 0)}
-              </td>
-            </tr>
-            {perLink.map(({ link, byDate }) => (
-              <tr key={link.id} className="border-t border-gray-200 dark:border-gray-700">
-                <td className="sticky left-0 z-0 bg-white dark:bg-gray-800 px-3 py-2 w-[200px] min-w-[200px] truncate" title={link.utm_name}>{link.custom_name || link.utm_name || 'Unnamed'}</td>
-                <td className="sticky left-[200px] z-0 bg-white dark:bg-gray-800 px-3 py-2 w-[180px] min-w-[180px] truncate" title={link.campaign_name}>{link.campaign_name}</td>
-                <td className="sticky left-[380px] z-0 bg-white dark:bg-gray-800 px-3 py-2 w-[140px] min-w-[140px] truncate" title={link.medium_name}>{link.medium_name}</td>
-                <td className="sticky left-[520px] z-0 bg-white dark:bg-gray-800 px-3 py-2 w-[160px] min-w-[160px] truncate" title={link.source_name}>{link.source_name}</td>
-                {dates.map(d => {
-                  const v = byDate[d] || { total: 0, unique: 0 };
-                  const totalDay = dayTotals[d].total || 0;
-                  const share = totalDay > 0 ? (v.total / totalDay) * 100 : 0;
-                  const uniqShare = totalDay > 0 ? (v.unique / totalDay) * 100 : 0;
-                  return (
-                    <td key={`${link.id}-${d}`} className="px-2 py-1 text-center" style={bgFor(d, v.total, share)}>
-                      <div className="text-[12px] font-medium text-gray-900 dark:text-white">{showPercent ? `${share.toFixed(1)}%` : v.total}</div>
-                      {!compactMode && (
-                        <div className="text-[10px] text-gray-500">{showPercent ? `${uniqShare.toFixed(1)}%` : v.unique}</div>
-                      )}
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-2 text-center font-semibold">
-                  {Object.values(byDate).reduce((s, it) => s + (it?.total || 0), 0)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}

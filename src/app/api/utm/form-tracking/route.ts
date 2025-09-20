@@ -39,6 +39,20 @@ export async function GET(req: NextRequest) {
 
   const pool = getDbPool();
 
+  console.log('[Form Tracking] API called with params:', {
+    startDate,
+    endDate,
+    entityIdFilter,
+    allEntities,
+    formId,
+    page,
+    pageSize,
+    datePage,
+    datePageSize,
+    rollup,
+    user: { role: user.role, entity_id: user.entity_id }
+  });
+
   try {
     await pool.query("SELECT 1");
 
@@ -49,10 +63,23 @@ export async function GET(req: NextRequest) {
         MAX(CASE WHEN field_name='utm_medium' THEN id END) AS utm_medium,
         MAX(CASE WHEN field_name='utm_source' THEN id END) AS utm_source
       FROM form_fields
-    `);
+      WHERE form_id = ?
+    `, [formId]);
     
     const fieldIds = Array.isArray(fieldResult) ? fieldResult[0] : fieldResult;
     const { utm_campaign, utm_medium, utm_source } = fieldIds as any;
+    
+    console.log('[Form Tracking] UTM Field IDs:', { utm_campaign, utm_medium, utm_source });
+    
+    // Check if any field IDs are null
+    if (!utm_campaign || !utm_medium || !utm_source) {
+      console.warn('[Form Tracking] Missing UTM field IDs:', {
+        utm_campaign: utm_campaign ? 'found' : 'MISSING',
+        utm_medium: utm_medium ? 'found' : 'MISSING', 
+        utm_source: utm_source ? 'found' : 'MISSING',
+        formId
+      });
+    }
 
     // Build aggregation query (daily or weekly) - normalize to YYYY-MM-DD format
     let selectDate = `DATE_FORMAT(fs.timestamp, '%Y-%m-%d') as submission_date`;
@@ -93,15 +120,22 @@ export async function GET(req: NextRequest) {
       SELECT 
         ${selectDate},
         COALESCE(fr.value, 'No campaign') AS utm_campaign,
-        COALESCE(fr2.value, 'unknown') AS utm_medium,
-        COALESCE(fr3.value, 'unknown') AS utm_source,
+        COALESCE(um.code, fr2.value, 'unknown') AS utm_medium,
+        COALESCE(us.code, fr3.value, 'unknown') AS utm_source,
         COUNT(DISTINCT fs.id) AS unique_submissions
       FROM form_submissions fs
       LEFT JOIN form_responses fr ON fr.submission_id = fs.id AND fr.field_id = ?
       LEFT JOIN form_responses fr2 ON fr2.submission_id = fs.id AND fr2.field_id = ?
+      LEFT JOIN utm_mediums um ON fr2.value = um.code
       LEFT JOIN form_responses fr3 ON fr3.submission_id = fs.id AND fr3.field_id = ?
+      LEFT JOIN utm_sources us ON fr3.value = us.code
       WHERE ${whereConditions.join(' AND ')}
     `;
+
+    console.log('[Form Tracking] Query conditions:', {
+      whereConditions,
+      params: [...params, utm_campaign, utm_medium, utm_source]
+    });
 
     // Get total count first for pagination - optimized without redundant aggregation
     const countQuery = `
@@ -110,14 +144,16 @@ export async function GET(req: NextRequest) {
         SELECT 
           ${groupDate} AS submission_date,
           COALESCE(fr.value, 'No campaign') AS utm_campaign, 
-          COALESCE(fr2.value, 'unknown') AS utm_medium, 
-          COALESCE(fr3.value, 'unknown') AS utm_source
+          COALESCE(um.code, fr2.value, 'unknown') AS utm_medium, 
+          COALESCE(us.code, fr3.value, 'unknown') AS utm_source
         FROM form_submissions fs
         LEFT JOIN form_responses fr ON fr.submission_id = fs.id AND fr.field_id = ?
         LEFT JOIN form_responses fr2 ON fr2.submission_id = fs.id AND fr2.field_id = ?
+        LEFT JOIN utm_mediums um ON fr2.value = um.code
         LEFT JOIN form_responses fr3 ON fr3.submission_id = fs.id AND fr3.field_id = ?
+        LEFT JOIN utm_sources us ON fr3.value = us.code
         WHERE ${whereConditions.join(' AND ')}
-        GROUP BY ${groupDate}, fr.value, fr2.value, fr3.value
+        GROUP BY ${groupDate}, fr.value, fr2.value, fr3.value, um.code, us.code
       ) AS final_group
     `;
 
@@ -138,6 +174,85 @@ export async function GET(req: NextRequest) {
 
     const [rows] = await pool.query(baseQuery, [...fieldParams, ...params, pageSize, offset]);
     const data = Array.isArray(rows) ? (rows as any[]) : [];
+    
+    console.log('[Form Tracking] Query results:', {
+      totalCombos,
+      dataLength: data.length,
+      sampleData: data.slice(0, 3), // First 3 records
+      page,
+      pageSize,
+      offset
+    });
+    
+    // Always check actual UTM values in database for debugging
+    const [utmValuesResult] = await pool.query(`
+      SELECT 
+        fr.value as utm_value,
+        ff.field_name,
+        COUNT(*) as count
+      FROM form_responses fr
+      JOIN form_fields ff ON fr.field_id = ff.id
+      JOIN form_submissions fs ON fr.submission_id = fs.id
+      WHERE fs.form_id = ? 
+        AND ff.field_name IN ('utm_campaign', 'utm_medium', 'utm_source')
+        AND fr.value IS NOT NULL 
+        AND fr.value != ''
+        AND fs.duplicated = FALSE
+      GROUP BY fr.value, ff.field_name
+      ORDER BY ff.field_name, COUNT(*) DESC
+      LIMIT 20
+    `, [formId]);
+    const utmValues = Array.isArray(utmValuesResult) ? utmValuesResult : [];
+    
+    console.log('[Form Tracking] Actual UTM values in database:', utmValues);
+    
+    // Debug: Check if we have any UTM data at all
+    if (data.length === 0) {
+      console.warn('[Form Tracking] No UTM data found. Checking raw submissions...');
+      
+      // Check total submissions for this form
+      const [totalSubmissionsResult] = await pool.query(`
+        SELECT COUNT(*) as total FROM form_submissions fs 
+        WHERE fs.form_id = ? AND fs.duplicated = FALSE
+      `, [formId]);
+      const totalSubmissions = Array.isArray(totalSubmissionsResult) && totalSubmissionsResult.length > 0 
+        ? (totalSubmissionsResult[0] as any).total : 0;
+      
+      console.log('[Form Tracking] Total submissions for form:', totalSubmissions);
+      
+      // Check if UTM fields exist for this form
+      const [utmFieldsResult] = await pool.query(`
+        SELECT field_name, id FROM form_fields 
+        WHERE form_id = ? AND field_name IN ('utm_campaign', 'utm_medium', 'utm_source')
+      `, [formId]);
+      const utmFields = Array.isArray(utmFieldsResult) ? utmFieldsResult : [];
+      
+      console.log('[Form Tracking] UTM fields for form:', utmFields);
+      
+      // Check actual UTM values in form_responses
+      if (utmFields.length > 0) {
+        const [utmValuesResult] = await pool.query(`
+          SELECT 
+            fr.value as utm_value,
+            ff.field_name,
+            COUNT(*) as count
+          FROM form_responses fr
+          JOIN form_fields ff ON fr.field_id = ff.id
+          JOIN form_submissions fs ON fr.submission_id = fs.id
+          WHERE fs.form_id = ? 
+            AND ff.field_name IN ('utm_campaign', 'utm_medium', 'utm_source')
+            AND fr.value IS NOT NULL 
+            AND fr.value != ''
+            AND fs.duplicated = FALSE
+          GROUP BY fr.value, ff.field_name
+          ORDER BY ff.field_name, COUNT(*) DESC
+          LIMIT 20
+        `, [formId]);
+        const utmValues = Array.isArray(utmValuesResult) ? utmValuesResult : [];
+        
+        console.log('[Form Tracking] Actual UTM values in database:', utmValues);
+      }
+    }
 
     // Get last updated timestamp for ETag accuracy
     let lastUpdated = null;
@@ -193,6 +308,12 @@ export async function GET(req: NextRequest) {
 
     const map = new Map<string, LinkRow>();
     let autoId = 1;
+    
+    console.log('[Form Tracking] Processing daily data:', {
+      totalRecords: data.length,
+      sampleRecord: data[0]
+    });
+    
     data.forEach(r => {
       // Ensure date format is YYYY-MM-DD to match allDates
       const day = new Date(r.submission_date).toISOString().split('T')[0];
@@ -281,6 +402,13 @@ export async function GET(req: NextRequest) {
         meta: { page: safePage, pageSize, totalPages, totalCombos, datePage: safeDatePage, datePageSize, totalDatePages, rollup: rollup || 'day' }
       }
     } as const;
+
+    console.log('[Form Tracking] Final response:', {
+      totalLinks: limitedRows.length,
+      totalDates: limitedDates.length,
+      totalSubmissions: Object.values(dayTotalSubmissions).reduce((sum: number, val: unknown) => sum + (val as number), 0),
+      meta: responseBody.data.meta
+    });
 
     const etagSource = JSON.stringify({
       p: page,

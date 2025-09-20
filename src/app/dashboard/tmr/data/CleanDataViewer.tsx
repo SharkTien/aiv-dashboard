@@ -11,6 +11,10 @@ type Submission = {
   entityName: string | null;
   utmCampaign: string | null;
   utmCampaignName: string | null;
+  utmMedium: string | null;
+  utmMediumName: string | null;
+  utmSource: string | null;
+  utmSourceName: string | null;
   emailSent: boolean;
   // Prefer array format with value_label available
   responses: { field_name: string; field_label: string; value: string; value_label?: string | null }[] | { [key: string]: string };
@@ -44,6 +48,8 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<string>('');
   const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<Set<string>>(new Set());
+  const [selectedUtmMedium, setSelectedUtmMedium] = useState<Set<string>>(new Set());
+  const [selectedUtmSource, setSelectedUtmSource] = useState<Set<string>>(new Set());
   const [entities, setEntities] = useState<Array<{ value: string; label: string; count?: number }>>([]);
   
   // Facet filters (like Raw Data)
@@ -256,6 +262,22 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       }
     });
 
+    // Collect UTM mediums
+    const utmMediums = new Set<string>();
+    submissions.forEach(sub => {
+      if (sub.utmMedium) {
+        utmMediums.add(sub.utmMedium);
+      }
+    });
+
+    // Collect UTM sources
+    const utmSources = new Set<string>();
+    submissions.forEach(sub => {
+      if (sub.utmSource) {
+        utmSources.add(sub.utmSource);
+      }
+    });
+
     return {
       years: collect(FIELD_MAP.year).sort(),
       majors: collect(FIELD_MAP.major).sort(),
@@ -265,6 +287,8 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       goCamps: collect(FIELD_MAP.goCamp).sort(),
       entities: Array.from(entities).sort(),
       utmCampaigns: Array.from(utmCampaigns).sort(),
+      utmMediums: Array.from(utmMediums).sort(),
+      utmSources: Array.from(utmSources).sort(),
     };
   }, [submissions]);
 
@@ -323,6 +347,18 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
         if (!selectedUtmCampaign.has(campaignName)) return false;
       }
 
+      // UTM Medium filter
+      if (selectedUtmMedium.size > 0) {
+        const medium = submission.utmMedium || '';
+        if (!selectedUtmMedium.has(medium)) return false;
+      }
+
+      // UTM Source filter
+      if (selectedUtmSource.size > 0) {
+        const source = submission.utmSource || '';
+        if (!selectedUtmSource.has(source)) return false;
+      }
+
       // Facet checks (TMR specific)
       const checkSet = (set: Set<string>, keys: readonly string[]) => set.size === 0 || set.has(findFieldValue(submission, Array.from(keys)));
 
@@ -378,7 +414,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
       
       return 0;
     });
-  }, [submissions, startDate, endDate, textQuery, searchTerm, selectedEntity, selectedUtmCampaign, selectedYear, selectedMajor, selectedReceiveInfo, selectedChannel, selectedAppliedBefore, selectedGoCamp, sortField, sortDirection]);
+  }, [submissions, startDate, endDate, textQuery, searchTerm, selectedEntity, selectedUtmCampaign, selectedUtmMedium, selectedUtmSource, selectedYear, selectedMajor, selectedReceiveInfo, selectedChannel, selectedAppliedBefore, selectedGoCamp, sortField, sortDirection]);
 
   const totalPages = Math.ceil(filteredSubmissions.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -509,9 +545,9 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
 
   const exportToCSV = () => {
     if (filteredSubmissions.length === 0) return;
-    const headers = ['Date', 'Entity', 'UTM Campaign', 'Email Sent', ...formFields.sort((a,b)=>a.sort_order-b.sort_order).map(f => f.field_label || f.field_name)];
+    const headers = ['Date', 'Entity', 'UTM Campaign', 'UTM Medium', 'UTM Source', 'Email Sent', ...formFields.sort((a,b)=>a.sort_order-b.sort_order).map(f => f.field_label || f.field_name)];
     const csvRows: string[][] = filteredSubmissions.map(sub => {
-      const base = [new Date(sub.timestamp).toLocaleString(), sub.entityName || '', sub.utmCampaignName || sub.utmCampaign || '', sub.emailSent ? 'Yes' : 'No'];
+      const base = [new Date(sub.timestamp).toLocaleString(), sub.entityName || '', sub.utmCampaignName || sub.utmCampaign || '', sub.utmMedium || '', sub.utmSource || '', sub.emailSent ? 'Yes' : 'No'];
       const map = Array.isArray(sub.responses)
         ? new Map(sub.responses.map((r: any) => [r.field_name, r]))
         : new Map(Object.entries(sub.responses as any).map(([k,v]: any) => [k, { field_name: k, value: v, value_label: v }]));
@@ -720,15 +756,23 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
 
           {/* UTM Campaign Filter */}
           <FacetDropdown title="UTM Campaign" options={facetOptions.utmCampaigns} selected={selectedUtmCampaign} onChange={setSelectedUtmCampaign} />
+          
+          {/* UTM Medium Filter */}
+          <FacetDropdown title="UTM Medium" options={facetOptions.utmMediums} selected={selectedUtmMedium} onChange={setSelectedUtmMedium} />
+          
+          {/* UTM Source Filter */}
+          <FacetDropdown title="UTM Source" options={facetOptions.utmSources} selected={selectedUtmSource} onChange={setSelectedUtmSource} />
 
           {/* Clear all filters */}
-          {(startDate || endDate || selectedEntity || selectedUtmCampaign.size > 0 || selectedYear.size > 0 || selectedMajor.size > 0 || selectedReceiveInfo.size > 0 || selectedChannel.size > 0 || selectedAppliedBefore.size > 0 || selectedGoCamp.size > 0) && (
+          {(startDate || endDate || selectedEntity || selectedUtmCampaign.size > 0 || selectedUtmMedium.size > 0 || selectedUtmSource.size > 0 || selectedYear.size > 0 || selectedMajor.size > 0 || selectedReceiveInfo.size > 0 || selectedChannel.size > 0 || selectedAppliedBefore.size > 0 || selectedGoCamp.size > 0) && (
             <button
               onClick={() => {
                 setStartDate('');
                 setEndDate('');
                 setSelectedEntity('');
                 setSelectedUtmCampaign(new Set());
+                setSelectedUtmMedium(new Set());
+                setSelectedUtmSource(new Set());
                 setSelectedYear(new Set());
                 setSelectedMajor(new Set());
                 setSelectedReceiveInfo(new Set());
@@ -756,7 +800,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
               </span>
             )}
           </p>
-          {(startDate || endDate || selectedEntity || selectedUtmCampaign.size > 0 || selectedYear.size > 0 || selectedMajor.size > 0 || selectedReceiveInfo.size > 0 || selectedChannel.size > 0 || selectedAppliedBefore.size > 0 || selectedGoCamp.size > 0) && (
+          {(startDate || endDate || selectedEntity || selectedUtmCampaign.size > 0 || selectedUtmMedium.size > 0 || selectedUtmSource.size > 0 || selectedYear.size > 0 || selectedMajor.size > 0 || selectedReceiveInfo.size > 0 || selectedChannel.size > 0 || selectedAppliedBefore.size > 0 || selectedGoCamp.size > 0) && (
             <div className="text-xs text-gray-500 dark:text-gray-400">
               <span className="font-medium">Active filters:</span>
               {startDate || endDate ? ' Date' : ''}
@@ -767,7 +811,9 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
               {selectedAppliedBefore.size > 0 ? ` AppliedBefore(${selectedAppliedBefore.size})` : ''}
               {selectedGoCamp.size > 0 ? ` GoCamp(${selectedGoCamp.size})` : ''}
               {selectedEntity ? ' Entity' : ''}
-              {selectedUtmCampaign.size > 0 ? ` UTM(${selectedUtmCampaign.size})` : ''}
+              {selectedUtmCampaign.size > 0 ? ` UTM Campaign(${selectedUtmCampaign.size})` : ''}
+              {selectedUtmMedium.size > 0 ? ` UTM Medium(${selectedUtmMedium.size})` : ''}
+              {selectedUtmSource.size > 0 ? ` UTM Source(${selectedUtmSource.size})` : ''}
             </div>
           )}
         </div>
@@ -775,7 +821,7 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
 
       {/* Table */}
       <div className="bg-white/60 dark:bg-gray-700/60 rounded-xl border border-gray-200/50 dark:border-gray-600/50 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto thin-scrollbar">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-600">
               <tr>
@@ -796,6 +842,18 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                   onClick={() => handleSort('utmCampaign')}
                 >
                   UTM Campaign {sortField === 'utmCampaign' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={() => handleSort('utmMedium')}
+                >
+                  UTM Medium {sortField === 'utmMedium' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={() => handleSort('utmSource')}
+                >
+                  UTM Source {sortField === 'utmSource' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
                 <th 
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -828,6 +886,30 @@ export default function CleanDataViewer({ formId }: { formId: number }) {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {submission.utmCampaign || <span className="text-gray-400">No campaign</span>}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {submission.utmMedium ? (
+                      <span 
+                        title={submission.utmMediumName || submission.utmMedium}
+                        className="cursor-help"
+                      >
+                        {submission.utmMedium}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">No medium</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {submission.utmSource ? (
+                      <span 
+                        title={submission.utmSourceName || submission.utmSource}
+                        className="cursor-help"
+                      >
+                        {submission.utmSource}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">No source</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

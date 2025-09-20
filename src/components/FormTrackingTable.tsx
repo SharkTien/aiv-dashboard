@@ -37,6 +37,7 @@ export default function FormTrackingTable({
 }: FormTrackingTableProps) {
   const [sortDate, setSortDate] = useState<string | null>(null);
   const [sortMetric, setSortMetric] = useState<'total' | 'unique'>('total');
+  const [sortByTotal, setSortByTotal] = useState<boolean>(false);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [anchorDate, setAnchorDate] = useState<string | null>(null);
   const [showPercent, setShowPercent] = useState<boolean>(false);
@@ -99,8 +100,16 @@ export default function FormTrackingTable({
     }
   }, [allDates, sortDate, initialScrollDone]);
 
-  // Sort links based on selected date and metric
+  // Sort links based on selected date and metric or total
   const sortedPerLink = useMemo(() => {
+    if (sortByTotal) {
+      return [...perLink].sort((a, b) => {
+        const aTotal = a.totalSubmissions || 0;
+        const bTotal = b.totalSubmissions || 0;
+        return bTotal - aTotal;
+      });
+    }
+    
     if (!sortDate) return perLink;
     
     return [...perLink].sort((a, b) => {
@@ -112,7 +121,7 @@ export default function FormTrackingTable({
       
       return bValue - aValue;
     });
-  }, [perLink, sortDate, sortMetric]);
+  }, [perLink, sortDate, sortMetric, sortByTotal]);
 
   // Handle date click for sorting
   const handleDateClick = (date: string, metric: 'total' | 'unique') => {
@@ -123,6 +132,14 @@ export default function FormTrackingTable({
       setSortDate(date);
       setSortMetric(metric);
     }
+    setSortByTotal(false); // Reset total sort when sorting by date
+  };
+
+  // Handle total column click for sorting
+  const handleTotalClick = () => {
+    setSortByTotal(!sortByTotal);
+    setSortDate(null); // Reset date sort when sorting by total
+    setSortMetric('total');
   };
 
   // Handle multi-date selection
@@ -346,7 +363,16 @@ export default function FormTrackingTable({
               <th className="sticky left-[200px] z-20 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left font-semibold text-gray-900 dark:text-white border-r border-gray-200 dark:border-gray-600" style={{ width: '150px', minWidth: '150px' }}>Campaign</th>
               <th className="sticky left-[350px] z-20 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left font-semibold text-gray-900 dark:text-white border-r border-gray-200 dark:border-gray-600" style={{ width: '120px', minWidth: '120px' }}>Medium</th>
               <th className="sticky left-[470px] z-20 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left font-semibold text-gray-900 dark:text-white border-r border-gray-200 dark:border-gray-600" style={{ width: '150px', minWidth: '150px' }}>Source</th>
-              <th className="sticky left-[620px] z-20 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left font-semibold text-gray-900 dark:text-white border-r border-gray-200 dark:border-gray-600" style={{ width: '120px', minWidth: '120px' }}>Form</th>
+              <th 
+                className={`sticky left-[620px] z-20 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-center font-semibold text-gray-900 dark:text-white border-r border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 ${
+                  sortByTotal ? 'bg-blue-100 dark:bg-blue-900' : ''
+                }`} 
+                style={{ width: '120px', minWidth: '120px' }}
+                onClick={handleTotalClick}
+                title="Sort by Total"
+              >
+                Total {sortByTotal ? '↓' : ''}
+              </th>
               {allDates.map(date => (
                 <th key={date} className="px-2 py-2 text-center font-semibold text-gray-900 dark:text-white min-w-[80px]">
                   <div className="space-y-1">
@@ -378,17 +404,22 @@ export default function FormTrackingTable({
                   </div>
                 </th>
               ))}
-              <th className="px-3 py-2 text-center font-semibold text-gray-900 dark:text-white">TOTAL</th>
             </tr>
           </thead>
           <tbody>
             {/* TOTALS Row */}
             <tr className="bg-gray-100 dark:bg-gray-700 font-semibold">
               <td className="sticky left-0 z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600">TOTALS</td>
-              <td className="sticky left-[200px] z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600">—</td>
-              <td className="sticky left-[350px] z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600">—</td>
-              <td className="sticky left-[470px] z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600">—</td>
-              <td className="sticky left-[620px] z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600">—</td>
+              <td className="sticky left-[200px] z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600"></td>
+              <td className="sticky left-[350px] z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600"></td>
+              <td className="sticky left-[470px] z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600"></td>
+              <td className="sticky left-[620px] z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2 border-r border-gray-200 dark:border-gray-600">
+                <div className="space-y-1 text-center">
+                  <div className="font-semibold">
+                    {filteredLinks.reduce((sum, link) => sum + link.totalUnique, 0)}
+                  </div>
+                </div>
+              </td>
               {allDates.map(date => {
                 const total = dayTotalSubmissions[date] || 0;
                 const dayUnique = filteredLinks.reduce((sum, link) => {
@@ -404,13 +435,6 @@ export default function FormTrackingTable({
                   </td>
                 );
               })}
-              <td className="px-3 py-2 text-center">
-                <div className="space-y-1">
-                  <div className="font-semibold">
-                    {filteredLinks.reduce((sum, link) => sum + link.totalUnique, 0)}
-                  </div>
-                </div>
-              </td>
             </tr>
             
             {/* Data Rows */}
@@ -428,8 +452,10 @@ export default function FormTrackingTable({
                 <td className="sticky left-[470px] z-10 bg-white dark:bg-gray-800 px-3 py-2 border-r border-gray-200 dark:border-gray-600">
                   {link.source_name}
                 </td>
-                <td className="sticky left-[620px] z-10 bg-white dark:bg-gray-800 px-3 py-2 border-r border-gray-200 dark:border-gray-600">
-                  {link.form_name}
+                <td className="sticky left-[620px] z-10 bg-white dark:bg-gray-800 px-3 py-2 border-r border-gray-200 dark:border-gray-600 text-center font-semibold">
+                <div className="space-y-1">
+                    <div className="font-semibold">{link.totalUnique || 0}</div>
+                  </div>
                 </td>
                 {link.rows.map(row => {
                   const dayUniqueTotal = dayTotalSubmissions[row.date] || 0;
@@ -450,67 +476,10 @@ export default function FormTrackingTable({
                     </td>
                   );
                 })}
-                <td className="px-3 py-2 text-center">
-                  <div className="space-y-1">
-                    <div className="font-semibold">{link.totalUnique}</div>
-                  </div>
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-      {/* Density table by Campaign/Medium/Source */}
-      <div className="mt-6 border-t border-gray-200 dark:border-gray-700">
-        <div className="p-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Submission Density by Campaign / Medium / Source</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Daily submissions aggregated by UTM combination. Heat intensity reflects counts.</p>
-          <div className="overflow-x-auto">
-            <table className="min-w-max w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th className="sticky left-0 z-20 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-left font-semibold text-gray-900 dark:text-white" style={{ width: '420px', minWidth: '420px' }}>Campaign / Medium / Source</th>
-                  {allDates.map(date => (
-                    <th key={date} className="px-2 py-2 text-center font-semibold text-gray-900 dark:text-white min-w-[80px]">
-                      {new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    </th>
-                  ))}
-                  <th className="px-3 py-2 text-center font-semibold text-gray-900 dark:text-white">TOTAL</th>
-                </tr>
-              </thead>
-              <tbody>
-                {/* Totals row */}
-                <tr className="bg-gray-100 dark:bg-gray-700 font-semibold">
-                  <td className="sticky left-0 z-10 bg-gray-100 dark:bg-gray-700 px-3 py-2">TOTALS</td>
-                  {allDates.map(date => {
-                    const dayTotal = densityRows.reduce((sum, r) => sum + (r.byDate[date] || 0), 0);
-                    return (
-                      <td key={`total-${date}`} className="text-center px-2 py-1">
-                        {dayTotal}
-                      </td>
-                    );
-                  })}
-                  <td className="px-3 py-2 text-center">
-                    {densityRows.reduce((sum, r) => sum + (r.totals || 0), 0)}
-                  </td>
-                </tr>
-                {densityRows.map(r => (
-                  <tr key={`${r.campaign}|${r.medium}|${r.source}`} className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 py-2 font-medium">
-                      {r.label}
-                    </td>
-                    {allDates.map(d => (
-                      <td key={`${r.label}-${d}`} className="text-center px-2 py-1" style={densityBg(r.byDate[d] || 0)}>
-                        {r.byDate[d] || 0}
-                      </td>
-                    ))}
-                    <td className="px-3 py-2 text-center font-semibold">{r.totals}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
       </div>
     </div>
   );

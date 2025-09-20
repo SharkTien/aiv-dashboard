@@ -84,22 +84,35 @@ export async function GET(request: NextRequest) {
 
     const channelBreakdown = Array.isArray(channelBreakdownResult) ? channelBreakdownResult : [];
 
-    // Get UTM breakdown
+    // Get UTM breakdown - Fixed query using subquery to avoid Cartesian product
     const [utmBreakdownResult] = await pool.query(`
       SELECT 
-        COALESCE(uc.name, 'No campaign') as utm_campaign,
-        COALESCE(uc.code, 'No source') as utm_source,
-        'campaign' as utm_medium,
-        COUNT(*) as signUps
-      FROM form_submissions fs
-      LEFT JOIN form_responses fr ON fs.id = fr.submission_id
-      LEFT JOIN form_fields ff ON fr.field_id = ff.id
-      LEFT JOIN utm_campaigns uc ON fr.value = uc.code
-      WHERE fs.form_id = ? 
-        AND fs.duplicated = FALSE
-        AND ff.field_name = 'utm_campaign'
-      GROUP BY COALESCE(uc.name, 'No campaign'), COALESCE(uc.code, 'No source')
-      ORDER BY COUNT(*) DESC
+        COALESCE(fs_with_utm.utm_campaign_value, 'No campaign') as utm_campaign,
+        COALESCE(fs_with_utm.utm_source_value, 'unknown') as utm_source,
+        COALESCE(fs_with_utm.utm_medium_value, 'unknown') as utm_medium,
+        COUNT(DISTINCT fs_with_utm.id) as signUps
+      FROM (
+        SELECT 
+          fs.id,
+          fs.entity_id,
+          MAX(CASE WHEN ff.field_name = 'utm_campaign' THEN fr.value END) as utm_campaign_value,
+          MAX(CASE WHEN ff.field_name = 'utm_source' THEN us.code END) as utm_source_value,
+          MAX(CASE WHEN ff.field_name = 'utm_medium' THEN um.code END) as utm_medium_value
+        FROM form_submissions fs
+        LEFT JOIN form_responses fr ON fs.id = fr.submission_id
+        LEFT JOIN form_fields ff ON fr.field_id = ff.id 
+        LEFT JOIN utm_sources us ON ff.field_name = 'utm_source' AND fr.value = us.code
+        LEFT JOIN utm_mediums um ON ff.field_name = 'utm_medium' AND fr.value = um.code
+        WHERE fs.form_id = ? 
+          AND fs.duplicated = FALSE
+          AND (ff.field_name = 'utm_campaign' OR ff.field_name = 'utm_source' OR ff.field_name = 'utm_medium')
+        GROUP BY fs.id, fs.entity_id
+      ) fs_with_utm
+      GROUP BY 
+        COALESCE(fs_with_utm.utm_campaign_value, 'No campaign'),
+        COALESCE(fs_with_utm.utm_source_value, 'unknown'),
+        COALESCE(fs_with_utm.utm_medium_value, 'unknown')
+      ORDER BY COUNT(DISTINCT fs_with_utm.id) DESC
       LIMIT 20
     `, [formId]);
 
@@ -145,26 +158,32 @@ export async function GET(request: NextRequest) {
     const majorDistribution = Array.isArray(majorDistributionResult) ? majorDistributionResult : [];
 
     // Get university year distribution by entity using universityyear field
-    // Optimized query with better indexing and smaller result set
+    // Fixed query to properly handle university year data with subquery approach
     const [universityYearResult] = await pool.query(`
       SELECT 
         e.name as entity_name,
         e.entity_id,
-        COALESCE(fr.value, 'Unknown Year') as universityYear,
-        COUNT(DISTINCT fs.id) as signUps
-      FROM form_submissions fs
-      JOIN entity e ON fs.entity_id = e.entity_id
-      LEFT JOIN form_responses fr ON fs.id = fr.submission_id
-      LEFT JOIN form_fields ff ON fr.field_id = ff.id 
-        AND ff.field_name = 'universityyear'
-      WHERE fs.form_id = ? 
-        AND fs.duplicated = FALSE
-        AND fs.timestamp >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-      GROUP BY e.name, e.entity_id, fr.value
-      HAVING COUNT(DISTINCT fs.id) > 0
-      ORDER BY e.name, COUNT(DISTINCT fs.id) DESC
+        COALESCE(fs_with_year.university_year_value, 'Unknown Year') as universityYear,
+        COUNT(DISTINCT fs_with_year.id) as signUps
+      FROM (
+        SELECT 
+          fs.id,
+          fs.entity_id,
+          MAX(CASE WHEN ff.field_name = 'universityyear' THEN fr.value END) as university_year_value
+        FROM form_submissions fs
+        LEFT JOIN form_responses fr ON fs.id = fr.submission_id
+        LEFT JOIN form_fields ff ON fr.field_id = ff.id 
+        WHERE fs.form_id = ? 
+          AND fs.duplicated = FALSE
+          AND fs.timestamp >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+        GROUP BY fs.id, fs.entity_id
+      ) fs_with_year
+      JOIN entity e ON fs_with_year.entity_id = e.entity_id
+      GROUP BY e.name, e.entity_id, COALESCE(fs_with_year.university_year_value, 'Unknown Year')
+      ORDER BY e.name, COUNT(DISTINCT fs_with_year.id) DESC
       LIMIT 1000
     `, [formId]);
+
 
     // Group by entity and calculate percentages
     const entityYearMap = new Map();
@@ -205,6 +224,7 @@ export async function GET(request: NextRequest) {
       ...entity,
       totalSignUps: entityTotals.get(`${entity.entity_name}_${entity.entity_id}`)
     }));
+
 
     // Get age group distribution (placeholder - can be implemented based on DOB field)
     const ageGroupDistribution: any[] = [];

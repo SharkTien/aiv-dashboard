@@ -90,6 +90,14 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
   // Search state for custom_name
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [activeTab, setActiveTab] = useState<'overview' | 'user_performance'>('overview');
+  
+  // Historical comparison state
+  const [comparisonMode, setComparisonMode] = useState<'none' | 'previous_week' | 'previous_month' | 'same_period_last_year' | 'custom'>('none');
+  const [comparisonData, setComparisonData] = useState<{
+    current: { totalClicks: number; totalUniqueClicks: number; clickRate: number };
+    previous: { totalClicks: number; totalUniqueClicks: number; clickRate: number };
+    period: string;
+  } | null>(null);
 
   // Load entities for admin filter
   const loadEntities = async () => {
@@ -120,6 +128,14 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
   useEffect(() => {
     loadAnalytics();
   }, [startDate, endDate, selectedFormId, selectedEntity, isAdmin, activeTab]);
+
+  useEffect(() => {
+    if (comparisonMode !== 'none') {
+      loadComparisonData();
+    } else {
+      setComparisonData(null);
+    }
+  }, [comparisonMode, startDate, endDate, selectedFormId, selectedEntity, isAdmin, activeTab]);
 
   
 
@@ -163,6 +179,92 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
       console.error('Error loading UTM analytics:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadComparisonData = async () => {
+    try {
+      // Calculate comparison period dates
+      const currentStart = new Date(startDate);
+      const currentEnd = new Date(endDate);
+      const daysDiff = Math.ceil((currentEnd.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24));
+      
+      let comparisonStart: Date;
+      let comparisonEnd: Date;
+      let periodLabel: string;
+
+      switch (comparisonMode) {
+        case 'previous_week':
+          comparisonStart = new Date(currentStart);
+          comparisonStart.setDate(comparisonStart.getDate() - 7);
+          comparisonEnd = new Date(currentEnd);
+          comparisonEnd.setDate(comparisonEnd.getDate() - 7);
+          periodLabel = 'Previous Week';
+          break;
+        case 'previous_month':
+          comparisonStart = new Date(currentStart);
+          comparisonStart.setMonth(comparisonStart.getMonth() - 1);
+          comparisonEnd = new Date(currentEnd);
+          comparisonEnd.setMonth(comparisonEnd.getMonth() - 1);
+          periodLabel = 'Previous Month';
+          break;
+        case 'same_period_last_year':
+          comparisonStart = new Date(currentStart);
+          comparisonStart.setFullYear(comparisonStart.getFullYear() - 1);
+          comparisonEnd = new Date(currentEnd);
+          comparisonEnd.setFullYear(comparisonEnd.getFullYear() - 1);
+          periodLabel = 'Same Period Last Year';
+          break;
+        default:
+          return;
+      }
+
+      // Fetch current period data (already available from data.insights)
+      const currentData = {
+        totalClicks: data?.insights?.totalClicks || 0,
+        totalUniqueClicks: data?.insights?.totalUniqueClicks || 0,
+        clickRate: data?.insights && data.insights.totalClicks > 0 ? (data.insights.totalUniqueClicks / data.insights.totalClicks) * 100 : 0
+      };
+
+      // Fetch comparison period data
+      const params = new URLSearchParams({
+        start_date: comparisonStart.toISOString().split('T')[0],
+        end_date: comparisonEnd.toISOString().split('T')[0]
+      });
+      
+      if (selectedFormId) {
+        params.append('form_id', selectedFormId.toString());
+      } else if (formType) {
+        params.append('form_type', formType);
+      }
+      if ((activeTab === 'user_performance' || (activeTab === 'overview' && isAdmin)) && selectedEntity) {
+        params.append('entity_id', selectedEntity);
+      }
+
+      let endpoint = '/api/utm/analytics';
+      if (activeTab === 'user_performance') {
+        endpoint = '/api/utm/analytics2';
+        if (!selectedEntity) params.append('all_entities', 'true');
+      }
+
+      const response = await fetch(`${endpoint}?${params.toString()}`, { cache: 'no-store' });
+      const result = await response.json();
+      
+      if (result.success && result.data?.insights) {
+        const previousData = {
+          totalClicks: result.data.insights.totalClicks || 0,
+          totalUniqueClicks: result.data.insights.totalUniqueClicks || 0,
+          clickRate: result.data.insights.totalClicks > 0 ? (result.data.insights.totalUniqueClicks / result.data.insights.totalClicks) * 100 : 0
+        };
+
+        setComparisonData({
+          current: currentData,
+          previous: previousData,
+          period: periodLabel
+        });
+      }
+    } catch (error) {
+      console.error('Error loading comparison data:', error);
     }
   };
 
@@ -292,6 +394,23 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         </div>
         )}
 
+        {/* Historical Comparison Controls */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+            Historical Comparison
+          </label>
+          <select
+            value={comparisonMode}
+            onChange={(e) => setComparisonMode(e.target.value as any)}
+            className="h-11 rounded-lg ring-1 ring-black/15 dark:ring-white/15 px-4 bg-white dark:bg-gray-800/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500/50 transition-all"
+          >
+            <option value="none">No Comparison</option>
+            <option value="previous_week">Previous Week</option>
+            <option value="previous_month">Previous Month</option>
+            <option value="same_period_last_year">Same Period Last Year</option>
+          </select>
+        </div>
+
         <button
           onClick={() => {
             loadAnalytics();
@@ -312,21 +431,53 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         <>
       {/* Overview Stats - UTM Clicks Summary */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-        <h3 className="text-md font-medium text-gray-900 dark:text-white mb-3">UTM Click Summary</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-md font-medium text-gray-900 dark:text-white">UTM Click Summary</h3>
+          {comparisonData && (
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              vs {comparisonData.period}
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <div className="text-center">
             <p className="text-xs text-gray-500 dark:text-gray-400">Total Clicks</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white">{insights?.totalClicks ?? 0}</p>
+            <div className="flex items-center justify-center gap-2">
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{insights?.totalClicks ?? 0}</p>
+              {comparisonData && (
+                <ComparisonIndicator 
+                  current={comparisonData.current.totalClicks} 
+                  previous={comparisonData.previous.totalClicks}
+                />
+              )}
+            </div>
           </div>
           <div className="text-center">
             <p className="text-xs text-gray-500 dark:text-gray-400">Unique Clicks</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white">{insights?.totalUniqueClicks ?? 0}</p>
+            <div className="flex items-center justify-center gap-2">
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{insights?.totalUniqueClicks ?? 0}</p>
+              {comparisonData && (
+                <ComparisonIndicator 
+                  current={comparisonData.current.totalUniqueClicks} 
+                  previous={comparisonData.previous.totalUniqueClicks}
+                />
+              )}
+            </div>
           </div>
           <div className="text-center">
             <p className="text-xs text-gray-500 dark:text-gray-400">Click Rate</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white">
-              {insights && insights.totalClicks > 0 ? ((insights.totalUniqueClicks / insights.totalClicks) * 100).toFixed(1) : 0}%
-            </p>
+            <div className="flex items-center justify-center gap-2">
+              <p className="text-lg font-bold text-gray-900 dark:text-white">
+                {insights && insights.totalClicks > 0 ? ((insights.totalUniqueClicks / insights.totalClicks) * 100).toFixed(1) : 0}%
+              </p>
+              {comparisonData && (
+                <ComparisonIndicator 
+                  current={comparisonData.current.clickRate} 
+                  previous={comparisonData.previous.clickRate}
+                  isPercentage={true}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -351,7 +502,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
       {heatmaps && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* Medium Heatmap */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 overflow-x-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 overflow-x-auto thin-scrollbar">
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Daily Clicks by Medium</h3>
             <HeatmapTable
               rows={heatmaps.byMedium.map(r => ({ label: r.medium_name || r.medium_code, code: r.medium_code, totals: r.totals, byDate: r.byDate }))}
@@ -360,7 +511,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
           </div>
 
           {/* Source Heatmap */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 overflow-x-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 overflow-x-auto thin-scrollbar">
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Daily Clicks by Source</h3>
             <HeatmapTable
               rows={heatmaps.bySource.map(r => ({ label: r.source_name || r.source_code, code: r.source_code, totals: r.totals, byDate: r.byDate }))}
@@ -450,7 +601,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 lg:col-span-3">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Top 5 EMT National UTM Links</h3>
           {emtTopLinks && emtTopLinks.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto thin-scrollbar">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
@@ -509,7 +660,7 @@ export default function UTMAnalytics({ formType, selectedFormId }: UTMAnalyticsP
             </div>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto thin-scrollbar">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
@@ -689,6 +840,52 @@ function getEffectivenessColor(score: number): string {
   return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
 }
 
+// Comparison indicator component
+function ComparisonIndicator({ 
+  current, 
+  previous, 
+  isPercentage = false 
+}: { 
+  current: number; 
+  previous: number; 
+  isPercentage?: boolean; 
+}) {
+  if (previous === 0) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-gray-500">—</span>
+      </div>
+    );
+  }
+
+  const changePercent = ((current - previous) / previous) * 100;
+  const isPositive = changePercent > 0;
+  const isNeutral = Math.abs(changePercent) < 1;
+
+  const colorClass = isNeutral 
+    ? 'text-gray-500' 
+    : isPositive 
+      ? 'text-green-600 dark:text-green-400' 
+      : 'text-red-600 dark:text-red-400';
+
+  const icon = isNeutral 
+    ? '→' 
+    : isPositive 
+      ? '↗' 
+      : '↘';
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className={`text-xs ${colorClass}`}>
+        {icon}
+      </span>
+      <span className={`text-xs font-medium ${colorClass}`}>
+        {Math.abs(changePercent).toFixed(1)}%
+      </span>
+    </div>
+  );
+}
+
 function getTrendIcon(trend: string): React.ReactNode {
   switch (trend) {
     case 'up':
@@ -817,7 +1014,7 @@ function UserPerformanceTable({ links, startDate, endDate }: { links: UTMLink[];
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <h3 className="text-md font-medium text-gray-900 dark:text-white">User Performance by UTM Link</h3>
       </div>
-      <div ref={scrollRef} className="overflow-x-auto w-full pb-1">
+      <div ref={scrollRef} className="overflow-x-auto w-full pb-1 thin-scrollbar">
         <table className="min-w-max text-xs md:text-sm border-collapse">
           <thead>
             <tr>
@@ -997,7 +1194,7 @@ function HeatmapTable({
   }, [dates]);
 
   return (
-    <div ref={scrollRef} className="overflow-x-auto heatmap-scroll-container">
+    <div ref={scrollRef} className="overflow-x-auto heatmap-scroll-container thin-scrollbar">
       <table className="w-full text-xs md:text-sm border-collapse">
         <thead>
           <tr>
@@ -1056,7 +1253,7 @@ function TimeOfDayHeatmap({
   }, [dates]);
 
   return (
-    <div ref={scrollRef} className="overflow-x-auto time-heatmap-scroll-container">
+    <div ref={scrollRef} className="overflow-x-auto time-heatmap-scroll-container thin-scrollbar">
       <table className="w-full text-xs md:text-sm border-collapse">
         <thead>
           <tr>

@@ -507,7 +507,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
           }}
           className="px-3 py-1.5 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white font-medium"
         >
-          Thử lại
+          Try again
         </button>
       </div>
     );
@@ -560,7 +560,7 @@ export default function FormBuilder({ formId }: { formId: number }) {
               }}
               className="px-2 py-1 text-xs rounded-md bg-sky-600 hover:bg-sky-700 text-white"
             >
-              Thử lại
+              Try again
             </button>
           </div>
         )}

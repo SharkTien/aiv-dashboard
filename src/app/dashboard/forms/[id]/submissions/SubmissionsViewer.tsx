@@ -79,7 +79,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
       });
       const json = await res.json();
       if (!res.ok || !json?.success) throw new Error(json?.error || 'Update failed');
-      // Optimistic update
+      // Optimistic update - preserve current page
       setSubmissions(prev => prev.map(sub => {
         if (sub.id !== submissionId) return sub;
         const next = { ...sub } as any;
@@ -94,6 +94,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
       }));
       setEditingCell(null);
       setEditingValue('');
+      // Don't reload data to preserve pagination state
     } catch (e) {
       alert((e as Error).message || 'Update failed');
     }
@@ -422,10 +423,13 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
     return (r?.value_label || r?.value || "").trim();
   }
 
-  // Reset to first page when submissions change
+  // Reset to first page when submissions change (but not for optimistic updates)
   useEffect(() => {
-    setCurrentPage(1);
-  }, [submissions]);
+    // Only reset to page 1 if we're not currently editing (to avoid reset during optimistic updates)
+    if (!editingCell) {
+      setCurrentPage(1);
+    }
+  }, [submissions, editingCell]);
 
   // Reset select all state when page changes
   useEffect(() => {
@@ -1312,7 +1316,7 @@ export default function SubmissionsViewer({ formId, options, inlineLoading }: { 
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">No submissions yet</div>
         ) : (
           <>
-            <div className="relative w-full max-w-full overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:dark:bg-gray-800 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:dark:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-gray-400 [&::-webkit-scrollbar-thumb]:dark:hover:bg-gray-500">
+            <div className="relative w-full max-w-full overflow-x-auto pb-2 thin-scrollbar">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left bg-gray-50 dark:bg-gray-800/60">
