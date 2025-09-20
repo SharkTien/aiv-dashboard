@@ -19,6 +19,10 @@ export async function POST(request: NextRequest) {
     const shortApiKey = process.env.SHORT_IO_API_KEY;
     const shortDomain = process.env.SHORT_IO_DOMAIN || 'short.io';
     
+    // Debug logging
+    console.log('Short.io API Key exists:', !!shortApiKey);
+    console.log('Short.io Domain:', shortDomain);
+    
     if (!shortApiKey) {
       return NextResponse.json(
         { error: 'Short.io API key not configured' },

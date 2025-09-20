@@ -40,6 +40,7 @@ const ALLOWED = new Set([
   "https://www.aiesec.vn",
   "https://aiv-dashboard-ten.vercel.app",
   "http://localhost:3000",
+  "https://aiv-dashboard.aiesec.vn",
 ]);
 
 export async function middleware(req: NextRequest) {
