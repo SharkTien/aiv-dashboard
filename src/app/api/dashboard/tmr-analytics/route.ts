@@ -145,6 +145,7 @@ export async function GET(request: NextRequest) {
     const majorDistribution = Array.isArray(majorDistributionResult) ? majorDistributionResult : [];
 
     // Get university year distribution by entity using universityyear field
+    // Optimized query with better indexing and smaller result set
     const [universityYearResult] = await pool.query(`
       SELECT 
         e.name as entity_name,
@@ -154,12 +155,15 @@ export async function GET(request: NextRequest) {
       FROM form_submissions fs
       JOIN entity e ON fs.entity_id = e.entity_id
       LEFT JOIN form_responses fr ON fs.id = fr.submission_id
-      LEFT JOIN form_fields ff ON fr.field_id = ff.id
+      LEFT JOIN form_fields ff ON fr.field_id = ff.id 
+        AND ff.field_name = 'universityyear'
       WHERE fs.form_id = ? 
         AND fs.duplicated = FALSE
-        AND ff.field_name = 'universityyear'
+        AND fs.timestamp >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
       GROUP BY e.name, e.entity_id, fr.value
+      HAVING COUNT(DISTINCT fs.id) > 0
       ORDER BY e.name, COUNT(DISTINCT fs.id) DESC
+      LIMIT 1000
     `, [formId]);
 
     // Group by entity and calculate percentages

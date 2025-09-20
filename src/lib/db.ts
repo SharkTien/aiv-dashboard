@@ -21,6 +21,15 @@ export function getDbPool() {
     // Ensure UTF-8 for Vietnamese at session level
     pool.query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci").catch(() => {});
     pool.query("SET SESSION collation_connection = 'utf8mb4_unicode_ci'").catch(() => {});
+    
+    // Configure MySQL to avoid temp files globally
+    pool.query("SET SESSION tmp_table_size = 1024*1024*1024").catch(() => {}); // 1GB - force in-memory
+    pool.query("SET SESSION max_heap_table_size = 1024*1024*1024").catch(() => {}); // 1GB - force in-memory
+    pool.query("SET SESSION sort_buffer_size = 16*1024*1024").catch(() => {}); // 16MB
+    pool.query("SET SESSION join_buffer_size = 8*1024*1024").catch(() => {}); // 8MB
+    pool.query("SET SESSION read_buffer_size = 2*1024*1024").catch(() => {}); // 2MB
+    pool.query("SET SESSION read_rnd_buffer_size = 4*1024*1024").catch(() => {}); // 4MB
+    
     // Optional connectivity check (non-blocking)
     pool.query("SELECT 1").catch((e) => {
       console.error("[DB] Connectivity error:", e?.message || e);

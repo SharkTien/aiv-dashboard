@@ -42,62 +42,141 @@ export async function GET(req: NextRequest) {
   try {
     await pool.query("SELECT 1");
 
-    // Build aggregation query (daily or weekly)
-    let selectDate = `DATE(fs.timestamp) as submission_date`;
-    let groupDate = `DATE(fs.timestamp)`;
+    // Pre-fetch UTM field IDs to avoid subqueries in JOIN conditions
+    const [fieldResult] = await pool.query(`
+      SELECT 
+        MAX(CASE WHEN field_name='utm_campaign' THEN id END) AS utm_campaign,
+        MAX(CASE WHEN field_name='utm_medium' THEN id END) AS utm_medium,
+        MAX(CASE WHEN field_name='utm_source' THEN id END) AS utm_source
+      FROM form_fields
+    `);
+    
+    const fieldIds = Array.isArray(fieldResult) ? fieldResult[0] : fieldResult;
+    const { utm_campaign, utm_medium, utm_source } = fieldIds as any;
+
+    // Build aggregation query (daily or weekly) - normalize to YYYY-MM-DD format
+    let selectDate = `DATE_FORMAT(fs.timestamp, '%Y-%m-%d') as submission_date`;
+    let groupDate = `DATE_FORMAT(fs.timestamp, '%Y-%m-%d')`;
     if (rollup === 'week') {
       // Week starts Monday (mode 3 ISO); use week start date for label
-      selectDate = `DATE_SUB(DATE(fs.timestamp), INTERVAL WEEKDAY(fs.timestamp) DAY) as submission_date`;
-      groupDate = `YEARWEEK(fs.timestamp, 3)`;
+      selectDate = `DATE_FORMAT(DATE_SUB(DATE(fs.timestamp), INTERVAL WEEKDAY(fs.timestamp) DAY), '%Y-%m-%d') as submission_date`;
+      groupDate = `DATE_FORMAT(DATE_SUB(DATE(fs.timestamp), INTERVAL WEEKDAY(fs.timestamp) DAY), '%Y-%m-%d')`;
+    }
+
+    // Build WHERE conditions
+    let whereConditions = ['fs.duplicated = FALSE', 'fs.timestamp BETWEEN ? AND ?'];
+    const params: any[] = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
+
+    // Add form_id filter if provided
+    if (formId) {
+      whereConditions.push('fs.form_id = ?');
+      params.push(Number(formId));
+    }
+
+    // Add entity filter based on user role
+    if (user.role !== 'admin') {
+      if (entityIdFilter) {
+        whereConditions.push('fs.entity_id = ?');
+        params.push(Number(entityIdFilter));
+      } else if (!allEntities) {
+        whereConditions.push('fs.entity_id = ?');
+        params.push(Number(user.entity_id));
+      } else {
+        whereConditions.push('(fs.entity_id IS NULL OR fs.entity_id NOT IN (SELECT entity_id FROM entity WHERE LOWER(name) = \'organic\'))');
+      }
+    } else if (entityIdFilter) {
+      whereConditions.push('fs.entity_id = ?');
+      params.push(Number(entityIdFilter));
     }
 
     let baseQuery = `
       SELECT 
         ${selectDate},
-        COALESCE(frc.value, 'No campaign') as utm_campaign,
-        COALESCE(frm.value, 'unknown') as utm_medium,
-        COALESCE(frs.value, 'unknown') as utm_source,
-        COUNT(DISTINCT fs.id) as unique_submissions
+        COALESCE(fr.value, 'No campaign') AS utm_campaign,
+        COALESCE(fr2.value, 'unknown') AS utm_medium,
+        COALESCE(fr3.value, 'unknown') AS utm_source,
+        COUNT(DISTINCT fs.id) AS unique_submissions
       FROM form_submissions fs
-      LEFT JOIN form_responses frc ON frc.submission_id = fs.id
-      LEFT JOIN form_fields ffc ON ffc.id = frc.field_id AND ffc.field_name = 'utm_campaign'
-      LEFT JOIN form_responses frm ON frm.submission_id = fs.id
-      LEFT JOIN form_fields ffm ON ffm.id = frm.field_id AND ffm.field_name = 'utm_medium'
-      LEFT JOIN form_responses frs ON frs.submission_id = fs.id
-      LEFT JOIN form_fields ffs ON ffs.id = frs.field_id AND ffs.field_name = 'utm_source'
-      WHERE fs.duplicated = FALSE
-        AND fs.timestamp >= ?
-        AND fs.timestamp <= ?
+      LEFT JOIN form_responses fr ON fr.submission_id = fs.id AND fr.field_id = ?
+      LEFT JOIN form_responses fr2 ON fr2.submission_id = fs.id AND fr2.field_id = ?
+      LEFT JOIN form_responses fr3 ON fr3.submission_id = fs.id AND fr3.field_id = ?
+      WHERE ${whereConditions.join(' AND ')}
     `;
-    const params: any[] = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
 
-    if (formId) {
-      baseQuery += " AND fs.form_id = ?";
-      params.push(Number(formId));
-    }
+    // Get total count first for pagination - optimized without redundant aggregation
+    const countQuery = `
+      SELECT COUNT(*) AS total
+      FROM (
+        SELECT 
+          ${groupDate} AS submission_date,
+          COALESCE(fr.value, 'No campaign') AS utm_campaign, 
+          COALESCE(fr2.value, 'unknown') AS utm_medium, 
+          COALESCE(fr3.value, 'unknown') AS utm_source
+        FROM form_submissions fs
+        LEFT JOIN form_responses fr ON fr.submission_id = fs.id AND fr.field_id = ?
+        LEFT JOIN form_responses fr2 ON fr2.submission_id = fs.id AND fr2.field_id = ?
+        LEFT JOIN form_responses fr3 ON fr3.submission_id = fs.id AND fr3.field_id = ?
+        WHERE ${whereConditions.join(' AND ')}
+        GROUP BY ${groupDate}, fr.value, fr2.value, fr3.value
+      ) AS final_group
+    `;
 
-    if (user.role !== 'admin') {
-      if (entityIdFilter) {
-        baseQuery += " AND fs.entity_id = ?";
-        params.push(Number(entityIdFilter));
-      } else if (!allEntities) {
-        baseQuery += " AND fs.entity_id = ?";
-        params.push(Number(user.entity_id));
-      } else {
-        baseQuery += " AND (fs.entity_id IS NULL OR fs.entity_id NOT IN (SELECT entity_id FROM entity WHERE LOWER(name) = 'organic'))";
-      }
-    } else if (entityIdFilter) {
-      baseQuery += " AND fs.entity_id = ?";
-      params.push(Number(entityIdFilter));
-    }
+    // Add field IDs to params for both queries
+    const fieldParams = [utm_campaign, utm_medium, utm_source];
+    
+    const [countResult] = await pool.query(countQuery, [...fieldParams, ...params]);
+    const totalCombos = Array.isArray(countResult) && countResult.length > 0 
+      ? (countResult[0] as any).total : 0;
 
+    // Apply pagination to main query
+    const offset = (page - 1) * pageSize;
     baseQuery += `
-      GROUP BY ${groupDate}, utm_campaign, utm_medium, utm_source
+      GROUP BY submission_date, utm_campaign, utm_medium, utm_source
       ORDER BY submission_date ASC
+      LIMIT ? OFFSET ?
     `;
 
-    const [rows] = await pool.query(baseQuery, params);
+    const [rows] = await pool.query(baseQuery, [...fieldParams, ...params, pageSize, offset]);
     const data = Array.isArray(rows) ? (rows as any[]) : [];
+
+    // Get last updated timestamp for ETag accuracy
+    let lastUpdated = null;
+    try {
+      let lastUpdatedQuery = `
+        SELECT MAX(fs.timestamp) as last_updated
+        FROM form_submissions fs
+        WHERE fs.duplicated = FALSE
+          AND fs.timestamp BETWEEN ? AND ?
+      `;
+      const lastUpdatedParams: any[] = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
+      
+      if (formId) {
+        lastUpdatedQuery += " AND fs.form_id = ?";
+        lastUpdatedParams.push(Number(formId));
+      }
+      
+      if (user.role !== 'admin') {
+        if (entityIdFilter) {
+          lastUpdatedQuery += " AND fs.entity_id = ?";
+          lastUpdatedParams.push(Number(entityIdFilter));
+        } else if (!allEntities) {
+          lastUpdatedQuery += " AND fs.entity_id = ?";
+          lastUpdatedParams.push(Number(user.entity_id));
+        } else {
+          lastUpdatedQuery += " AND (fs.entity_id IS NULL OR fs.entity_id NOT IN (SELECT entity_id FROM entity WHERE LOWER(name) = 'organic'))";
+        }
+      } else if (entityIdFilter) {
+        lastUpdatedQuery += " AND fs.entity_id = ?";
+        lastUpdatedParams.push(Number(entityIdFilter));
+      }
+
+      const [lastUpdatedResult] = await pool.query(lastUpdatedQuery, lastUpdatedParams);
+      const lastUpdatedData = Array.isArray(lastUpdatedResult) ? lastUpdatedResult : [];
+      lastUpdated = lastUpdatedData.length > 0 ? (lastUpdatedData[0] as any).last_updated : null;
+    } catch (error) {
+      console.warn('Failed to get last updated timestamp:', error);
+      // Continue without last_updated if query fails
+    }
 
     type LinkRow = {
       id: number;
@@ -115,11 +194,14 @@ export async function GET(req: NextRequest) {
     const map = new Map<string, LinkRow>();
     let autoId = 1;
     data.forEach(r => {
-      const day = String(r.submission_date);
+      // Ensure date format is YYYY-MM-DD to match allDates
+      const day = new Date(r.submission_date).toISOString().split('T')[0];
       const campaign = String(r.utm_campaign || 'No campaign');
       const medium = String(r.utm_medium || 'unknown');
       const source = String(r.utm_source || 'unknown');
       const key = `${campaign}|||${medium}|||${source}`;
+      const unique = Number(r.unique_submissions || 0);
+      
       if (!map.has(key)) {
         map.set(key, {
           id: autoId++,
@@ -130,27 +212,28 @@ export async function GET(req: NextRequest) {
           medium_name: medium,
           medium_code: medium,
           utm_name: `${campaign} / ${medium} / ${source}`,
-          dailySubmissions: {},
+          dailySubmissions: Object.create(null), // Optimized: no prototype overhead
           __total: 0,
         });
       }
       const row = map.get(key)!;
-      if (!row.dailySubmissions[day]) row.dailySubmissions[day] = { unique: 0 };
-      row.dailySubmissions[day].unique += Number(r.unique_submissions || 0);
-      row.__total = (row.__total || 0) + Number(r.unique_submissions || 0);
+      const daily = row.dailySubmissions;
+      if (!daily[day]) daily[day] = { unique: 0 };
+      daily[day].unique += unique;
+      row.__total = (row.__total || 0) + unique;
     });
 
     const allRows = Array.from(map.values());
     allRows.sort((a, b) => (b.__total || 0) - (a.__total || 0));
 
-    const totalCombos = allRows.length;
     const totalPages = Math.max(1, Math.ceil(totalCombos / pageSize));
     const safePage = Math.min(page, totalPages);
-    const startIndex = (safePage - 1) * pageSize;
-    const limitedRows = allRows.slice(startIndex, startIndex + pageSize).map(({ __total, ...rest }) => rest);
+    const limitedRows = allRows.map(({ __total, ...rest }) => rest);
 
-    // Build full date range (daily or weekly labels)
+    // Build full date range (daily or weekly labels) - optimized
     const allDatesFull: string[] = [];
+    const dateFormatter = new Intl.DateTimeFormat('en-CA'); // YYYY-MM-DD format
+    
     if (rollup === 'week') {
       // iterate weeks
       const cur = new Date(start);
@@ -158,13 +241,13 @@ export async function GET(req: NextRequest) {
       cur.setDate(cur.getDate() - ((cur.getDay() + 6) % 7));
       const endCopy = new Date(end);
       while (cur <= endCopy) {
-        allDatesFull.push(cur.toISOString().split('T')[0]);
+        allDatesFull.push(dateFormatter.format(cur));
         cur.setDate(cur.getDate() + 7);
       }
     } else {
       const cur = new Date(start);
       while (cur <= end) {
-        allDatesFull.push(cur.toISOString().split('T')[0]);
+        allDatesFull.push(dateFormatter.format(cur));
         cur.setDate(cur.getDate() + 1);
       }
     }
@@ -175,10 +258,16 @@ export async function GET(req: NextRequest) {
     const dateStartIdx = (safeDatePage - 1) * datePageSize;
     const limitedDates = allDatesFull.slice(dateStartIdx, dateStartIdx + datePageSize);
 
-    // Compute visible day totals (unique only) on limited dates
-    const dayTotalSubmissions: Record<string, number> = {};
-    limitedDates.forEach(date => {
-      dayTotalSubmissions[date] = limitedRows.reduce((sum, link) => sum + (link.dailySubmissions[date]?.unique || 0), 0);
+    // Compute visible day totals (unique only) on limited dates - optimized O(N) instead of O(N*M)
+    const dayTotalSubmissions = Object.create(null);
+    const limitedDatesSet = new Set(limitedDates); // O(1) lookup instead of O(n) includes()
+    limitedRows.forEach(link => {
+      for (const date in link.dailySubmissions) {
+        if (limitedDatesSet.has(date)) { // Only count dates in visible range
+          if (!dayTotalSubmissions[date]) dayTotalSubmissions[date] = 0;
+          dayTotalSubmissions[date] += link.dailySubmissions[date].unique;
+        }
+      }
     });
 
     // Prepare response body and ETag
@@ -202,7 +291,8 @@ export async function GET(req: NextRequest) {
       e: endDate,
       r: rollup,
       c: responseBody.data.meta.totalCombos,
-      d: responseBody.data.allDates.length
+      d: responseBody.data.allDates.length,
+      u: lastUpdated // Include last_updated timestamp for accurate cache invalidation
     });
     const etag = crypto.createHash('sha1').update(etagSource).digest('hex');
 
