@@ -146,7 +146,7 @@ export default function DashboardHome() {
         <div className="inline-flex items-center gap-3 rounded-xl bg-white/70 dark:bg-gray-800/70 backdrop-blur px-4 py-3 ring-1 ring-black/10 dark:ring-white/10">
           <Image src="/giphy.gif" alt="loading" width={96} height={96} />
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Whats up, AIESECer</h1>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Whatss up, AIESECer</h1>
             <p className="text-sm text-gray-600 dark:text-gray-300">Stay updated with your AIESEC experience</p>
           </div>
         </div>
